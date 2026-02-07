@@ -7,14 +7,25 @@ from typing import TYPE_CHECKING
 
 from textual.app import App
 
-from cogitus.config import AppSettings, get_settings
+from cogitus.config import get_settings
 from cogitus.db import get_db
 from cogitus.services.idea_service import IdeaService
 from cogitus.ui.screens.main_screen import MainScreen
 
 if TYPE_CHECKING:
+    from typing import Protocol
+
     from rich.console import RenderableType
     from sqliter import SqliterDB
+
+    class SettingsLike(Protocol):
+        """Settings interface required by the app."""
+
+        last_viewed_idea_pk: int
+
+        def save(self) -> None:
+            """Persist settings."""
+
 
 CSS_PATH = Path(__file__).parent / "ui" / "styles" / "app.tcss"
 
@@ -29,7 +40,7 @@ class CogitusApp(App[None]):
         self,
         db_path: str | None = None,
         db: SqliterDB | None = None,
-        settings: AppSettings | None = None,
+        settings: SettingsLike | None = None,
     ) -> None:
         """Initialize the Cogitus application.
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from sqliter.exceptions import RecordInsertionError
+
 if TYPE_CHECKING:
     from cogitus.repositories.idea_repo import (
         IdeaRepository,
@@ -59,6 +61,28 @@ class TestTagRepository:
             "middle",
             "zebra",
         ]
+
+    def test_get_or_create_recovers_after_insert_race(
+        self, tag_repo: TagRepository, mocker
+    ) -> None:
+        """Insert race should recover by re-fetching tag after insert error."""
+        existing = tag_repo.get_or_create("python")
+
+        find_mock = mocker.patch.object(
+            tag_repo,
+            "find_by_name",
+            side_effect=[None, existing],
+        )
+        mocker.patch.object(
+            tag_repo._db,
+            "insert",
+            side_effect=RecordInsertionError("insert failed"),
+        )
+
+        found = tag_repo.get_or_create("python")
+
+        assert found.pk == existing.pk
+        assert find_mock.call_count == 2
 
 
 class TestIdeaRepository:
