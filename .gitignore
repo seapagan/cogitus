@@ -24,3 +24,6 @@ AGENTS.md
 .coverage
 coverage.lcov
 htmlcov/
+
+# local tool config
+.changelog_generator.toml

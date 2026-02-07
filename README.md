@@ -64,7 +64,7 @@ Cogitus is also a real-world validation project for `sqliter-py`.
 
 ---
 
-## Planned MVP (v0.1)
+## MVP (v0.1)
 
 - Create new ideas
 - Edit existing ideas
@@ -126,16 +126,16 @@ searchable workspace.
 
 ---
 
-## Installation (Planned)
+## Installation
 
 ```bash
 uv tool install cogitus
 ```
 
-or as a project dependency:
+## Usage
 
 ```bash
-uv add cogitus
+cogitus
 ```
 
 ---
