@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+from typing import TYPE_CHECKING, Any
 from unittest.mock import PropertyMock
 
 import pytest
@@ -19,11 +19,20 @@ from cogitus.ui.screens.main_screen import MainScreen
 from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from pytest_mock import MockerFixture
+    from sqliter import SqliterDB
+    from textual.screen import Screen
+
+    from cogitus.services.idea_service import IdeaService
+
 
 class _SingleScreenApp(App[None]):
     """Host app that mounts a screen on start."""
 
-    def __init__(self, screen) -> None:
+    def __init__(self, screen: Screen[Any]) -> None:
         super().__init__()
         self._screen = screen
 
@@ -50,7 +59,10 @@ class _FakeSettings:
 
 
 @pytest.mark.asyncio
-async def test_idea_form_screen_create_and_validation(service, mocker) -> None:
+async def test_idea_form_screen_create_and_validation(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
     """Form should validate title and create ideas."""
     screen = IdeaFormScreen(service)
     app = _SingleScreenApp(screen)
@@ -84,7 +96,10 @@ async def test_idea_form_screen_create_and_validation(service, mocker) -> None:
 
 
 @pytest.mark.asyncio
-async def test_idea_form_screen_edit_and_buttons(service, mocker) -> None:
+async def test_idea_form_screen_edit_and_buttons(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
     """Form should support editing and button dispatch."""
     idea = service.create_idea("Original", body="old", tags=["one", "two"])
     screen = IdeaFormScreen(service, idea=idea)
@@ -106,13 +121,9 @@ async def test_idea_form_screen_edit_and_buttons(service, mocker) -> None:
 
         save_action = mocker.patch.object(screen, "action_save")
         cancel_action = mocker.patch.object(screen, "action_cancel")
-        screen.on_button_pressed(
-            SimpleNamespace(button=SimpleNamespace(id="save-btn"))
-        )
+        await pilot.click("#save-btn")
         save_action.assert_called_once()
-        screen.on_button_pressed(
-            SimpleNamespace(button=SimpleNamespace(id="cancel-btn"))
-        )
+        await pilot.click("#cancel-btn")
         cancel_action.assert_called_once()
 
         dismiss.reset_mock()
@@ -122,21 +133,19 @@ async def test_idea_form_screen_edit_and_buttons(service, mocker) -> None:
 
 
 @pytest.mark.asyncio
-async def test_confirm_dialog_and_help_screen(mocker) -> None:
+async def test_confirm_dialog_and_help_screen(
+    mocker: MockerFixture,
+) -> None:
     """Confirmation and help modal actions should dismiss correctly."""
     confirm = ConfirmDialog("Are you sure?")
     app = _SingleScreenApp(confirm)
     async with app.run_test() as pilot:
         dismiss = mocker.patch.object(confirm, "dismiss")
-        confirm.on_button_pressed(
-            SimpleNamespace(button=SimpleNamespace(id="confirm-yes-btn"))
-        )
+        await pilot.click("#confirm-yes-btn")
         dismiss.assert_called_once_with(True)
 
         dismiss.reset_mock()
-        confirm.on_button_pressed(
-            SimpleNamespace(button=SimpleNamespace(id="confirm-no-btn"))
-        )
+        await pilot.click("#confirm-no-btn")
         dismiss.assert_called_once_with(False)
         await pilot.pause()
 
@@ -150,7 +159,10 @@ async def test_confirm_dialog_and_help_screen(mocker) -> None:
 
 
 @pytest.mark.asyncio
-async def test_main_screen_selection_and_search(service, mocker) -> None:
+async def test_main_screen_selection_and_search(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
     """Main screen should handle selection and search refresh paths."""
     first = service.create_idea("First")
     second = service.create_idea("Second")
@@ -214,7 +226,8 @@ async def test_main_screen_selection_and_search(service, mocker) -> None:
 
 @pytest.mark.asyncio
 async def test_main_screen_create_edit_delete_and_form_result(
-    service, mocker
+    service: IdeaService,
+    mocker: MockerFixture,
 ) -> None:
     """Main screen should cover create/edit/delete branches."""
     first = service.create_idea("First")
@@ -274,7 +287,8 @@ async def test_main_screen_create_edit_delete_and_form_result(
 
 @pytest.mark.asyncio
 async def test_main_screen_focus_toggle_help_quit_and_callback(
-    service, mocker
+    service: IdeaService,
+    mocker: MockerFixture,
 ) -> None:
     """Main screen should handle focus, help, quit, and callback updates."""
     first = service.create_idea("First")
@@ -328,7 +342,7 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
 
 @pytest.mark.asyncio
 async def test_main_screen_search_cancel_restores_previous_focus(
-    service,
+    service: IdeaService,
 ) -> None:
     """Esc clears search and restores panel active before slash."""
     service.create_idea("First")
@@ -364,7 +378,7 @@ async def test_main_screen_search_cancel_restores_previous_focus(
 
 @pytest.mark.asyncio
 async def test_main_screen_cancel_search_noop_when_search_not_focused(
-    service,
+    service: IdeaService,
 ) -> None:
     """Cancel search should no-op when focus is not on search input."""
     service.create_idea("First")
@@ -387,7 +401,10 @@ async def test_main_screen_cancel_search_noop_when_search_not_focused(
 
 
 @pytest.mark.asyncio
-async def test_main_screen_toggle_list_panel(service, mocker) -> None:
+async def test_main_screen_toggle_list_panel(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
     """List panel should collapse and expand via action."""
     service.create_idea("First")
     screen = MainScreen(service)
@@ -413,7 +430,7 @@ async def test_main_screen_toggle_list_panel(service, mocker) -> None:
 
 
 @pytest.mark.asyncio
-async def test_cogitus_app_mount_and_exit(db) -> None:
+async def test_cogitus_app_mount_and_exit(db: SqliterDB) -> None:
     """Cogitus app should restore and persist last viewed idea."""
     settings = _FakeSettings(last_viewed_idea_pk=0)
     app = CogitusApp(db=db, settings=settings)
@@ -428,7 +445,11 @@ async def test_cogitus_app_mount_and_exit(db) -> None:
     assert settings.saved is True
 
 
-def test_cogitus_app_init_uses_db_path(mocker, db, tmp_path) -> None:
+def test_cogitus_app_init_uses_db_path(
+    mocker: MockerFixture,
+    db: SqliterDB,
+    tmp_path: Path,
+) -> None:
     """App should call get_db with db_path when provided."""
     get_db = mocker.patch("cogitus.app.get_db", return_value=db)
     settings = _FakeSettings()
@@ -439,7 +460,10 @@ def test_cogitus_app_init_uses_db_path(mocker, db, tmp_path) -> None:
     get_db.assert_called_once_with(db_path)
 
 
-def test_cogitus_app_init_uses_default_db(mocker, db) -> None:
+def test_cogitus_app_init_uses_default_db(
+    mocker: MockerFixture,
+    db: SqliterDB,
+) -> None:
     """App should call get_db with default args when db_path is missing."""
     get_db = mocker.patch("cogitus.app.get_db", return_value=db)
     settings = _FakeSettings()

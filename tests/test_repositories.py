@@ -7,12 +7,10 @@ from typing import TYPE_CHECKING
 from sqliter.exceptions import RecordInsertionError
 
 if TYPE_CHECKING:
-    from cogitus.repositories.idea_repo import (
-        IdeaRepository,
-    )
-    from cogitus.repositories.tag_repo import (
-        TagRepository,
-    )
+    from pytest_mock import MockerFixture
+
+    from cogitus.repositories.idea_repo import IdeaRepository
+    from cogitus.repositories.tag_repo import TagRepository
 
 
 class TestTagRepository:
@@ -63,7 +61,9 @@ class TestTagRepository:
         ]
 
     def test_get_or_create_recovers_after_insert_race(
-        self, tag_repo: TagRepository, mocker
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
     ) -> None:
         """Insert race should recover by re-fetching tag after insert error."""
         existing = tag_repo.get_or_create("python")

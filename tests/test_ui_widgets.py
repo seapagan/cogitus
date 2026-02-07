@@ -3,26 +3,38 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import ListView, Markdown, Static
+from textual.widgets import Input, ListItem, ListView, Markdown, Static
 
 from cogitus.ui.widgets.idea_list import IdeaListPanel, _format_timestamp
 from cogitus.ui.widgets.idea_view import IdeaView, _format_full_timestamp
+
+if TYPE_CHECKING:
+    from pytest_mock import MockerFixture
+    from textual.widget import Widget
+
+    from cogitus.services.idea_service import IdeaService
 
 
 class _WidgetApp(App[None]):
     """Small app to mount a single widget for tests."""
 
-    def __init__(self, widget) -> None:
+    def __init__(self, widget: Widget) -> None:
         super().__init__()
         self._widget = widget
 
     def compose(self) -> ComposeResult:
         """Compose with one mounted widget."""
         yield self._widget
+
+
+class _IdeaListItem(ListItem):
+    """ListItem test helper with an idea attribute."""
+
+    idea: object
 
 
 def _to_unix(dt: datetime) -> int:
@@ -52,7 +64,9 @@ def test_format_full_timestamp_branches() -> None:
 
 
 @pytest.mark.asyncio
-async def test_idea_list_panel_load_and_selection(service) -> None:
+async def test_idea_list_panel_load_and_selection(
+    service: IdeaService,
+) -> None:
     """List panel should load ideas and return highlighted selection."""
     first = service.create_idea("First")
     second = service.create_idea("Second")
@@ -71,10 +85,13 @@ async def test_idea_list_panel_load_and_selection(service) -> None:
         assert selected.pk == second.pk
 
 
-def test_idea_list_panel_methods_and_events(mocker) -> None:
+def test_idea_list_panel_methods_and_events(
+    mocker: MockerFixture,
+) -> None:
     """List panel helpers and event handlers should behave correctly."""
     panel = IdeaListPanel(id="idea-list-panel")
-    search = SimpleNamespace(value="", focus=mocker.Mock())
+    search = mocker.Mock(spec=Input)
+    search.value = "abc"
     mocker.patch.object(panel, "query_one", return_value=search)
 
     panel.focus_search()
@@ -82,15 +99,16 @@ def test_idea_list_panel_methods_and_events(mocker) -> None:
 
     panel.clear_search()
     assert search.value == ""
+    assert search.focus.call_count == 2
 
-    timer = SimpleNamespace(stop=mocker.Mock())
+    timer = mocker.Mock()
     panel._debounce_timer = timer
-    set_timer = mocker.patch.object(panel, "set_timer", return_value="new")
-    event = SimpleNamespace(
-        input=SimpleNamespace(id="search-input"),
-        value="xyz",
+    set_timer = mocker.patch.object(
+        panel, "set_timer", return_value=mocker.Mock()
     )
-    panel.on_input_changed(event)
+    input_widget = mocker.Mock(spec=Input)
+    input_widget.id = "search-input"
+    panel.on_input_changed(Input.Changed(input_widget, "xyz"))
     timer.stop.assert_called_once_with()
     set_timer.assert_called_once()
 
@@ -98,26 +116,25 @@ def test_idea_list_panel_methods_and_events(mocker) -> None:
     panel._fire_search("needle")
     post.assert_called_once()
 
-    idea = SimpleNamespace(pk=123)
+    list_view = ListView()
+    list_item = _IdeaListItem()
+    list_item.idea = mocker.Mock()
+
     post.reset_mock()
-    panel.on_list_view_selected(
-        SimpleNamespace(item=SimpleNamespace(idea=idea))
-    )
+    panel.on_list_view_selected(ListView.Selected(list_view, list_item, 0))
     assert post.call_count == 1
 
     post.reset_mock()
-    panel.on_list_view_highlighted(
-        SimpleNamespace(item=SimpleNamespace(idea=idea))
-    )
+    panel.on_list_view_highlighted(ListView.Highlighted(list_view, list_item))
     assert post.call_count == 1
 
     post.reset_mock()
-    panel.on_list_view_highlighted(SimpleNamespace(item=None))
+    panel.on_list_view_highlighted(ListView.Highlighted(list_view, None))
     post.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_idea_view_show_and_empty(service) -> None:
+async def test_idea_view_show_and_empty(service: IdeaService) -> None:
     """Idea view should render populated and empty states."""
     idea = service.create_idea(
         "Renderable",

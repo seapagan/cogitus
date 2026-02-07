@@ -9,8 +9,13 @@ from cogitus.config import AppSettings, get_settings
 if TYPE_CHECKING:
     from pathlib import Path
 
+    import pytest
 
-def test_get_settings_returns_singleton(tmp_path: Path, monkeypatch) -> None:
+
+def test_get_settings_returns_singleton(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """get_settings should return the same singleton instance."""
     monkeypatch.setattr(
         "simple_toml_settings.settings.xdg_config_home",
@@ -24,7 +29,10 @@ def test_get_settings_returns_singleton(tmp_path: Path, monkeypatch) -> None:
     assert first is second
 
 
-def test_settings_persist_last_viewed_pk(tmp_path: Path, monkeypatch) -> None:
+def test_settings_persist_last_viewed_pk(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Settings should persist and reload the last viewed idea primary key."""
     monkeypatch.setattr(
         "simple_toml_settings.settings.xdg_config_home",

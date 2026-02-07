@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from cogitus import main
 
+if TYPE_CHECKING:
+    from pytest_mock import MockerFixture
 
-def test_main_runs_app(mocker) -> None:
+
+def test_main_runs_app(mocker: MockerFixture) -> None:
     """Main should instantiate CogitusApp and run it."""
     app_cls = mocker.patch("cogitus.main.CogitusApp")
     app = app_cls.return_value
