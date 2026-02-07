@@ -2,8 +2,8 @@
 
 > [!NOTE]
 >
-> This is still in the very-early stages of development and so-far contains no
-> usable functionality.
+> This is still in the very-early stages of development and functionality is
+> likely to change.
 
 **Cogitus — a fast, searchable terminal workspace for capturing and evolving
 programming ideas.**
