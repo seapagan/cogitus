@@ -1,0 +1,1 @@
+"""Screen components for Cogitus."""

@@ -1,6 +1,9 @@
-"""Main Module."""
+"""CLI entrypoint for Cogitus."""
+
+from cogitus.app import CogitusApp
 
 
 def main() -> None:
-    """Main Function."""
-    print("Hello from cogitus!")  # noqa: T201
+    """Launch the Cogitus TUI application."""
+    app = CogitusApp()
+    app.run()
