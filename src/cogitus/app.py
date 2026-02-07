@@ -7,11 +7,13 @@ from typing import TYPE_CHECKING
 
 from textual.app import App
 
+from cogitus.config import AppSettings, get_settings
 from cogitus.db import get_db
 from cogitus.services.idea_service import IdeaService
 from cogitus.ui.screens.main_screen import MainScreen
 
 if TYPE_CHECKING:
+    from rich.console import RenderableType
     from sqliter import SqliterDB
 
 CSS_PATH = Path(__file__).parent / "ui" / "styles" / "app.tcss"
@@ -27,14 +29,20 @@ class CogitusApp(App[None]):
         self,
         db_path: str | None = None,
         db: SqliterDB | None = None,
+        settings: AppSettings | None = None,
     ) -> None:
         """Initialize the Cogitus application.
 
         Args:
             db_path: Path to the database file.
             db: Pre-configured database instance (for testing).
+            settings: Optional settings instance (for testing).
         """
         super().__init__(css_path=CSS_PATH)
+        self._settings = settings if settings is not None else get_settings()
+        last_viewed = self._settings.last_viewed_idea_pk
+        self._last_viewed_idea_pk = last_viewed if last_viewed > 0 else None
+
         if db is not None:
             self._db = db
         elif db_path is not None:
@@ -45,4 +53,29 @@ class CogitusApp(App[None]):
 
     def on_mount(self) -> None:
         """Push the main screen on mount."""
-        self.push_screen(MainScreen(self._service))
+        self.push_screen(
+            MainScreen(
+                self._service,
+                initial_select_pk=self._last_viewed_idea_pk,
+                on_selected_idea_changed=self._on_selected_idea_changed,
+            )
+        )
+
+    def _on_selected_idea_changed(self, idea_pk: int | None) -> None:
+        """Track currently selected idea for persistence."""
+        self._last_viewed_idea_pk = idea_pk
+
+    def exit(
+        self,
+        result: None = None,
+        return_code: int = 0,
+        message: RenderableType | None = None,
+    ) -> None:
+        """Persist settings before the app exits."""
+        self._settings.last_viewed_idea_pk = self._last_viewed_idea_pk or 0
+        self._settings.save()
+        super().exit(
+            result=result,
+            return_code=return_code,
+            message=message,
+        )

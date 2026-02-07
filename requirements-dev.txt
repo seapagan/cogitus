@@ -181,7 +181,9 @@ ruff==0.15.0
 shellingham==1.5.4
     # via typer
 simple-toml-settings==0.10.0
-    # via github-changelog-md
+    # via
+    #   cogitus
+    #   github-changelog-md
 six==1.17.0
     # via python-dateutil
 sqliter-py==0.18.0

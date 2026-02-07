@@ -5,7 +5,11 @@ description = "Cogitus — a fast, searchable terminal workspace for capturing a
 readme = "README.md"
 authors = [{ name = "Grant Ramsay", email = "seapagan@gmail.com" }]
 requires-python = ">=3.10"
-dependencies = ["sqliter-py>=0.18.0", "textual>=7.5.0"]
+dependencies = [
+    "simple-toml-settings>=0.10.0",
+    "sqliter-py>=0.18.0",
+    "textual>=7.5.0",
+]
 
 [project.scripts]
 cogitus = "cogitus.main:main"

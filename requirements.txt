@@ -25,6 +25,10 @@ pygments==2.19.2
     #   textual
 rich==14.3.2
     # via textual
+rtoml==0.13.0
+    # via simple-toml-settings
+simple-toml-settings==0.10.0
+    # via cogitus
 sqliter-py==0.18.0
     # via cogitus
 textual==7.5.0

@@ -17,6 +17,8 @@ from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from textual.app import ComposeResult
 
     from cogitus.services.idea_service import IdeaService
@@ -45,14 +47,25 @@ class MainScreen(Screen[None]):
         Binding("q", "quit_app", "Quit", key_display="Q"),
     ]
 
-    def __init__(self, service: IdeaService) -> None:
+    def __init__(
+        self,
+        service: IdeaService,
+        *,
+        initial_select_pk: int | None = None,
+        on_selected_idea_changed: Callable[[int | None], None] | None = None,
+    ) -> None:
         """Initialize with the idea service.
 
         Args:
             service: The IdeaService instance.
+            initial_select_pk: Idea primary key to select on first load.
+            on_selected_idea_changed: Callback for selected idea changes.
         """
         super().__init__()
         self._service = service
+        self._initial_select_pk = initial_select_pk
+        self._on_selected_idea_changed = on_selected_idea_changed
+        self._selected_idea_pk: int | None = None
 
     def compose(self) -> ComposeResult:
         """Compose the main screen layout."""
@@ -63,7 +76,7 @@ class MainScreen(Screen[None]):
 
     def on_mount(self) -> None:
         """Load ideas when screen mounts."""
-        self.refresh_ideas()
+        self.refresh_ideas(select_pk=self._initial_select_pk)
 
     def refresh_ideas(self, select_pk: int | None = None) -> None:
         """Reload the idea list from the service."""
@@ -81,10 +94,13 @@ class MainScreen(Screen[None]):
                         break
             selected = panel.get_selected_idea()
             if selected is not None:
+                self._set_selected_idea(selected.pk)
                 view.show_idea(selected)
             else:
+                self._set_selected_idea(None)
                 view.show_empty()
         else:
+            self._set_selected_idea(None)
             view.show_empty()
 
     def on_idea_list_panel_idea_selected(
@@ -94,8 +110,10 @@ class MainScreen(Screen[None]):
         view = self.query_one("#content-panel", IdeaView)
         fresh = self._service.get_idea(event.idea.pk)
         if fresh is not None:
+            self._set_selected_idea(fresh.pk)
             view.show_idea(fresh)
         else:
+            self._set_selected_idea(None)
             view.show_empty()
 
     def on_idea_list_panel_search_changed(
@@ -111,8 +129,10 @@ class MainScreen(Screen[None]):
         view = self.query_one("#content-panel", IdeaView)
         selected = panel.get_selected_idea()
         if selected is not None:
+            self._set_selected_idea(selected.pk)
             view.show_idea(selected)
         else:
+            self._set_selected_idea(None)
             view.show_empty()
 
     def action_new_idea(self) -> None:
@@ -191,3 +211,9 @@ class MainScreen(Screen[None]):
     def action_quit_app(self) -> None:
         """Quit the application."""
         self.app.exit()
+
+    def _set_selected_idea(self, idea_pk: int | None) -> None:
+        """Track and publish the selected idea primary key."""
+        self._selected_idea_pk = idea_pk
+        if self._on_selected_idea_changed is not None:
+            self._on_selected_idea_changed(idea_pk)
