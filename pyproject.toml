@@ -5,11 +5,32 @@ description = "Cogitus — a fast, searchable terminal workspace for capturing a
 readme = "README.md"
 authors = [{ name = "Grant Ramsay", email = "seapagan@gmail.com" }]
 requires-python = ">=3.10"
+keywords = ["ideas", "tui", "textual", "sqlite", "developer-tools"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
 dependencies = [
     "simple-toml-settings>=0.10.0",
     "sqliter-py>=0.18.0",
     "textual>=7.5.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/seapagan/cogitus"
+Issues = "https://github.com/seapagan/cogitus/issues"
+Changelog = "https://github.com/seapagan/cogitus/blob/main/CHANGELOG.md"
 
 [project.scripts]
 cogitus = "cogitus.main:main"

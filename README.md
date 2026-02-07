@@ -2,8 +2,8 @@
 
 > [!NOTE]
 >
-> This is still in the very-early stages of development and functionality is
-> likely to change.
+> Cogitus is currently in `v0.1` MVP/alpha stage. Core workflows are available,
+> and interfaces may continue to evolve in subsequent releases.
 
 **Cogitus — a fast, searchable terminal workspace for capturing and evolving
 programming ideas.**
@@ -81,14 +81,35 @@ Search will initially be simple but structured to evolve into FTS5.
 
 ### v0.2
 
-- Full-text search (FTS5)
-- Tag filtering
-- Improved navigation and keyboard shortcuts
+- SQLite FTS5 search backend
+- Better ranking/snippet presentation
+- Tag filtering and combined query UX
+- Navigation and keybinding polish
+- In-place right-pane Markdown edit mode (view/edit toggle in content pane)
+- Contextual dynamic toolbar/actions by mode
+- Evaluate SQLite write tuning (`PRAGMA synchronous=NORMAL`) as an optional
+  performance optimization, backed by benchmark and risk assessment.
 
-### v0.3 - Idea linking (graph-style relationships)
+### v0.3
 
-- Enhanced search scoring
-- Richer metadata
+- Idea linking (explicit relationships)
+- Relationship browsing primitives
+- Richer metadata and prioritization signals
+
+### v0.4
+
+- Add non-TUI CLI tasks for idea management:
+  - list ideas,
+  - dump/export ideas,
+  - delete ideas.
+- Ensure CLI task layer reuses the same repository/service abstractions as the
+  TUI.
+
+### v0.5+
+
+- Graph-oriented idea exploration views
+- Scoring heuristics (impact/effort/confidence)
+- Optional AI-assisted idea expansion and prompt-to-structure workflows
 
 ---
 
