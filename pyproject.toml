@@ -1,0 +1,146 @@
+[project]
+name = "cogitus"
+version = "0.1.0"
+description = "Cogitus — a fast, searchable terminal workspace for capturing and evolving programming ideas."
+readme = "README.md"
+authors = [{ name = "Grant Ramsay", email = "seapagan@gmail.com" }]
+requires-python = ">=3.10"
+dependencies = ["sqliter-py>=0.18.0", "textual>=7.5.0"]
+
+[project.scripts]
+cogitus = "cogitus.main:main"
+
+[build-system]
+requires = ["uv_build>=0.10.0,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "github-changelog-md>=0.9.8",
+    "mdx-truly-sane-lists>=1.3",
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.1",
+    "mkdocs-minify-plugin>=0.8.0",
+    "mock>=5.2.0",
+    "mypy>=1.19.1",
+    "poethepoet>=0.40.0",
+    "prek>=0.3.2",
+    "pygments>=2.19.2",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "pytest-clarity>=1.0.1",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.1",
+    "pytest-randomly>=4.0.1",
+    "pytest-reverse>=1.9.0",
+    "pytest-sugar>=1.1.1",
+    "pytest-watcher>=0.6.3",
+    "ruff>=0.15.0",
+]
+
+# --------------------------------- POE tasks -------------------------------- #
+[tool.poe.tasks]
+pre.cmd = "prek run --all-files"
+pre.help = "Run pre-commit checks"
+
+mypy.cmd = "mypy . --strict"
+mypy.help = "Run mypy checks"
+format.cmd = "ruff format ."
+format.help = "Format code with Ruff"
+ruff.cmd = "ruff check --output-format=concise ."
+ruff.help = "Run Ruff checks"
+
+test.cmd = "pytest"
+test.help = "Run tests using Pytest"
+"test:watch".cmd = "ptw . --now --clear"
+"test:watch".help = "Run tests using Pytest in watch mode"
+
+changelog.cmd = "github-changelog-md"
+changelog.help = "Generate a changelog"
+
+"docs:publish".cmd = "mkdocs gh-deploy"
+"docs:publish".help = "Publish documentation to GitHub Pages"
+"docs:build".cmd = "mkdocs build"
+"docs:build".help = "Build documentation locally to './site' folder"
+"docs:serve".cmd = "mkdocs serve -w TODO.md -w CHANGELOG.md -w CONTRIBUTING.md"
+"docs:serve".help = "Serve documentation locally"
+"docs:serve:all".cmd = "mkdocs serve -w TODO.md -w CHANGELOG.md -w CONTRIBUTING.md -a 0.0.0.0:9000"
+"docs:serve:all".help = "Serve documentation locally on all interfaces"
+
+# ---------------------------------- linting --------------------------------- #
+[tool.ruff]
+line-length = 80
+lint.select = ["ALL"] # we are being very strict!
+lint.ignore = [
+    "PGH003",
+    "FBT002",
+    "FBT003",
+    "B006",
+] # These rules are too strict even for us 😝
+lint.extend-ignore = [
+    "COM812",
+    "ISC001",
+] # these are ignored for ruff formatting
+
+target-version = "py310" # minimum python version supported
+
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "double"
+
+[tool.ruff.lint.pylint]
+max-args = 6
+
+[tool.ruff.lint.pep8-naming]
+classmethod-decorators = []
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.extend-per-file-ignores]
+"tests/**/*.py" = [
+    "S101",    # we can (and MUST!) use 'assert' in test files.
+    "ANN001",  # annotations for fixtures are sometimes a pain for test files
+    "ARG00",   # test fixtures often are not directly used
+    "PLR2004", # magic numbers are often used in test files
+    "SLF001",  # sometimes we need to test private methods
+]
+
+[tool.ruff.lint.isort]
+known-first-party = []
+
+[tool.ruff.lint.pyupgrade]
+keep-runtime-typing = true
+
+[tool.mypy]
+plugins = []
+
+python_version = "3.10"
+exclude = ["docs"]
+
+[[tool.mypy.overrides]]
+disable_error_code = []
+module = "tests.*"
+
+# ---------------------------------- testing --------------------------------- #
+[tool.pytest.ini_options]
+# asyncio_mode = "auto"
+# asyncio_default_fixture_loop_scope = "function"
+addopts = [
+    "--cov",
+    "--cov-report",
+    "term-missing",
+    "--cov-report",
+    "html",
+    "--cov-report",
+    "lcov",
+]
+filterwarnings = [
+    "ignore:'direction' argument is deprecated:DeprecationWarning",
+]
+mock_use_standalone_module = true
+markers = []
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/tests/*"]

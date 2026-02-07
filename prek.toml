@@ -1,0 +1,43 @@
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "check-yaml" },
+  { id = "trailing-whitespace" },
+  { id = "check-toml" },
+  { id = "check-merge-conflict" },
+  { id = "end-of-file-fixer" },
+  { id = "check-added-large-files" },
+]
+
+[[repos]]
+repo = "https://github.com/astral-sh/ruff-pre-commit"
+rev = "v0.15.0"
+hooks = [
+  { id = "ruff", args = [
+    "--output-format=concise",
+  ], name = "format with ruff" },
+  { id = "ruff-format", name = "lint with ruff" },
+]
+
+[[repos]]
+repo = "https://github.com/pre-commit/mirrors-mypy"
+rev = "v1.19.1"
+hooks = [{ id = "mypy", name = "run mypy" }]
+
+[[repos]]
+repo = "https://github.com/astral-sh/uv-pre-commit"
+rev = "0.10.0"
+hooks = [
+  { id = "uv-lock" },
+  { id = "uv-export", name = "Export dependencies to 'requirements.txt'", args = [
+    "--no-hashes",
+    "--no-dev",
+    "--no-emit-project",
+    "--output-file=requirements.txt",
+  ] },
+  { id = "uv-export", name = "Export dev dependencies to 'requirements-dev.txt'", args = [
+    "--no-hashes",
+    "--no-emit-project",
+    "--output-file=requirements-dev.txt",
+  ] },
+]

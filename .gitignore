@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# IDE files
+.vscode
+
+# direnv config
+.envrc
+
+# AI stuff
+.claude/
+CLAUDE.md
+AGENTS.md
+
+# Test coverage
+.coverage
+coverage.lcov
+htmlcov/
