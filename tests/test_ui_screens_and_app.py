@@ -325,6 +325,32 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_toggle_list_panel(service, mocker) -> None:
+    """List panel should collapse and expand via action."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        content = screen.query_one("#content-panel", IdeaView)
+        list_view = panel.query_one("#idea-list", ListView)
+
+        content_focus = mocker.patch.object(content, "focus")
+        list_focus = mocker.patch.object(list_view, "focus")
+
+        assert not panel.has_class("collapsed")
+        screen.action_toggle_list_panel()
+        assert panel.has_class("collapsed")
+        content_focus.assert_called_once_with()
+
+        screen.action_toggle_list_panel()
+        assert not panel.has_class("collapsed")
+        list_focus.assert_called_once_with()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_cogitus_app_mount_and_exit(db) -> None:
     """Cogitus app should restore and persist last viewed idea."""
     settings = _FakeSettings(last_viewed_idea_pk=0)

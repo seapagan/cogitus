@@ -21,7 +21,9 @@ MainScreen {
 
 #search-input {
     dock: top;
-    margin: 0 1;
+    height: 3;
+    margin: 0;
+    padding: 0 1;
 }
 
 #idea-list {
@@ -29,8 +31,12 @@ MainScreen {
 }
 
 .idea-item {
-    height: 3;
+    height: 4;
     padding: 0;
+}
+
+.idea-item > IdeaListItem {
+    height: 1fr;
 }
 
 #idea-list > .idea-item.-hovered {
@@ -47,6 +53,8 @@ MainScreen {
 }
 
 .idea-text {
+    height: 1fr;
+    content-align: left middle;
     padding: 0 1;
     width: 1fr;
 }

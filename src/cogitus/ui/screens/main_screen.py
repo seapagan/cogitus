@@ -44,6 +44,12 @@ class MainScreen(Screen[None]):
             "Switch Pane",
             show=False,
         ),
+        Binding(
+            "ctrl+b",
+            "toggle_list_panel",
+            "Toggle List",
+            key_display="Ctrl+B",
+        ),
         Binding("q", "quit_app", "Quit", key_display="Q"),
     ]
 
@@ -207,6 +213,17 @@ class MainScreen(Screen[None]):
         else:
             list_view = panel.query_one("#idea-list")
             list_view.focus()
+
+    def action_toggle_list_panel(self) -> None:
+        """Collapse/expand the left list panel."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        content = self.query_one("#content-panel", IdeaView)
+        if panel.has_class("collapsed"):
+            panel.remove_class("collapsed")
+            panel.query_one("#idea-list", ListView).focus()
+        else:
+            panel.add_class("collapsed")
+            content.focus()
 
     def action_quit_app(self) -> None:
         """Quit the application."""
