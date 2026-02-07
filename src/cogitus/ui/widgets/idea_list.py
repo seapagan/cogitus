@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from rich.text import Text
 from textual.containers import Vertical
 from textual.message import Message
 from textual.reactive import reactive
@@ -39,7 +40,7 @@ def _format_timestamp(unix_ts: int) -> str:
     return dt.strftime("%Y-%m-%d")
 
 
-class IdeaListItem(Static):
+class IdeaListItem(Vertical):
     """A single idea row in the list."""
 
     def __init__(self, idea: Idea) -> None:
@@ -53,21 +54,12 @@ class IdeaListItem(Static):
 
     def compose(self) -> ComposeResult:
         """Compose the idea item display."""
-        tags = self.idea.tags.fetch_all()
-        tag_str = " ".join(f"[{t.name}]" for t in tags)
         timestamp = _format_timestamp(self.idea.updated_at)
-        yield Static(self.idea.title, classes="idea-title")
-        meta_parts = []
-        if tag_str:
-            meta_parts.append(f"[green]{tag_str}[/green]")
+        row = Text(self.idea.title, style="bold")
         if timestamp:
-            meta_parts.append(f"[dim]{timestamp}[/dim]")
-        if meta_parts:
-            yield Static(
-                "  ".join(meta_parts),
-                classes="idea-meta",
-                markup=True,
-            )
+            row.append("\n")
+            row.append(timestamp, style="dim")
+        yield Static(row, classes="idea-text")
 
 
 class IdeaListPanel(Vertical):
@@ -131,7 +123,7 @@ class IdeaListPanel(Vertical):
         list_view = self.query_one("#idea-list", ListView)
         list_view.clear()
         for idea in ideas:
-            item = ListItem(IdeaListItem(idea))
+            item = ListItem(IdeaListItem(idea), classes="idea-item")
             item.idea = idea  # type: ignore[attr-defined]
             list_view.append(item)
 

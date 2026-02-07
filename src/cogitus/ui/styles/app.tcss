@@ -30,23 +30,25 @@ MainScreen {
 
 .idea-item {
     height: 3;
-    padding: 0 1;
+    padding: 0;
 }
 
-.idea-item:hover {
+#idea-list > .idea-item.-hovered {
     background: $boost;
 }
 
-.idea-item.--highlight {
-    background: $accent 30%;
+#idea-list > .idea-item.-highlight,
+#idea-list:focus > .idea-item.-highlight,
+#idea-list > .idea-item.-highlight.-hovered,
+#idea-list:focus > .idea-item.-highlight.-hovered {
+    color: $block-cursor-foreground;
+    background: $block-cursor-background;
+    text-style: $block-cursor-text-style;
 }
 
-.idea-title {
-    text-style: bold;
-}
-
-.idea-meta {
-    color: $text-muted;
+.idea-text {
+    padding: 0 1;
+    width: 1fr;
 }
 
 .idea-tags {
