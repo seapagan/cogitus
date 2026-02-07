@@ -25,6 +25,8 @@ def _format_full_timestamp(unix_ts: int) -> str:
 class IdeaView(Vertical):
     """Right panel showing full detail of an idea."""
 
+    can_focus = True
+
     def compose(self) -> ComposeResult:
         """Compose the idea detail view."""
         yield Vertical(

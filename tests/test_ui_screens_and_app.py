@@ -164,6 +164,7 @@ async def test_main_screen_selection_and_search(service, mocker) -> None:
 
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        assert app.focused is panel.query_one("#idea-list")
         assert panel.get_selected_idea() is not None
 
         screen.on_idea_list_panel_idea_selected(
@@ -281,11 +282,12 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
     screen = MainScreen(service, on_selected_idea_changed=selected.append)
     app = _SingleScreenApp(screen)
 
-    async with app.run_test():
+    async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         view = screen.query_one("#content-panel", IdeaView)
 
         screen.action_focus_search()
+        await pilot.pause()
         assert app.focused is panel.query_one("#search-input")
 
         push = mocker.patch.object(app, "push_screen")
@@ -322,6 +324,66 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
 
         screen._set_selected_idea(first.pk)
         assert selected[-1] == first.pk
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_cancel_restores_previous_focus(
+    service,
+) -> None:
+    """Esc clears search and restores panel active before slash."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        content = screen.query_one("#content-panel", IdeaView)
+        search = panel.query_one("#search-input", Input)
+        list_view = panel.query_one("#idea-list", ListView)
+
+        screen._active_pane = "content"
+        screen.action_focus_search()
+        await pilot.pause()
+        assert app.focused is search
+        search.value = "abc"
+        screen.action_cancel_search()
+        await pilot.pause()
+        assert search.value == ""
+        assert app.focused is content
+
+        screen._active_pane = "list"
+        screen.action_focus_search()
+        await pilot.pause()
+        assert app.focused is search
+        search.value = "xyz"
+        screen.action_cancel_search()
+        await pilot.pause()
+        assert search.value == ""
+        assert app.focused is list_view
+
+
+@pytest.mark.asyncio
+async def test_main_screen_cancel_search_noop_when_search_not_focused(
+    service,
+) -> None:
+    """Cancel search should no-op when focus is not on search input."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        list_view = panel.query_one("#idea-list", ListView)
+
+        list_view.focus()
+        await pilot.pause()
+        search.value = "keep"
+        screen.action_cancel_search()
+        await pilot.pause()
+
+        assert search.value == "keep"
+        assert app.focused is list_view
 
 
 @pytest.mark.asyncio

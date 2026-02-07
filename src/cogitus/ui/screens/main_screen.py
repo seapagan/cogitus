@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from textual.binding import Binding, BindingType
 from textual.screen import Screen
-from textual.widgets import Footer, Header, ListView
+from textual.widgets import Footer, Header, Input, ListView
 
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
@@ -32,6 +32,7 @@ class MainScreen(Screen[None]):
         Binding("e", "edit_idea", "Edit", key_display="E"),
         Binding("d", "delete_idea", "Delete", key_display="D"),
         Binding("slash", "focus_search", "Search", key_display="/"),
+        Binding("escape", "cancel_search", "Back", show=False),
         Binding(
             "question_mark",
             "show_help",
@@ -72,6 +73,8 @@ class MainScreen(Screen[None]):
         self._initial_select_pk = initial_select_pk
         self._on_selected_idea_changed = on_selected_idea_changed
         self._selected_idea_pk: int | None = None
+        self._active_pane: str = "list"
+        self._focus_before_search: str = "list"
 
     def compose(self) -> ComposeResult:
         """Compose the main screen layout."""
@@ -83,6 +86,8 @@ class MainScreen(Screen[None]):
     def on_mount(self) -> None:
         """Load ideas when screen mounts."""
         self.refresh_ideas(select_pk=self._initial_select_pk)
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        panel.query_one("#idea-list", ListView).focus()
 
     def refresh_ideas(self, select_pk: int | None = None) -> None:
         """Reload the idea list from the service."""
@@ -198,7 +203,25 @@ class MainScreen(Screen[None]):
     def action_focus_search(self) -> None:
         """Focus the search input."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        panel.focus_search()
+        search = panel.query_one("#search-input", Input)
+        if self.app.focused is not search:
+            self._focus_before_search = self._active_pane
+        search.focus()
+
+    def action_cancel_search(self) -> None:
+        """Clear search and return focus to the previous panel."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        if self.app.focused is not search:
+            return
+
+        search.value = ""
+        if self._focus_before_search == "content":
+            self.query_one("#content-panel", IdeaView).focus()
+            self._active_pane = "content"
+        else:
+            panel.query_one("#idea-list", ListView).focus()
+            self._active_pane = "list"
 
     def action_show_help(self) -> None:
         """Show the help overlay."""
@@ -210,9 +233,11 @@ class MainScreen(Screen[None]):
         if panel.has_focus_within:
             content = self.query_one("#content-panel", IdeaView)
             content.focus()
+            self._active_pane = "content"
         else:
             list_view = panel.query_one("#idea-list")
             list_view.focus()
+            self._active_pane = "list"
 
     def action_toggle_list_panel(self) -> None:
         """Collapse/expand the left list panel."""
@@ -221,9 +246,11 @@ class MainScreen(Screen[None]):
         if panel.has_class("collapsed"):
             panel.remove_class("collapsed")
             panel.query_one("#idea-list", ListView).focus()
+            self._active_pane = "list"
         else:
             panel.add_class("collapsed")
             content.focus()
+            self._active_pane = "content"
 
     def action_quit_app(self) -> None:
         """Quit the application."""
