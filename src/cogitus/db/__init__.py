@@ -32,6 +32,7 @@ def get_db(
         expanded = Path(db_path).expanduser()
         expanded.parent.mkdir(parents=True, exist_ok=True)
         db = SqliterDB(str(expanded))
+        db.connect().execute("PRAGMA journal_mode=WAL;")
 
     db.create_table(Tag)
     db.create_table(Idea)

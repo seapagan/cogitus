@@ -34,3 +34,15 @@ def test_get_db_file_path_creates_parent(tmp_path: Path) -> None:
         assert db_file.exists()
     finally:
         db.close()
+
+
+def test_get_db_file_enables_wal_mode(tmp_path: Path) -> None:
+    """File-backed database should enable WAL journal mode."""
+    db_file = tmp_path / "nested" / "cogitus.db"
+    db = get_db(str(db_file))
+    try:
+        result = db.connect().execute("PRAGMA journal_mode;").fetchone()
+        assert result is not None
+        assert str(result[0]).lower() == "wal"
+    finally:
+        db.close()
