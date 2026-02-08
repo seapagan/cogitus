@@ -140,6 +140,34 @@ cogitus
 
 ---
 
+## Clipboard Support
+
+Cogitus uses two clipboard strategies for maximum compatibility:
+
+- **OSC 52** (primary) — works in most modern terminals (Ghostty, iTerm2, Kitty,
+  Alacritty, WezTerm, Windows Terminal) and through tmux/SSH
+- **pyperclip** (fallback) — uses system tools like `xclip`, `xsel`, or
+  `pbcopy` for terminals that don't support OSC 52 (e.g. Gnome Terminal, macOS
+  Terminal)
+
+**tmux users:** You need `set-clipboard` enabled in your `~/.tmux.conf` for
+OSC 52 to pass through:
+
+```tmux
+set -g set-clipboard on
+```
+
+**Linux users without OSC 52 support:** Install `xclip` or `xsel` for the
+pyperclip fallback to work:
+
+```bash
+sudo apt-get install xclip   # Debian/Ubuntu
+sudo pacman -S xclip          # Arch
+sudo dnf install xclip        # Fedora
+```
+
+---
+
 ## Development
 
 This project uses:
