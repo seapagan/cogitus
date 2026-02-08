@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from textual.app import App
 
 
-def copy_to_clipboard(text: str, app: App[object]) -> None:
+def copy_to_clipboard(text: str, app: App[object]) -> bool:
     """Copy text to the system clipboard.
 
     Sends an OSC 52 escape sequence (handled by the terminal
@@ -28,8 +28,15 @@ def copy_to_clipboard(text: str, app: App[object]) -> None:
     Args:
         text: The text to copy.
         app: The running Textual application instance.
+
+    Returns:
+        True if at least one clipboard backend succeeds.
     """
+    copied = False
     with contextlib.suppress(OSError, RuntimeError):
         app.copy_to_clipboard(text)
+        copied = True
     with contextlib.suppress(pyperclip.PyperclipException):
         pyperclip.copy(text)
+        copied = True
+    return copied

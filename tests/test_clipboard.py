@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pyperclip
-import pytest
 
 from cogitus.ui.clipboard import copy_to_clipboard
 
@@ -17,7 +16,7 @@ class TestCopyToClipboard:
     def test_uses_osc52_and_pyperclip(self, mock_pyperclip: MagicMock) -> None:
         """Calls both OSC 52 and pyperclip."""
         mock_app: MagicMock = MagicMock()
-        copy_to_clipboard("hello", mock_app)
+        assert copy_to_clipboard("hello", mock_app) is True
         mock_app.copy_to_clipboard.assert_called_once_with("hello")
         mock_pyperclip.assert_called_once_with("hello")
 
@@ -30,14 +29,14 @@ class TestCopyToClipboard:
             "no copy mechanism"
         )
         mock_app: MagicMock = MagicMock()
-        copy_to_clipboard("hello", mock_app)
+        assert copy_to_clipboard("hello", mock_app) is True
         mock_app.copy_to_clipboard.assert_called_once_with("hello")
 
     @patch("cogitus.ui.clipboard.pyperclip.copy")
     def test_empty_string(self, mock_pyperclip: MagicMock) -> None:
         """Handles copying an empty string."""
         mock_app: MagicMock = MagicMock()
-        copy_to_clipboard("", mock_app)
+        assert copy_to_clipboard("", mock_app) is True
         mock_app.copy_to_clipboard.assert_called_once_with("")
         mock_pyperclip.assert_called_once_with("")
 
@@ -51,20 +50,24 @@ class TestCopyToClipboard:
             "terminal write failed"
         )
 
-        copy_to_clipboard("hello", mock_app)
+        assert copy_to_clipboard("hello", mock_app) is True
 
         mock_app.copy_to_clipboard.assert_called_once_with("hello")
         mock_pyperclip.assert_called_once_with("hello")
 
     @patch("cogitus.ui.clipboard.pyperclip.copy")
-    def test_unexpected_app_copy_failure_propagates(
+    def test_both_clipboard_backends_fail(
         self, mock_pyperclip: MagicMock
     ) -> None:
-        """Unexpected app-copy exceptions are not swallowed."""
+        """Returns false when both clipboard backends fail."""
         mock_app: MagicMock = MagicMock()
-        mock_app.copy_to_clipboard.side_effect = ValueError("bad state")
+        mock_app.copy_to_clipboard.side_effect = OSError(
+            "terminal write failed"
+        )
+        mock_pyperclip.side_effect = pyperclip.PyperclipException(
+            "no copy mechanism"
+        )
 
-        with pytest.raises(ValueError, match="bad state"):
-            copy_to_clipboard("hello", mock_app)
+        assert copy_to_clipboard("hello", mock_app) is False
 
-        mock_pyperclip.assert_not_called()
+        mock_pyperclip.assert_called_once_with("hello")

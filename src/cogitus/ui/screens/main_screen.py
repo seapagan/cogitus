@@ -202,8 +202,10 @@ class MainScreen(Screen[None]):
         if not idea.body:
             self.notify("Idea has no body to copy", severity="warning")
             return
-        copy_to_clipboard(idea.body, self.app)
-        self.notify("Copied idea body to clipboard")
+        if copy_to_clipboard(idea.body, self.app):
+            self.notify("Copied idea body to clipboard")
+        else:
+            self.notify("Clipboard unavailable", severity="warning")
 
     def _on_delete_confirm(
         self,

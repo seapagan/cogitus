@@ -511,9 +511,16 @@ async def test_main_screen_copy_idea_body(
         # Success
         notify.reset_mock()
         screen._selected_idea_pk = idea.pk
+        copy.return_value = True
         screen.action_copy_idea_body()
         copy.assert_called_once_with("# Hello", app)
         notify.assert_called_with("Copied idea body to clipboard")
+
+        # Clipboard unavailable
+        notify.reset_mock()
+        copy.return_value = False
+        screen.action_copy_idea_body()
+        notify.assert_called_with("Clipboard unavailable", severity="warning")
         await pilot.pause()
 
 
@@ -542,9 +549,17 @@ async def test_cogitus_text_area_y_copies_selection(
         # y with selection copies instead of typing
         ta.text = "hello world"
         ta.select_all()
+        copy.return_value = True
         await pilot.press("y")
         copy.assert_called_once_with("hello world", app)
         notify.assert_called_with("Copied selection to clipboard")
+
+        # Failed clipboard copy shows warning
+        notify.reset_mock()
+        copy.return_value = False
+        ta.select_all()
+        await pilot.press("y")
+        notify.assert_called_with("Clipboard unavailable", severity="warning")
         await pilot.pause()
 
 
