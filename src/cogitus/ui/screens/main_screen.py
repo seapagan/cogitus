@@ -6,11 +6,13 @@ from typing import TYPE_CHECKING, ClassVar
 
 from textual.binding import Binding, BindingType
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Input, ListView
+from textual.widgets import Footer, Header, Input, Tree
 
 from cogitus.ui.clipboard import copy_to_clipboard
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
+    GroupDeleteReassignScreen,
+    GroupFormScreen,
     HelpScreen,
     IdeaFormScreen,
 )
@@ -30,6 +32,13 @@ class MainScreen(Screen[None]):
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("n", "new_idea", "New", key_display="N"),
+        Binding("g", "new_group", "New Group", key_display="G"),
+        Binding(
+            "shift+g",
+            "delete_group",
+            "Delete Group",
+            key_display="Shift+G",
+        ),
         Binding("e", "edit_idea", "Edit", key_display="E"),
         Binding("d", "delete_idea", "Delete", key_display="D"),
         Binding("slash", "focus_search", "Search", key_display="/"),
@@ -94,22 +103,19 @@ class MainScreen(Screen[None]):
         """Load ideas when screen mounts."""
         self.refresh_ideas(select_pk=self._initial_select_pk)
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        panel.query_one("#idea-list", ListView).focus()
+        panel.query_one("#idea-list", Tree).focus()
 
     def refresh_ideas(self, select_pk: int | None = None) -> None:
         """Reload the idea list from the service."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        ideas = self._service.list_ideas()
-        panel.load_ideas(ideas)
+        grouped = self._service.list_ideas_grouped()
+        panel.load_grouped_ideas(grouped)
 
         view = self.query_one("#content-panel", IdeaView)
+        ideas = [idea for _, group_ideas in grouped for idea in group_ideas]
         if ideas:
             if select_pk is not None:
-                for i, idea in enumerate(ideas):
-                    if idea.pk == select_pk:
-                        lv = panel.query_one("#idea-list", ListView)
-                        lv.index = i
-                        break
+                panel.select_idea(select_pk)
             selected = panel.get_selected_idea()
             if selected is not None:
                 self._set_selected_idea(selected.pk)
@@ -139,11 +145,8 @@ class MainScreen(Screen[None]):
     ) -> None:
         """Filter ideas based on search query."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        if event.query.strip():
-            ideas = self._service.search_ideas(event.query)
-        else:
-            ideas = self._service.list_ideas()
-        panel.load_ideas(ideas)
+        grouped = self._service.list_ideas_grouped(event.query)
+        panel.load_grouped_ideas(grouped)
         view = self.query_one("#content-panel", IdeaView)
         selected = panel.get_selected_idea()
         if selected is not None:
@@ -158,6 +161,13 @@ class MainScreen(Screen[None]):
         self.app.push_screen(
             IdeaFormScreen(self._service),
             callback=self._on_form_dismiss,
+        )
+
+    def action_new_group(self) -> None:
+        """Open the new group form."""
+        self.app.push_screen(
+            GroupFormScreen(self._service),
+            callback=self._on_group_form_dismiss,
         )
 
     def action_edit_idea(self) -> None:
@@ -187,6 +197,53 @@ class MainScreen(Screen[None]):
             ConfirmDialog(f'Delete "{idea.title}"?'),
             callback=lambda confirmed: self._on_delete_confirm(
                 idea.pk, confirmed=confirmed
+            ),
+        )
+
+    def action_delete_group(self) -> None:
+        """Delete selected group with optional bulk move."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        group_pk = panel.get_selected_group_pk()
+        if group_pk is None:
+            self.notify("No group selected", severity="warning")
+            return
+
+        groups = self._service.list_groups()
+        group = next((item for item in groups if item.pk == group_pk), None)
+        if group is None:
+            self.notify("Group not found", severity="error")
+            return
+        if group.name == self._service.DEFAULT_GROUP_NAME:
+            self.notify("Default group cannot be deleted", severity="warning")
+            return
+
+        grouped = self._service.list_ideas_grouped()
+        ideas_in_group = next(
+            (
+                ideas
+                for item_group, ideas in grouped
+                if item_group.pk == group_pk
+            ),
+            [],
+        )
+        if not ideas_in_group:
+            self.app.push_screen(
+                ConfirmDialog(f'Delete group "{group.name}"?'),
+                callback=lambda confirmed: self._on_delete_group_confirm(
+                    group_pk,
+                    confirmed=confirmed,
+                ),
+            )
+            return
+
+        options = [
+            (item.name, item.pk) for item in groups if item.pk != group_pk
+        ]
+        self.app.push_screen(
+            GroupDeleteReassignScreen(group.name, options),
+            callback=lambda target_pk: self._on_delete_group_reassign(
+                group_pk,
+                target_pk,
             ),
         )
 
@@ -224,6 +281,47 @@ class MainScreen(Screen[None]):
         if result is not None:
             self.refresh_ideas(select_pk=result)
 
+    def _on_group_form_dismiss(self, result: int | None) -> None:
+        """Refresh tree after group create."""
+        if result is not None:
+            self.notify("Group created")
+            self.refresh_ideas()
+
+    def _on_delete_group_confirm(
+        self,
+        group_pk: int,
+        *,
+        confirmed: bool,
+    ) -> None:
+        """Handle delete-group confirmation for empty groups."""
+        if confirmed:
+            try:
+                self._service.delete_group(group_pk)
+            except ValueError as exc:
+                self.notify(str(exc), severity="error")
+                return
+            self.notify("Group deleted")
+            self.refresh_ideas()
+
+    def _on_delete_group_reassign(
+        self,
+        group_pk: int,
+        target_group_pk: int | None,
+    ) -> None:
+        """Handle group delete with reassignment."""
+        if target_group_pk is None:
+            return
+        try:
+            self._service.delete_group(
+                group_pk,
+                move_to_group_pk=target_group_pk,
+            )
+        except ValueError as exc:
+            self.notify(str(exc), severity="error")
+            return
+        self.notify("Group deleted and ideas moved")
+        self.refresh_ideas()
+
     def action_focus_search(self) -> None:
         """Focus the search input."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
@@ -244,7 +342,7 @@ class MainScreen(Screen[None]):
             self.query_one("#content-panel", IdeaView).focus()
             self._active_pane = "content"
         else:
-            panel.query_one("#idea-list", ListView).focus()
+            panel.query_one("#idea-list", Tree).focus()
             self._active_pane = "list"
 
     def action_show_help(self) -> None:
@@ -259,8 +357,8 @@ class MainScreen(Screen[None]):
             content.focus()
             self._active_pane = "content"
         else:
-            list_view = panel.query_one("#idea-list")
-            list_view.focus()
+            tree = panel.query_one("#idea-list")
+            tree.focus()
             self._active_pane = "list"
 
     def action_toggle_list_panel(self) -> None:
@@ -269,7 +367,7 @@ class MainScreen(Screen[None]):
         content = self.query_one("#content-panel", IdeaView)
         if panel.has_class("collapsed"):
             panel.remove_class("collapsed")
-            panel.query_one("#idea-list", ListView).focus()
+            panel.query_one("#idea-list", Tree).focus()
             self._active_pane = "list"
         else:
             panel.add_class("collapsed")

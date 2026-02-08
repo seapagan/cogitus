@@ -30,35 +30,6 @@ MainScreen {
     height: 1fr;
 }
 
-.idea-item {
-    height: 4;
-    padding: 0;
-}
-
-.idea-item > IdeaListItem {
-    height: 1fr;
-}
-
-#idea-list > .idea-item.-hovered {
-    background: $boost;
-}
-
-#idea-list > .idea-item.-highlight,
-#idea-list:focus > .idea-item.-highlight,
-#idea-list > .idea-item.-highlight.-hovered,
-#idea-list:focus > .idea-item.-highlight.-hovered {
-    color: $block-cursor-foreground;
-    background: $block-cursor-background;
-    text-style: $block-cursor-text-style;
-}
-
-.idea-text {
-    height: 1fr;
-    content-align: left middle;
-    padding: 0 1;
-    width: 1fr;
-}
-
 .idea-tags {
     color: $success;
 }
@@ -134,6 +105,10 @@ IdeaFormScreen {
 }
 
 #tags-input {
+    margin-bottom: 1;
+}
+
+#group-select {
     margin-bottom: 1;
 }
 

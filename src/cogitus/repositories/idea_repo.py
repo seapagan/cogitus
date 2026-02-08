@@ -10,27 +10,37 @@ from cogitus.models.tag import Tag
 if TYPE_CHECKING:
     from sqliter import SqliterDB
 
+    from cogitus.models.group import Group
+    from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.tag_repo import TagRepository
 
 
 class IdeaRepository:
     """Handles Idea persistence and querying through sqliter-py."""
 
-    def __init__(self, db: SqliterDB, tag_repo: TagRepository) -> None:
+    def __init__(
+        self,
+        db: SqliterDB,
+        tag_repo: TagRepository,
+        group_repo: GroupRepository,
+    ) -> None:
         """Initialize with a database connection and tag repository.
 
         Args:
             db: The SqliterDB instance.
             tag_repo: The TagRepository for tag operations.
+            group_repo: The GroupRepository for group operations.
         """
         self._db = db
         self._tag_repo = tag_repo
+        self._group_repo = group_repo
 
     def create(
         self,
         title: str,
         body: str = "",
         tag_names: list[str] | None = None,
+        group_pk: int | None = None,
     ) -> Idea:
         """Insert a new idea with optional tags.
 
@@ -38,11 +48,13 @@ class IdeaRepository:
             title: The idea title.
             body: The idea body text.
             tag_names: Optional list of tag names to associate.
+            group_pk: Optional group primary key.
 
         Returns:
             The newly created Idea.
         """
-        idea = self._db.insert(Idea(title=title, body=body))
+        group = self._resolve_group(group_pk)
+        idea = self._db.insert(Idea(title=title, body=body, group=group))
         if tag_names:
             tags = [self._tag_repo.get_or_create(n) for n in tag_names]
             idea.tags.add(*tags)
@@ -87,6 +99,7 @@ class IdeaRepository:
         title: str,
         body: str,
         tag_names: list[str] | None = None,
+        group_pk: int | None = None,
     ) -> Idea | None:
         """Update an idea's fields and re-sync tag associations.
 
@@ -95,6 +108,7 @@ class IdeaRepository:
             title: The new title.
             body: The new body text.
             tag_names: If provided, replace all tags with these.
+            group_pk: Optional group primary key.
 
         Returns:
             The updated Idea, or None if not found.
@@ -105,6 +119,7 @@ class IdeaRepository:
 
         idea.title = title
         idea.body = body
+        idea.group = self._resolve_group(group_pk)
         self._db.update(idea)
 
         if tag_names is not None:
@@ -169,3 +184,33 @@ class IdeaRepository:
 
         results.sort(key=lambda i: i.updated_at, reverse=True)
         return results
+
+    def list_for_group(self, group_pk: int) -> list[Idea]:
+        """Return ideas for a specific group ordered by recency."""
+        return (
+            self._db.select(Idea)
+            .filter(group_id=group_pk)
+            .order("updated_at", reverse=True)
+            .fetch_all()
+        )
+
+    def bulk_move_group(
+        self,
+        source_group_pk: int,
+        target_group_pk: int,
+    ) -> int:
+        """Move all ideas from source group to target group."""
+        target_group = self._resolve_group(target_group_pk)
+        ideas = self.list_for_group(source_group_pk)
+        for idea in ideas:
+            idea.group = target_group
+            self._db.update(idea)
+        return len(ideas)
+
+    def _resolve_group(self, group_pk: int | None) -> Group:
+        """Resolve a group by primary key, falling back to default."""
+        if group_pk is not None:
+            group = self._group_repo.get(group_pk)
+            if group is not None:
+                return group
+        return self._group_repo.get_or_create("default")

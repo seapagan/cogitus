@@ -7,13 +7,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import Input, ListItem, ListView, Markdown, Static
+from textual.widgets import Input, Markdown, Static, Tree
 
 from cogitus.ui.widgets.idea_list import IdeaListPanel, _format_timestamp
 from cogitus.ui.widgets.idea_view import IdeaView, _format_full_timestamp
 
 if TYPE_CHECKING:
-    from pytest_mock import MockerFixture
     from textual.widget import Widget
 
     from cogitus.services.idea_service import IdeaService
@@ -29,12 +28,6 @@ class _WidgetApp(App[None]):
     def compose(self) -> ComposeResult:
         """Compose with one mounted widget."""
         yield self._widget
-
-
-class _IdeaListItem(ListItem):
-    """ListItem test helper with an idea attribute."""
-
-    idea: object
 
 
 def _to_unix(dt: datetime) -> int:
@@ -68,15 +61,15 @@ async def test_idea_list_panel_load_and_selection(
     service: IdeaService,
 ) -> None:
     """List panel should load ideas and return highlighted selection."""
-    first = service.create_idea("First")
+    service.create_idea("First")
     second = service.create_idea("Second")
     panel = IdeaListPanel(id="idea-list-panel")
     app = _WidgetApp(panel)
 
     async with app.run_test() as pilot:
-        panel.load_ideas([first, second])
-        list_view = panel.query_one("#idea-list", ListView)
-        list_view.index = 1
+        grouped = service.list_ideas_grouped()
+        panel.load_grouped_ideas(grouped)
+        panel.select_idea(second.pk)
         await pilot.pause()
 
         selected = panel.get_selected_idea()
@@ -85,52 +78,34 @@ async def test_idea_list_panel_load_and_selection(
         assert selected.pk == second.pk
 
 
-def test_idea_list_panel_methods_and_events(
-    mocker: MockerFixture,
+@pytest.mark.asyncio
+async def test_idea_list_panel_methods_and_events(
+    service: IdeaService,
 ) -> None:
     """List panel helpers and event handlers should behave correctly."""
+    idea = service.create_idea("Event target")
     panel = IdeaListPanel(id="idea-list-panel")
-    search = mocker.Mock(spec=Input)
-    search.value = "abc"
-    mocker.patch.object(panel, "query_one", return_value=search)
+    app = _WidgetApp(panel)
+    async with app.run_test() as pilot:
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        tree = panel.query_one("#idea-list", Tree)
+        panel.select_idea(idea.pk)
+        await pilot.pause()
 
-    panel.focus_search()
-    search.focus.assert_called_once_with()
+        search = panel.query_one("#search-input", Input)
+        search.value = "abc"
+        panel.focus_search()
+        assert app.focused is search
 
-    panel.clear_search()
-    assert search.value == ""
-    assert search.focus.call_count == 2
+        panel.clear_search()
+        assert search.value == ""
+        assert app.focused is search
 
-    timer = mocker.Mock()
-    panel._debounce_timer = timer
-    set_timer = mocker.patch.object(
-        panel, "set_timer", return_value=mocker.Mock()
-    )
-    input_widget = mocker.Mock(spec=Input)
-    input_widget.id = "search-input"
-    panel.on_input_changed(Input.Changed(input_widget, "xyz"))
-    timer.stop.assert_called_once_with()
-    set_timer.assert_called_once()
-
-    post = mocker.patch.object(panel, "post_message")
-    panel._fire_search("needle")
-    post.assert_called_once()
-
-    list_view = ListView()
-    list_item = _IdeaListItem()
-    list_item.idea = mocker.Mock()
-
-    post.reset_mock()
-    panel.on_list_view_selected(ListView.Selected(list_view, list_item, 0))
-    assert post.call_count == 1
-
-    post.reset_mock()
-    panel.on_list_view_highlighted(ListView.Highlighted(list_view, list_item))
-    assert post.call_count == 1
-
-    post.reset_mock()
-    panel.on_list_view_highlighted(ListView.Highlighted(list_view, None))
-    post.assert_not_called()
+        panel.on_input_changed(Input.Changed(search, "xyz"))
+        await pilot.pause()
+        panel._fire_search("needle")
+        assert tree.cursor_node is not None
+        panel.on_tree_node_selected(Tree.NodeSelected(tree.cursor_node))
 
 
 @pytest.mark.asyncio

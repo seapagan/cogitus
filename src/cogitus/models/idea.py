@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from sqliter.orm import BaseDBModel, ManyToMany
+from sqliter.orm import BaseDBModel, ForeignKey, ManyToMany
 
+from cogitus.models.group import Group
 from cogitus.models.tag import Tag
 
 
@@ -14,6 +15,11 @@ class Idea(BaseDBModel):
 
     title: str
     body: str = ""
+    group: ForeignKey[Group] = ForeignKey(
+        Group,
+        related_name="ideas",
+        on_delete="RESTRICT",
+    )
     tags: ClassVar[ManyToMany[Tag]] = ManyToMany(Tag, related_name="ideas")
 
     class Meta:

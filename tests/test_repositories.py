@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
 from sqliter.exceptions import RecordInsertionError
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
+    from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.idea_repo import IdeaRepository
     from cogitus.repositories.tag_repo import TagRepository
 
@@ -94,6 +96,7 @@ class TestIdeaRepository:
         assert idea.pk > 0
         assert idea.title == "My idea"
         assert idea.body == ""
+        assert idea.group.name == "default"
 
     def test_create_idea_with_body(self, idea_repo: IdeaRepository) -> None:
         """Idea is inserted with body text."""
@@ -173,3 +176,38 @@ class TestIdeaRepository:
         ideas = idea_repo.list_all()
         assert len(ideas) == 1
         assert ideas[0].title == "Keep"
+
+    def test_bulk_move_group(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Ideas can be bulk-moved between groups."""
+        source = group_repo.create("source")
+        target = group_repo.create("target")
+        idea = idea_repo.create("Move me", group_pk=source.pk)
+
+        moved_count = idea_repo.bulk_move_group(source.pk, target.pk)
+
+        fetched = idea_repo.get(idea.pk)
+        assert moved_count == 1
+        assert fetched is not None
+        assert fetched.group.pk == target.pk
+
+
+class TestGroupRepository:
+    """Tests for GroupRepository."""
+
+    def test_create_and_find(self, group_repo: GroupRepository) -> None:
+        """Group can be created and found by name."""
+        group = group_repo.create("backend")
+        found = group_repo.find_by_name("backend")
+        assert group.pk > 0
+        assert found is not None
+        assert found.pk == group.pk
+
+    def test_create_duplicate_raises(self, group_repo: GroupRepository) -> None:
+        """Duplicate names are rejected."""
+        group_repo.create("backend")
+        with pytest.raises(ValueError, match="already exists"):
+            group_repo.create("backend")

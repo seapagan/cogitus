@@ -1,23 +1,35 @@
-"""Left pane: scrollable idea list with search."""
+"""Left pane: grouped idea tree with search."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from rich.text import Text
 from textual.containers import Vertical
 from textual.message import Message
 from textual.reactive import reactive
-from textual.widgets import Input, ListItem, ListView, Static
+from textual.widgets import Input, Tree
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
     from textual.timer import Timer
+    from textual.widgets._tree import TreeNode
 
+    from cogitus.models.group import Group
     from cogitus.models.idea import Idea
 
 _DAYS_IN_WEEK = 7
+
+
+@dataclass(frozen=True)
+class IdeaTreeNodeData:
+    """Typed metadata for tree nodes."""
+
+    kind: Literal["root", "group", "idea"]
+    group_pk: int | None = None
+    idea_pk: int | None = None
 
 
 def _format_timestamp(unix_ts: int) -> str:
@@ -40,30 +52,8 @@ def _format_timestamp(unix_ts: int) -> str:
     return dt.strftime("%Y-%m-%d")
 
 
-class IdeaListItem(Vertical):
-    """A single idea row in the list."""
-
-    def __init__(self, idea: Idea) -> None:
-        """Initialize with an idea.
-
-        Args:
-            idea: The Idea to display.
-        """
-        self.idea = idea
-        super().__init__()
-
-    def compose(self) -> ComposeResult:
-        """Compose the idea item display."""
-        timestamp = _format_timestamp(self.idea.updated_at)
-        row = Text(self.idea.title, style="bold")
-        if timestamp:
-            row.append("\n")
-            row.append(timestamp, style="dim")
-        yield Static(row, classes="idea-text")
-
-
 class IdeaListPanel(Vertical):
-    """Left panel with search input and idea list."""
+    """Left panel with search input and grouped idea tree."""
 
     search_query: reactive[str] = reactive("", layout=True)
 
@@ -71,11 +61,7 @@ class IdeaListPanel(Vertical):
         """Fired when an idea is selected."""
 
         def __init__(self, idea: Idea) -> None:
-            """Initialize with the selected idea.
-
-            Args:
-                idea: The selected Idea.
-            """
+            """Initialize with the selected idea."""
             self.idea = idea
             super().__init__()
 
@@ -83,11 +69,7 @@ class IdeaListPanel(Vertical):
         """Fired when search query changes (debounced)."""
 
         def __init__(self, query: str) -> None:
-            """Initialize with the search query.
-
-            Args:
-                query: The search query string.
-            """
+            """Initialize with the search query."""
             self.query = query
             super().__init__()
 
@@ -98,16 +80,12 @@ class IdeaListPanel(Vertical):
         id: str | None = None,  # noqa: A002
         classes: str | None = None,
     ) -> None:
-        """Initialize the idea list panel.
-
-        Args:
-            name: The name of the widget.
-            id: The CSS ID of the widget.
-            classes: The CSS classes of the widget.
-        """
+        """Initialize the idea list panel."""
         super().__init__(name=name, id=id, classes=classes)
-        self._ideas: list[Idea] = []
         self._debounce_timer: Timer | None = None
+        self._ideas_by_pk: dict[int, Idea] = {}
+        self._group_nodes_by_pk: dict[int, TreeNode[IdeaTreeNodeData]] = {}
+        self._idea_nodes_by_pk: dict[int, TreeNode[IdeaTreeNodeData]] = {}
 
     def compose(self) -> ComposeResult:
         """Compose the idea list panel."""
@@ -115,27 +93,112 @@ class IdeaListPanel(Vertical):
             placeholder="Search ideas... (/ to focus)",
             id="search-input",
         )
-        yield ListView(id="idea-list")
+        yield Tree[IdeaTreeNodeData](
+            "Ideas",
+            data=IdeaTreeNodeData(kind="root"),
+            id="idea-list",
+        )
+
+    def load_grouped_ideas(
+        self,
+        grouped_ideas: list[tuple[Group, list[Idea]]],
+    ) -> None:
+        """Replace the displayed grouped ideas."""
+        tree = self.query_one("#idea-list", Tree)
+        tree.clear()
+        self._ideas_by_pk.clear()
+        self._group_nodes_by_pk.clear()
+        self._idea_nodes_by_pk.clear()
+        tree.root.label = "Ideas"
+        tree.root.data = IdeaTreeNodeData(kind="root")
+        first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
+
+        for group, ideas in grouped_ideas:
+            group_node = tree.root.add(
+                group.name,
+                data=IdeaTreeNodeData(kind="group", group_pk=group.pk),
+                expand=True,
+            )
+            self._group_nodes_by_pk[group.pk] = group_node
+            for idea in ideas:
+                ts = _format_timestamp(idea.updated_at)
+                label = Text(idea.title, style="bold")
+                if ts:
+                    label.append(f" [{ts}]", style="dim")
+                idea_node = group_node.add_leaf(
+                    label,
+                    data=IdeaTreeNodeData(
+                        kind="idea",
+                        group_pk=group.pk,
+                        idea_pk=idea.pk,
+                    ),
+                )
+                self._ideas_by_pk[idea.pk] = idea
+                self._idea_nodes_by_pk[idea.pk] = idea_node
+                if first_idea_node is None:
+                    first_idea_node = idea_node
+        tree.root.expand()
+        if first_idea_node is not None:
+            tree.select_node(first_idea_node)
+            tree.move_cursor(first_idea_node, animate=False)
 
     def load_ideas(self, ideas: list[Idea]) -> None:
-        """Replace the displayed ideas."""
-        self._ideas = ideas
-        list_view = self.query_one("#idea-list", ListView)
-        list_view.clear()
+        """Compatibility helper to load ideas under a synthetic group."""
+        tree = self.query_one("#idea-list", Tree)
+        tree.clear()
+        self._ideas_by_pk.clear()
+        self._group_nodes_by_pk.clear()
+        self._idea_nodes_by_pk.clear()
+        tree.root.label = "Ideas"
+        tree.root.data = IdeaTreeNodeData(kind="root")
+        first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
         for idea in ideas:
-            item = ListItem(IdeaListItem(idea), classes="idea-item")
-            item.idea = idea  # type: ignore[attr-defined]
-            list_view.append(item)
+            ts = _format_timestamp(idea.updated_at)
+            label = Text(idea.title, style="bold")
+            if ts:
+                label.append(f" [{ts}]", style="dim")
+            idea_node = tree.root.add_leaf(
+                label,
+                data=IdeaTreeNodeData(kind="idea", idea_pk=idea.pk),
+            )
+            self._ideas_by_pk[idea.pk] = idea
+            self._idea_nodes_by_pk[idea.pk] = idea_node
+            if first_idea_node is None:
+                first_idea_node = idea_node
+        tree.root.expand()
+        if first_idea_node is not None:
+            tree.select_node(first_idea_node)
+            tree.move_cursor(first_idea_node, animate=False)
+
+    def select_idea(self, idea_pk: int) -> bool:
+        """Select an idea node by primary key."""
+        tree = self.query_one("#idea-list", Tree)
+        node = self._idea_nodes_by_pk.get(idea_pk)
+        if node is None:
+            return False
+        tree.select_node(node)
+        tree.move_cursor(node, animate=False)
+        return True
 
     def get_selected_idea(self) -> Idea | None:
-        """Return the currently highlighted idea."""
-        list_view = self.query_one("#idea-list", ListView)
-        if list_view.highlighted_child is not None:
-            idea: Idea | None = getattr(
-                list_view.highlighted_child, "idea", None
-            )
-            return idea
-        return None
+        """Return the currently selected idea."""
+        tree = self.query_one("#idea-list", Tree)
+        node = tree.cursor_node
+        data = node.data if node is not None else None
+        if not isinstance(data, IdeaTreeNodeData) or data.kind != "idea":
+            return None
+        if data.idea_pk is None:
+            return None
+        return self._ideas_by_pk.get(data.idea_pk)
+
+    def get_selected_group_pk(self) -> int | None:
+        """Return selected group pk when a group node is selected."""
+        tree = self.query_one("#idea-list", Tree)
+        node = tree.cursor_node
+        data = node.data if node is not None else None
+        if not isinstance(data, IdeaTreeNodeData) or data.kind != "group":
+            return None
+        return data.group_pk
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes with debounce."""
@@ -151,18 +214,37 @@ class IdeaListPanel(Vertical):
         """Post the debounced search message."""
         self.post_message(self.SearchChanged(query))
 
-    def on_list_view_selected(self, event: ListView.Selected) -> None:
-        """Handle idea selection from list."""
-        idea = getattr(event.item, "idea", None)
-        if idea is not None:
-            self.post_message(self.IdeaSelected(idea))
+    def on_tree_node_selected(
+        self,
+        event: Tree.NodeSelected[IdeaTreeNodeData],
+    ) -> None:
+        """Handle idea selection from tree."""
+        data = event.node.data
+        if (
+            data is not None
+            and data.kind == "idea"
+            and data.idea_pk is not None
+            and data.idea_pk in self._ideas_by_pk
+        ):
+            self.post_message(
+                self.IdeaSelected(self._ideas_by_pk[data.idea_pk])
+            )
 
-    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
-        """Handle idea highlight change."""
-        if event.item is not None:
-            idea = getattr(event.item, "idea", None)
-            if idea is not None:
-                self.post_message(self.IdeaSelected(idea))
+    def on_tree_node_highlighted(
+        self,
+        event: Tree.NodeHighlighted[IdeaTreeNodeData],
+    ) -> None:
+        """Handle highlight change in tree."""
+        data = event.node.data if event.node is not None else None
+        if (
+            data is not None
+            and data.kind == "idea"
+            and data.idea_pk is not None
+            and data.idea_pk in self._ideas_by_pk
+        ):
+            self.post_message(
+                self.IdeaSelected(self._ideas_by_pk[data.idea_pk])
+            )
 
     def focus_search(self) -> None:
         """Focus the search input."""

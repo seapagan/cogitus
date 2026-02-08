@@ -7,11 +7,13 @@ from unittest.mock import PropertyMock
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import Input, ListView, TextArea
+from textual.widgets import Input, TextArea, Tree
 
 from cogitus.app import CogitusApp
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
+    GroupDeleteReassignScreen,
+    GroupFormScreen,
     HelpScreen,
     IdeaFormScreen,
 )
@@ -150,6 +152,25 @@ async def test_confirm_dialog_and_help_screen(
         dismiss.assert_called_once_with(False)
         await pilot.pause()
 
+    group_form = GroupFormScreen(service=mocker.Mock())
+    app_group = _SingleScreenApp(group_form)
+    async with app_group.run_test() as pilot:
+        dismiss = mocker.patch.object(group_form, "dismiss")
+        group_form.action_cancel()
+        dismiss.assert_called_once_with(None)
+        await pilot.pause()
+
+    reassign = GroupDeleteReassignScreen(
+        "source",
+        [("default", 1), ("target", 2)],
+    )
+    app_reassign = _SingleScreenApp(reassign)
+    async with app_reassign.run_test() as pilot:
+        dismiss = mocker.patch.object(reassign, "dismiss")
+        reassign.action_cancel()
+        dismiss.assert_called_once_with(None)
+        await pilot.pause()
+
     help_screen = HelpScreen()
     app2 = _SingleScreenApp(help_screen)
     async with app2.run_test() as pilot:
@@ -193,8 +214,8 @@ async def test_main_screen_selection_and_search(
 
         search = mocker.patch.object(
             screen._service,
-            "search_ideas",
-            return_value=[first],
+            "list_ideas_grouped",
+            return_value=[(first.group, [first])],
         )
         selected_view = mocker.patch.object(
             screen.query_one("#content-panel", IdeaView),
@@ -209,8 +230,8 @@ async def test_main_screen_selection_and_search(
 
         list_all = mocker.patch.object(
             screen._service,
-            "list_ideas",
-            return_value=[first],
+            "list_ideas_grouped",
+            return_value=[(first.group, [first])],
         )
         empty_view = mocker.patch.object(
             screen.query_one("#content-panel", IdeaView),
@@ -242,8 +263,7 @@ async def test_main_screen_create_edit_delete_and_form_result(
         push.assert_called()
 
         screen.refresh_ideas(select_pk=first.pk)
-        list_view = panel.query_one("#idea-list", ListView)
-        list_view.index = 0
+        panel.select_idea(first.pk)
         await pilot.pause()
 
         push.reset_mock()
@@ -284,6 +304,45 @@ async def test_main_screen_create_edit_delete_and_form_result(
         refresh.assert_not_called()
         screen._on_form_dismiss(first.pk)
         refresh.assert_called_once_with(select_pk=first.pk)
+
+
+@pytest.mark.asyncio
+async def test_main_screen_group_actions(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Main screen should open create/delete group flows."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        push = mocker.patch.object(app, "push_screen")
+        notify = mocker.patch.object(screen, "notify")
+
+        screen.action_new_group()
+        push.assert_called()
+
+        notify.reset_mock()
+        mocker.patch.object(panel, "get_selected_group_pk", return_value=None)
+        screen.action_delete_group()
+        notify.assert_called_with("No group selected", severity="warning")
+
+        backend = service.create_group("backend")
+        mocker.patch.object(
+            panel,
+            "get_selected_group_pk",
+            return_value=backend.pk,
+        )
+        push.reset_mock()
+        screen.action_delete_group()
+        assert push.call_args.args
+        assert isinstance(
+            push.call_args.args[0],
+            ConfirmDialog | GroupDeleteReassignScreen,
+        )
+        await pilot.pause()
 
 
 @pytest.mark.asyncio
@@ -354,7 +413,7 @@ async def test_main_screen_search_cancel_restores_previous_focus(
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         content = screen.query_one("#content-panel", IdeaView)
         search = panel.query_one("#search-input", Input)
-        list_view = panel.query_one("#idea-list", ListView)
+        tree = panel.query_one("#idea-list", Tree)
 
         screen._active_pane = "content"
         screen.action_focus_search()
@@ -374,7 +433,7 @@ async def test_main_screen_search_cancel_restores_previous_focus(
         screen.action_cancel_search()
         await pilot.pause()
         assert search.value == ""
-        assert app.focused is list_view
+        assert app.focused is tree
 
 
 @pytest.mark.asyncio
@@ -389,16 +448,16 @@ async def test_main_screen_cancel_search_noop_when_search_not_focused(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        list_view = panel.query_one("#idea-list", ListView)
+        tree = panel.query_one("#idea-list", Tree)
 
-        list_view.focus()
+        tree.focus()
         await pilot.pause()
         search.value = "keep"
         screen.action_cancel_search()
         await pilot.pause()
 
         assert search.value == "keep"
-        assert app.focused is list_view
+        assert app.focused is tree
 
 
 @pytest.mark.asyncio
@@ -414,10 +473,10 @@ async def test_main_screen_toggle_list_panel(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         content = screen.query_one("#content-panel", IdeaView)
-        list_view = panel.query_one("#idea-list", ListView)
+        tree = panel.query_one("#idea-list", Tree)
 
         content_focus = mocker.patch.object(content, "focus")
-        list_focus = mocker.patch.object(list_view, "focus")
+        list_focus = mocker.patch.object(tree, "focus")
 
         assert not panel.has_class("collapsed")
         screen.action_toggle_list_panel()
