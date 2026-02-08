@@ -2,8 +2,8 @@
 
 > [!NOTE]
 >
-> Cogitus is currently in `v0.1` MVP/alpha stage. Core workflows are available,
-> and interfaces may continue to evolve in subsequent releases.
+> Cogitus is currently in MVP/alpha stage. Core workflows are available, and
+> interfaces may continue to evolve in subsequent releases.
 
 **Cogitus — a fast, searchable terminal workspace for capturing and evolving
 programming ideas.**
@@ -64,7 +64,7 @@ Cogitus is also a real-world validation project for `sqliter-py`.
 
 ---
 
-## MVP (v0.1)
+## Current Release (v0.2)
 
 - Create new ideas
 - Edit existing ideas
@@ -72,6 +72,7 @@ Cogitus is also a real-world validation project for `sqliter-py`.
 - Tag ideas
 - Basic search (SQLite `LIKE`)
 - View idea details
+- Copy & Paste support
 
 Search will initially be simple but structured to evolve into FTS5.
 
@@ -79,7 +80,7 @@ Search will initially be simple but structured to evolve into FTS5.
 
 ## Roadmap
 
-### v0.2
+### v0.3
 
 - SQLite FTS5 search backend
 - Better ranking/snippet presentation
@@ -90,13 +91,13 @@ Search will initially be simple but structured to evolve into FTS5.
 - Evaluate SQLite write tuning (`PRAGMA synchronous=NORMAL`) as an optional
   performance optimization, backed by benchmark and risk assessment.
 
-### v0.3
+### v0.4
 
 - Idea linking (explicit relationships)
 - Relationship browsing primitives
 - Richer metadata and prioritization signals
 
-### v0.4
+### v0.5
 
 - Add non-TUI CLI tasks for idea management:
   - list ideas,
@@ -105,7 +106,7 @@ Search will initially be simple but structured to evolve into FTS5.
 - Ensure CLI task layer reuses the same repository/service abstractions as the
   TUI.
 
-### v0.5+
+### v0.6+
 
 - Graph-oriented idea exploration views
 - Scoring heuristics (impact/effort/confidence)
@@ -128,8 +129,18 @@ searchable workspace.
 
 ## Installation
 
+The recommended way to install this is as a global tool, either using `uv`
+(best) or `pipx`:
+
 ```bash
 uv tool install cogitus
+```
+
+You can always install globally using `pip` if you don't want to use any of
+those 2 tools:
+
+```bash
+pip install cogitus
 ```
 
 ## Usage
@@ -179,15 +190,6 @@ This project uses:
 
 ---
 
-## Philosophy
+## License
 
-Cogitus is designed to be:
-
-- Local-first
-- Minimal
-- Fast
-- Developer-centric
-- Extensible without becoming bloated
-
-It should feel like a serious engineering tool — not a productivity app with a
-marketing layer
+Cogitus is licensed under the MIT License. See [`LICENSE.txt`](LICENSE.txt).
