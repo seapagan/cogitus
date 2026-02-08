@@ -72,6 +72,8 @@ async def test_idea_form_screen_create_and_validation(
 
     async with app.run_test() as pilot:
         assert screen._get_existing_tags() == ""
+        assert screen.query_one("#idea-form-scroll") is not None
+        assert screen.query_one("#form-buttons") is not None
 
         dismiss = mocker.patch.object(screen, "dismiss")
         notify = mocker.patch.object(screen, "notify")

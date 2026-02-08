@@ -79,9 +79,9 @@ IdeaFormScreen {
 }
 
 #idea-form-container {
-    width: 80;
+    width: 80%;
     max-width: 90%;
-    height: auto;
+    height: 85%;
     max-height: 85%;
     border: thick $accent;
     background: $surface;
@@ -99,8 +99,12 @@ IdeaFormScreen {
     margin-bottom: 1;
 }
 
+#idea-form-scroll {
+    height: 1fr;
+}
+
 #body-input {
-    height: 15;
+    min-height: 8;
     margin-bottom: 1;
 }
 

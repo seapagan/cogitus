@@ -55,31 +55,32 @@ class IdeaFormScreen(ModalScreen[int | None]):
 
         with Vertical(id="idea-form-container"):
             yield Static(form_title, id="form-title")
-            yield Label("Title")
-            yield Input(
-                value=idea.title if idea else "",
-                placeholder="Idea title...",
-                id="title-input",
-            )
-            yield Label("Body (Markdown)")
-            yield CogitusTextArea(
-                text=idea.body if idea else "",
-                id="body-input",
-                language="markdown",
-            )
-            yield Label("Tags (comma-separated)")
-            yield Input(
-                value=(self._get_existing_tags() if is_edit else ""),
-                placeholder=("python, architecture, performance..."),
-                id="tags-input",
-            )
-            yield Label("Group")
-            yield Select[int](
-                options=self._group_options(),
-                value=self._get_existing_group_pk(),
-                allow_blank=False,
-                id="group-select",
-            )
+            with VerticalScroll(id="idea-form-scroll"):
+                yield Label("Title")
+                yield Input(
+                    value=idea.title if idea else "",
+                    placeholder="Idea title...",
+                    id="title-input",
+                )
+                yield Label("Body (Markdown)")
+                yield CogitusTextArea(
+                    text=idea.body if idea else "",
+                    id="body-input",
+                    language="markdown",
+                )
+                yield Label("Tags (comma-separated)")
+                yield Input(
+                    value=(self._get_existing_tags() if is_edit else ""),
+                    placeholder=("python, architecture, performance..."),
+                    id="tags-input",
+                )
+                yield Label("Group")
+                yield Select[int](
+                    options=self._group_options(),
+                    value=self._get_existing_group_pk(),
+                    allow_blank=False,
+                    id="group-select",
+                )
             with Horizontal(id="form-buttons"):
                 yield Button(
                     "Save [Ctrl+S]",
