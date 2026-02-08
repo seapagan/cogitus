@@ -135,6 +135,8 @@ pymdown-extensions==10.20.1
     # via mkdocs-material
 pynacl==1.6.2
     # via pygithub
+pyperclip==1.11.0
+    # via cogitus
 pytest==9.0.2
     # via
     #   pytest-asyncio
@@ -201,6 +203,7 @@ tomli==2.4.0 ; python_full_version <= '3.11'
     #   pytest-watcher
 typer==0.21.1
     # via github-changelog-md
+types-pyperclip==1.9.0.20250801
 typing-extensions==4.15.0
     # via
     #   cryptography

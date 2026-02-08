@@ -240,6 +240,7 @@ name = "cogitus"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "pyperclip" },
     { name = "simple-toml-settings" },
     { name = "sqliter-py" },
     { name = "textual" },
@@ -267,10 +268,12 @@ dev = [
     { name = "pytest-sugar" },
     { name = "pytest-watcher" },
     { name = "ruff" },
+    { name = "types-pyperclip" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "pyperclip", specifier = ">=1.11.0" },
     { name = "simple-toml-settings", specifier = ">=0.10.0" },
     { name = "sqliter-py", specifier = ">=0.18.0" },
     { name = "textual", specifier = ">=7.5.0" },
@@ -298,6 +301,7 @@ dev = [
     { name = "pytest-sugar", specifier = ">=1.1.1" },
     { name = "pytest-watcher", specifier = ">=0.6.3" },
     { name = "ruff", specifier = ">=0.15.0" },
+    { name = "types-pyperclip", specifier = ">=1.9.0.20250801" },
 ]
 
 [[package]]
@@ -1280,6 +1284,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyperclip"
+version = "1.11.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/52/d87eba7cb129b81563019d1679026e7a112ef76855d6159d24754dbd2a51/pyperclip-1.11.0.tar.gz", hash = "sha256:244035963e4428530d9e3a6101a1ef97209c6825edab1567beac148ccc1db1b6", size = 12185, upload-time = "2025-09-26T14:40:37.245Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/80/fc9d01d5ed37ba4c42ca2b55b4339ae6e200b456be3a1aaddf4a9fa99b8c/pyperclip-1.11.0-py3-none-any.whl", hash = "sha256:299403e9ff44581cb9ba2ffeed69c7aa96a008622ad0c46cb575ca75b5b84273", size = 11063, upload-time = "2025-09-26T14:40:36.069Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1746,6 +1759,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/36/bf/8825b5929afd84d0dabd606c67cd57b8388cb3ec385f7ef19c5cc2202069/typer-0.21.1.tar.gz", hash = "sha256:ea835607cd752343b6b2b7ce676893e5a0324082268b48f27aa058bdb7d2145d", size = 110371, upload-time = "2026-01-06T11:21:10.989Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/1d/d9257dd49ff2ca23ea5f132edf1281a0c4f9de8a762b9ae399b670a59235/typer-0.21.1-py3-none-any.whl", hash = "sha256:7985e89081c636b88d172c2ee0cfe33c253160994d47bdfdc302defd7d1f1d01", size = 47381, upload-time = "2026-01-06T11:21:09.824Z" },
+]
+
+[[package]]
+name = "types-pyperclip"
+version = "1.9.0.20250801"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5b/7d/144cc18484621f31b1c04f2b4e6b1cd925a25573f72f00770f0030061cd4/types_pyperclip-1.9.0.20250801.tar.gz", hash = "sha256:37eb1b8f6989ccc1ec2f80e2984316f74ccd2aedb385331c210252928ffc3a1f", size = 7202, upload-time = "2025-08-01T03:47:43.071Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/38/6e/af02c7af8178f2d3933b26560b5428236fcfa78966dbb4a52220f1b2253b/types_pyperclip-1.9.0.20250801-py3-none-any.whl", hash = "sha256:73ad08721a2380506549027d5b13a8b360db909a2480649e728a37d836c36456", size = 7606, upload-time = "2025-08-01T03:47:42.115Z" },
 ]
 
 [[package]]
