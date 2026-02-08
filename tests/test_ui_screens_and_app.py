@@ -546,3 +546,61 @@ async def test_cogitus_text_area_y_copies_selection(
         copy.assert_called_once_with("hello world", app)
         notify.assert_called_with("Copied selection to clipboard")
         await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_y_binding_not_triggered_by_text_area_typing(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Typing y in form body should not trigger MainScreen copy binding."""
+    service.create_idea("First", body="first body")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        copy_body = mocker.patch.object(screen, "action_copy_idea_body")
+        screen.action_new_idea()
+        await pilot.pause()
+
+        form = app.screen
+        assert isinstance(form, IdeaFormScreen)
+        body = form.query_one("#body-input", CogitusTextArea)
+        body.text = ""
+        body.focus()
+
+        await pilot.press("y")
+
+        assert body.text == "y"
+        copy_body.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_y_binding_not_triggered_by_text_area_selection_copy(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Copying selected text with y should not trigger MainScreen binding."""
+    service.create_idea("First", body="first body")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        copy_body = mocker.patch.object(screen, "action_copy_idea_body")
+        copy = mocker.patch("cogitus.ui.widgets.text_area.copy_to_clipboard")
+        screen.action_new_idea()
+        await pilot.pause()
+
+        form = app.screen
+        assert isinstance(form, IdeaFormScreen)
+        body = form.query_one("#body-input", CogitusTextArea)
+        body.text = "hello world"
+        body.select_all()
+        body.focus()
+
+        await pilot.press("y")
+
+        copy.assert_called_once_with("hello world", app)
+        copy_body.assert_not_called()
+        await pilot.pause()
