@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pyperclip
+import pytest
 
 from cogitus.ui.clipboard import copy_to_clipboard
 
@@ -39,3 +40,31 @@ class TestCopyToClipboard:
         copy_to_clipboard("", mock_app)
         mock_app.copy_to_clipboard.assert_called_once_with("")
         mock_pyperclip.assert_called_once_with("")
+
+    @patch("cogitus.ui.clipboard.pyperclip.copy")
+    def test_app_copy_failure_still_uses_pyperclip(
+        self, mock_pyperclip: MagicMock
+    ) -> None:
+        """Falls back to pyperclip when OSC 52 copy raises runtime/IO errors."""
+        mock_app: MagicMock = MagicMock()
+        mock_app.copy_to_clipboard.side_effect = OSError(
+            "terminal write failed"
+        )
+
+        copy_to_clipboard("hello", mock_app)
+
+        mock_app.copy_to_clipboard.assert_called_once_with("hello")
+        mock_pyperclip.assert_called_once_with("hello")
+
+    @patch("cogitus.ui.clipboard.pyperclip.copy")
+    def test_unexpected_app_copy_failure_propagates(
+        self, mock_pyperclip: MagicMock
+    ) -> None:
+        """Unexpected app-copy exceptions are not swallowed."""
+        mock_app: MagicMock = MagicMock()
+        mock_app.copy_to_clipboard.side_effect = ValueError("bad state")
+
+        with pytest.raises(ValueError, match="bad state"):
+            copy_to_clipboard("hello", mock_app)
+
+        mock_pyperclip.assert_not_called()

@@ -29,6 +29,7 @@ def copy_to_clipboard(text: str, app: App[object]) -> None:
         text: The text to copy.
         app: The running Textual application instance.
     """
-    app.copy_to_clipboard(text)
+    with contextlib.suppress(OSError, RuntimeError):
+        app.copy_to_clipboard(text)
     with contextlib.suppress(pyperclip.PyperclipException):
         pyperclip.copy(text)
