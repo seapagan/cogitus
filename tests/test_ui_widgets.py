@@ -9,7 +9,11 @@ import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import Input, Markdown, Static, Tree
 
-from cogitus.ui.widgets.idea_list import IdeaListPanel, _format_timestamp
+from cogitus.ui.widgets.idea_list import (
+    IdeaListPanel,
+    IdeaTreeNodeData,
+    _format_timestamp,
+)
 from cogitus.ui.widgets.idea_view import IdeaView, _format_full_timestamp
 
 if TYPE_CHECKING:
@@ -106,6 +110,57 @@ async def test_idea_list_panel_methods_and_events(
         panel._fire_search("needle")
         assert tree.cursor_node is not None
         panel.on_tree_node_selected(Tree.NodeSelected(tree.cursor_node))
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_remaining_branches(
+    service: IdeaService,
+) -> None:
+    """Cover load_ideas compatibility and non-idea/group selections."""
+    idea = service.create_idea("Compat idea")
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.load_ideas([idea])
+        await pilot.pause()
+
+        assert panel.select_idea(999999) is False
+
+        tree = panel.query_one("#idea-list", Tree)
+        tree.move_cursor(tree.root, animate=False)
+        await pilot.pause()
+        assert panel.get_selected_idea() is None
+        assert panel.get_selected_group_pk() is None
+
+        # Add malformed idea node to exercise idea_pk is None branch.
+        malformed = tree.root.add_leaf("Bad")
+        malformed.data = IdeaTreeNodeData(kind="idea", idea_pk=None)
+        tree.move_cursor(malformed, animate=False)
+        await pilot.pause()
+        assert panel.get_selected_idea() is None
+
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        group_node = tree.root.children[0]
+        tree.move_cursor(group_node, animate=False)
+        await pilot.pause()
+        assert panel.get_selected_group_pk() is not None
+
+
+def test_idea_list_panel_get_selected_idea_with_missing_pk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """get_selected_idea should return None when idea node has no PK."""
+    panel = IdeaListPanel(id="idea-list-panel")
+
+    class _Node:
+        data = IdeaTreeNodeData(kind="idea", idea_pk=None)
+
+    class _Tree:
+        cursor_node = _Node()
+
+    monkeypatch.setattr(panel, "query_one", lambda *_args, **_kwargs: _Tree())
+    assert panel.get_selected_idea() is None
 
 
 @pytest.mark.asyncio

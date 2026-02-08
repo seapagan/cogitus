@@ -148,3 +148,46 @@ class TestIdeaService:
         assert updated is not None
         tags = updated.tags.fetch_all()
         assert len(tags) == 1
+
+    def test_list_ideas_grouped_filters_empty_groups_on_query(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Query mode should exclude groups with zero matching ideas."""
+        backend = service.create_group("backend")
+        service.create_idea("Matching idea", group_pk=backend.pk)
+        service.create_group("empty-group")
+
+        grouped = service.list_ideas_grouped("matching")
+        names = [group.name for group, _ in grouped]
+
+        assert "backend" in names
+        assert "empty-group" not in names
+
+    def test_delete_group_missing_group_noop(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Deleting a non-existent group should no-op."""
+        service.delete_group(99999)
+
+    def test_delete_group_target_missing_raises(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Deleting with a missing target should raise."""
+        source = service.create_group("source")
+        with pytest.raises(ValueError, match="Target group not found"):
+            service.delete_group(source.pk, move_to_group_pk=99999)
+
+    def test_delete_group_same_target_raises(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Deleting with source == target should raise."""
+        source = service.create_group("source")
+        with pytest.raises(
+            ValueError,
+            match="same group being deleted",
+        ):
+            service.delete_group(source.pk, move_to_group_pk=source.pk)

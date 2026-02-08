@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import PropertyMock
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import Input, TextArea, Tree
+from textual.widgets import Button, Input, Select, TextArea, Tree
 
 from cogitus.app import CogitusApp
 from cogitus.ui.screens.idea_form_screen import (
@@ -137,6 +137,20 @@ async def test_idea_form_screen_edit_and_buttons(
         await pilot.pause()
 
 
+def test_idea_form_default_group_fallback(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Fallback should return first group when default name is missing."""
+    screen = IdeaFormScreen(service)
+    fake_group = mocker.Mock()
+    fake_group.name = "not-default"
+    fake_group.pk = 99
+    mocker.patch.object(service, "list_groups", return_value=[fake_group])
+
+    assert screen._get_default_group_pk() == 99
+
+
 @pytest.mark.asyncio
 async def test_confirm_dialog_and_help_screen(
     mocker: MockerFixture,
@@ -179,6 +193,87 @@ async def test_confirm_dialog_and_help_screen(
         dismiss = mocker.patch.object(help_screen, "dismiss")
         help_screen.action_close()
         dismiss.assert_called_once_with(None)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_group_form_and_reassign_validation_branches(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Group form and reassign screen should validate and route buttons."""
+    group_form = GroupFormScreen(service=service)
+    app_group = _SingleScreenApp(group_form)
+    async with app_group.run_test() as pilot:
+        notify = mocker.patch.object(group_form, "notify")
+        dismiss = mocker.patch.object(group_form, "dismiss")
+
+        # Empty name
+        group_form.query_one("#group-name-input", Input).value = "   "
+        group_form.action_save()
+        notify.assert_called_once()
+        dismiss.assert_not_called()
+
+        # Duplicate name
+        service.create_group("backend")
+        notify.reset_mock()
+        group_form.query_one("#group-name-input", Input).value = "backend"
+        group_form.action_save()
+        notify.assert_called_once()
+        dismiss.assert_not_called()
+
+        # Success
+        notify.reset_mock()
+        group_form.query_one("#group-name-input", Input).value = "frontend"
+        group_form.action_save()
+        dismiss.assert_called_once()
+
+        # on_button_pressed routes both paths
+        save_action = mocker.patch.object(group_form, "action_save")
+        cancel_action = mocker.patch.object(group_form, "action_cancel")
+        group_form.on_button_pressed(
+            Button.Pressed(group_form.query_one("#save-group-btn", Button))
+        )
+        group_form.on_button_pressed(
+            Button.Pressed(group_form.query_one("#cancel-group-btn", Button))
+        )
+        save_action.assert_called_once()
+        cancel_action.assert_called_once()
+        await pilot.pause()
+
+    reassign = GroupDeleteReassignScreen(
+        "source",
+        cast("list[tuple[str, int]]", [("bad", "x")]),
+    )
+    app_reassign = _SingleScreenApp(reassign)
+    async with app_reassign.run_test() as pilot:
+        notify = mocker.patch.object(reassign, "notify")
+        dismiss = mocker.patch.object(reassign, "dismiss")
+
+        # Invalid selection branch (selected value is non-int).
+        select = reassign.query_one("#move-group-select", Select)
+        reassign.action_save()
+        notify.assert_called_once()
+        dismiss.assert_not_called()
+
+        # Valid save
+        notify.reset_mock()
+        select.set_options([("default", 1), ("x", 2)])
+        select.value = 1
+        reassign.action_save()
+        dismiss.assert_called_once_with(1)
+
+        # on_button_pressed routes save/cancel
+        save_action = mocker.patch.object(reassign, "action_save")
+        cancel_action = mocker.patch.object(reassign, "action_cancel")
+        reassign.on_button_pressed(
+            Button.Pressed(reassign.query_one("#move-delete-btn", Button))
+        )
+        reassign.on_button_pressed(
+            Button.Pressed(reassign.query_one("#cancel-move-btn", Button))
+        )
+        save_action.assert_called_once()
+        cancel_action.assert_called_once()
         await pilot.pause()
 
 
@@ -331,7 +426,13 @@ async def test_main_screen_group_actions(
         screen.action_delete_group()
         notify.assert_called_with("No group selected", severity="warning")
 
+        notify.reset_mock()
+        mocker.patch.object(panel, "get_selected_group_pk", return_value=12345)
+        screen.action_delete_group()
+        notify.assert_called_with("Group not found", severity="error")
+
         backend = service.create_group("backend")
+        service.create_idea("Grouped", group_pk=backend.pk)
         mocker.patch.object(
             panel,
             "get_selected_group_pk",
@@ -344,7 +445,113 @@ async def test_main_screen_group_actions(
             push.call_args.args[0],
             ConfirmDialog | GroupDeleteReassignScreen,
         )
+
+        # Empty group takes confirm-delete branch.
+        empty_group = service.create_group("empty")
+        mocker.patch.object(
+            panel,
+            "get_selected_group_pk",
+            return_value=empty_group.pk,
+        )
+        push.reset_mock()
+        screen.action_delete_group()
+        assert push.call_args.args
+        assert isinstance(push.call_args.args[0], ConfirmDialog)
+
+        # Default group delete guard
+        default = next(
+            group
+            for group in service.list_groups()
+            if group.name == service.DEFAULT_GROUP_NAME
+        )
+        notify.reset_mock()
+        mocker.patch.object(
+            panel,
+            "get_selected_group_pk",
+            return_value=default.pk,
+        )
+        screen.action_delete_group()
+        notify.assert_called_with(
+            "Default group cannot be deleted",
+            severity="warning",
+        )
         await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_refresh_empty_selection_branch(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """refresh_ideas should clear selection when no idea is selected."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        view = screen.query_one("#content-panel", IdeaView)
+        mocker.patch.object(panel, "get_selected_idea", return_value=None)
+        set_selected = mocker.patch.object(screen, "_set_selected_idea")
+        show_empty = mocker.patch.object(view, "show_empty")
+
+        screen.refresh_ideas()
+
+        set_selected.assert_called_with(None)
+        show_empty.assert_called()
+        await pilot.pause()
+
+
+def test_main_screen_group_helper_branches(mocker: MockerFixture) -> None:
+    """Internal group callbacks should cover all branch paths."""
+    service = mocker.Mock()
+    screen = MainScreen(service)
+    service_mock = mocker.Mock()
+    screen._service = service_mock
+    notify = mocker.patch.object(screen, "notify")
+    refresh = mocker.patch.object(screen, "refresh_ideas")
+
+    screen._on_group_form_dismiss(None)
+    notify.assert_not_called()
+    refresh.assert_not_called()
+
+    screen._on_group_form_dismiss(1)
+    notify.assert_called_with("Group created")
+    refresh.assert_called_once()
+
+    # delete confirm: success
+    notify.reset_mock()
+    refresh.reset_mock()
+    screen._on_delete_group_confirm(1, confirmed=True)
+    service_mock.delete_group.assert_called_once_with(1)
+    notify.assert_called_with("Group deleted")
+    refresh.assert_called_once()
+
+    # delete confirm: error
+    notify.reset_mock()
+    refresh.reset_mock()
+    service_mock.delete_group.side_effect = ValueError("boom")
+    screen._on_delete_group_confirm(1, confirmed=True)
+    notify.assert_called_with("boom", severity="error")
+    refresh.assert_not_called()
+
+    # reassign: target None
+    notify.reset_mock()
+    refresh.reset_mock()
+    screen._on_delete_group_reassign(1, None)
+    notify.assert_not_called()
+    refresh.assert_not_called()
+
+    service_mock.delete_group.side_effect = ValueError("bad move")
+    screen._on_delete_group_reassign(1, 2)
+    notify.assert_called_with("bad move", severity="error")
+
+    notify.reset_mock()
+    refresh.reset_mock()
+    service_mock.delete_group.side_effect = None
+    screen._on_delete_group_reassign(1, 2)
+    notify.assert_called_with("Group deleted and ideas moved")
+    refresh.assert_called_once()
 
 
 @pytest.mark.asyncio

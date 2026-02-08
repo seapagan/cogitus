@@ -211,3 +211,19 @@ class TestGroupRepository:
         group_repo.create("backend")
         with pytest.raises(ValueError, match="already exists"):
             group_repo.create("backend")
+
+    def test_create_empty_name_raises(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Empty group names are rejected."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            group_repo.create("   ")
+
+    def test_get_or_create_creates_when_missing(
+        self, group_repo: GroupRepository
+    ) -> None:
+        """get_or_create should create a new group when none exists."""
+        created = group_repo.get_or_create("new-group")
+        assert created.name == "new-group"
+        assert created.pk > 0
