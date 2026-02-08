@@ -130,14 +130,14 @@ searchable workspace.
 ## Installation
 
 The recommended way to install this is as a global tool, either using `uv`
-(best) or `pipx`
+(best) or `pipx`:
 
 ```bash
 uv tool install cogitus
 ```
 
-You can always install globally using `pip` if you dont want to use any of those
-2 tools:
+You can always install globally using `pip` if you don't want to use any of
+those 2 tools:
 
 ```bash
 pip install cogitus
