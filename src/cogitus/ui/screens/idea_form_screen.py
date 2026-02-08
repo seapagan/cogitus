@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Static, TextArea
+from textual.widgets import Button, Input, Label, Static
 
 from cogitus.ui.widgets.text_area import CogitusTextArea
 
@@ -107,7 +107,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
             self.query_one("#title-input", Input).focus()
             return
 
-        body = self.query_one("#body-input", TextArea).text
+        body = self.query_one("#body-input", CogitusTextArea).text
         tags_str = self.query_one("#tags-input", Input).value
         tags = (
             [t.strip() for t in tags_str.split(",") if t.strip()]
