@@ -18,6 +18,7 @@ from cogitus.ui.screens.idea_form_screen import (
 from cogitus.ui.screens.main_screen import MainScreen
 from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
+from cogitus.ui.widgets.text_area import CogitusTextArea
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -471,3 +472,150 @@ def test_cogitus_app_init_uses_default_db(
     CogitusApp(settings=settings)
 
     get_db.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_copy_idea_body(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Copy action should handle all branches."""
+    idea = service.create_idea("Test", body="# Hello")
+    no_body = service.create_idea("Empty")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+        copy = mocker.patch("cogitus.ui.screens.main_screen.copy_to_clipboard")
+
+        # No idea selected
+        screen._selected_idea_pk = None
+        screen.action_copy_idea_body()
+        notify.assert_called_with("No idea selected", severity="warning")
+
+        # Idea not found
+        notify.reset_mock()
+        screen._selected_idea_pk = 9999
+        screen.action_copy_idea_body()
+        notify.assert_called_with("Idea not found", severity="error")
+
+        # Idea with no body
+        notify.reset_mock()
+        screen._selected_idea_pk = no_body.pk
+        screen.action_copy_idea_body()
+        notify.assert_called_with(
+            "Idea has no body to copy", severity="warning"
+        )
+
+        # Success
+        notify.reset_mock()
+        screen._selected_idea_pk = idea.pk
+        copy.return_value = True
+        screen.action_copy_idea_body()
+        copy.assert_called_once_with("# Hello", app)
+        notify.assert_called_with("Copied idea body to clipboard")
+
+        # Clipboard unavailable
+        notify.reset_mock()
+        copy.return_value = False
+        screen.action_copy_idea_body()
+        notify.assert_called_with("Clipboard unavailable", severity="warning")
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_cogitus_text_area_y_copies_selection(
+    mocker: MockerFixture,
+) -> None:
+    """Pressing y with a selection copies text to clipboard."""
+
+    class _TextAreaApp(App[None]):
+        def compose(self) -> ComposeResult:
+            yield CogitusTextArea("hello world", id="ta")
+
+    app = _TextAreaApp()
+    async with app.run_test() as pilot:
+        ta = app.query_one("#ta", CogitusTextArea)
+        copy = mocker.patch("cogitus.ui.widgets.text_area.copy_to_clipboard")
+        notify = mocker.patch.object(ta, "notify")
+
+        # y with no selection types normally
+        ta.focus()
+        await pilot.press("y")
+        copy.assert_not_called()
+        assert "y" in ta.text
+
+        # y with selection copies instead of typing
+        ta.text = "hello world"
+        ta.select_all()
+        copy.return_value = True
+        await pilot.press("y")
+        copy.assert_called_once_with("hello world", app)
+        notify.assert_called_with("Copied selection to clipboard")
+
+        # Failed clipboard copy shows warning
+        notify.reset_mock()
+        copy.return_value = False
+        ta.select_all()
+        await pilot.press("y")
+        notify.assert_called_with("Clipboard unavailable", severity="warning")
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_y_binding_not_triggered_by_text_area_typing(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Typing y in form body should not trigger MainScreen copy binding."""
+    service.create_idea("First", body="first body")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        copy_body = mocker.patch.object(screen, "action_copy_idea_body")
+        screen.action_new_idea()
+        await pilot.pause()
+
+        form = app.screen
+        assert isinstance(form, IdeaFormScreen)
+        body = form.query_one("#body-input", CogitusTextArea)
+        body.text = ""
+        body.focus()
+
+        await pilot.press("y")
+
+        assert body.text == "y"
+        copy_body.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_y_binding_not_triggered_by_text_area_selection_copy(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Copying selected text with y should not trigger MainScreen binding."""
+    service.create_idea("First", body="first body")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        copy_body = mocker.patch.object(screen, "action_copy_idea_body")
+        copy = mocker.patch("cogitus.ui.widgets.text_area.copy_to_clipboard")
+        screen.action_new_idea()
+        await pilot.pause()
+
+        form = app.screen
+        assert isinstance(form, IdeaFormScreen)
+        body = form.query_one("#body-input", CogitusTextArea)
+        body.text = "hello world"
+        body.select_all()
+        body.focus()
+
+        await pilot.press("y")
+
+        copy.assert_called_once_with("hello world", app)
+        copy_body.assert_not_called()
+        await pilot.pause()

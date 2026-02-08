@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING, ClassVar
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Static, TextArea
+from textual.widgets import Button, Input, Label, Static
+
+from cogitus.ui.widgets.text_area import CogitusTextArea
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -60,7 +62,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
                 id="title-input",
             )
             yield Label("Body (Markdown)")
-            yield TextArea(
+            yield CogitusTextArea(
                 text=idea.body if idea else "",
                 id="body-input",
                 language="markdown",
@@ -105,7 +107,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
             self.query_one("#title-input", Input).focus()
             return
 
-        body = self.query_one("#body-input", TextArea).text
+        body = self.query_one("#body-input", CogitusTextArea).text
         tags_str = self.query_one("#tags-input", Input).value
         tags = (
             [t.strip() for t in tags_str.split(",") if t.strip()]
@@ -209,11 +211,13 @@ class HelpScreen(ModalScreen[None]):
         "  n                New idea\n"
         "  e                Edit selected idea\n"
         "  d                Delete selected idea\n"
+        "  y                Copy idea body\n"
         "  /                Focus search\n"
         "  Escape           Clear search / close\n"
         "\n"
         "[bold]Form[/bold]\n"
         "  Ctrl+S           Save\n"
+        "  y (selection)    Copy selected text\n"
         "  Escape           Cancel\n"
         "\n"
         "[bold]General[/bold]\n"

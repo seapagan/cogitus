@@ -8,6 +8,7 @@ from textual.binding import Binding, BindingType
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, ListView
 
+from cogitus.ui.clipboard import copy_to_clipboard
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
     HelpScreen,
@@ -50,6 +51,12 @@ class MainScreen(Screen[None]):
             "toggle_list_panel",
             "Toggle List",
             key_display="Ctrl+B",
+        ),
+        Binding(
+            "y",
+            "copy_idea_body",
+            "Copy body",
+            key_display="Y",
         ),
         Binding("q", "quit_app", "Quit", key_display="Q"),
     ]
@@ -182,6 +189,23 @@ class MainScreen(Screen[None]):
                 idea.pk, confirmed=confirmed
             ),
         )
+
+    def action_copy_idea_body(self) -> None:
+        """Copy the selected idea's body to the system clipboard."""
+        if self._selected_idea_pk is None:
+            self.notify("No idea selected", severity="warning")
+            return
+        idea = self._service.get_idea(self._selected_idea_pk)
+        if idea is None:
+            self.notify("Idea not found", severity="error")
+            return
+        if not idea.body:
+            self.notify("Idea has no body to copy", severity="warning")
+            return
+        if copy_to_clipboard(idea.body, self.app):
+            self.notify("Copied idea body to clipboard")
+        else:
+            self.notify("Clipboard unavailable", severity="warning")
 
     def _on_delete_confirm(
         self,

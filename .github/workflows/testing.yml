@@ -10,7 +10,7 @@ on:
 jobs:
   testing:
     # uncomment the line before to disable this job if needed.
-    if: false
+    # if: false
     name: pytest
     runs-on: ubuntu-latest
     strategy:

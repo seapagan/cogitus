@@ -23,6 +23,8 @@ pygments==2.19.2
     # via
     #   rich
     #   textual
+pyperclip==1.11.0
+    # via cogitus
 rich==14.3.2
     # via textual
 rtoml==0.13.0
