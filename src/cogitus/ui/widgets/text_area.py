@@ -26,11 +26,8 @@ class CogitusTextArea(TextArea):
             event: The key event.
         """
         if event.key == "y" and self.selected_text:
-            success, msg = copy_to_clipboard(self.selected_text)
-            self.notify(
-                msg,
-                severity="information" if success else "error",
-            )
+            copy_to_clipboard(self.selected_text, self.app)
+            self.notify("Copied selection to clipboard")
             event.prevent_default()
             event.stop()
             return

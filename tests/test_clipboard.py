@@ -13,26 +13,29 @@ class TestCopyToClipboard:
     """Tests for copy_to_clipboard."""
 
     @patch("cogitus.ui.clipboard.pyperclip.copy")
-    def test_success(self, mock_copy: MagicMock) -> None:
-        """Returns success tuple when copy succeeds."""
-        success, msg = copy_to_clipboard("hello")
-        assert success is True
-        assert "Copied" in msg
-        mock_copy.assert_called_once_with("hello")
+    def test_uses_osc52_and_pyperclip(self, mock_pyperclip: MagicMock) -> None:
+        """Calls both OSC 52 and pyperclip."""
+        mock_app: MagicMock = MagicMock()
+        copy_to_clipboard("hello", mock_app)
+        mock_app.copy_to_clipboard.assert_called_once_with("hello")
+        mock_pyperclip.assert_called_once_with("hello")
 
     @patch("cogitus.ui.clipboard.pyperclip.copy")
-    def test_failure_no_clipboard_tool(self, mock_copy: MagicMock) -> None:
-        """Returns failure tuple with the exception message."""
-        mock_copy.side_effect = pyperclip.PyperclipException(
+    def test_pyperclip_failure_swallowed(
+        self, mock_pyperclip: MagicMock
+    ) -> None:
+        """Silently swallows pyperclip exceptions."""
+        mock_pyperclip.side_effect = pyperclip.PyperclipException(
             "no copy mechanism"
         )
-        success, msg = copy_to_clipboard("hello")
-        assert success is False
-        assert msg == "no copy mechanism"
+        mock_app: MagicMock = MagicMock()
+        copy_to_clipboard("hello", mock_app)
+        mock_app.copy_to_clipboard.assert_called_once_with("hello")
 
     @patch("cogitus.ui.clipboard.pyperclip.copy")
-    def test_empty_string(self, mock_copy: MagicMock) -> None:
+    def test_empty_string(self, mock_pyperclip: MagicMock) -> None:
         """Handles copying an empty string."""
-        success, _msg = copy_to_clipboard("")
-        assert success is True
-        mock_copy.assert_called_once_with("")
+        mock_app: MagicMock = MagicMock()
+        copy_to_clipboard("", mock_app)
+        mock_app.copy_to_clipboard.assert_called_once_with("")
+        mock_pyperclip.assert_called_once_with("")
