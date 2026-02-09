@@ -15,7 +15,7 @@ from textual.widgets import Input, Tree
 if TYPE_CHECKING:
     from textual.app import ComposeResult
     from textual.timer import Timer
-    from textual.widgets._tree import TreeNode
+    from textual.widgets.tree import TreeNode
 
     from cogitus.models.group import Group
     from cogitus.models.idea import Idea
