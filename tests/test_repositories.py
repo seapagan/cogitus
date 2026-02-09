@@ -241,3 +241,26 @@ class TestGroupRepository:
         created = group_repo.get_or_create("new-group")
         assert created.name == "new-group"
         assert created.pk > 0
+
+    def test_get_or_create_recovers_after_insert_race(
+        self,
+        group_repo: GroupRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Insert race should recover by re-fetching after create error."""
+        existing = group_repo.create("backend")
+        find_mock = mocker.patch.object(
+            group_repo,
+            "find_by_name",
+            side_effect=[None, existing],
+        )
+        mocker.patch.object(
+            group_repo,
+            "create",
+            side_effect=ValueError("already exists"),
+        )
+
+        found = group_repo.get_or_create("backend")
+
+        assert found.pk == existing.pk
+        assert find_mock.call_count == 2

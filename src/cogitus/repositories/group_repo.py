@@ -45,7 +45,14 @@ class GroupRepository:
         found = self.find_by_name(normalized)
         if found is not None:
             return found
-        return self.create(normalized)
+        try:
+            return self.create(normalized)
+        except ValueError:
+            # Race condition: created between lookup and insert.
+            found = self.find_by_name(normalized)
+            if found is not None:
+                return found
+            raise
 
     def list_all(self) -> list[Group]:
         """Return all groups."""
