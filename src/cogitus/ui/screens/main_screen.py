@@ -217,16 +217,7 @@ class MainScreen(Screen[None]):
             self.notify("Default group cannot be deleted", severity="warning")
             return
 
-        grouped = self._service.list_ideas_grouped()
-        ideas_in_group = next(
-            (
-                ideas
-                for item_group, ideas in grouped
-                if item_group.pk == group_pk
-            ),
-            [],
-        )
-        if not ideas_in_group:
+        if not self._service.has_ideas_in_group(group_pk):
             self.app.push_screen(
                 ConfirmDialog(f'Delete group "{group.name}"?'),
                 callback=lambda confirmed: self._on_delete_group_confirm(

@@ -164,6 +164,15 @@ class TestIdeaService:
         assert "backend" in names
         assert "empty-group" not in names
 
+    def test_has_ideas_in_group(self, service: IdeaService) -> None:
+        """Group occupancy check should report true/false correctly."""
+        backend = service.create_group("backend")
+        empty = service.create_group("empty")
+        service.create_idea("Idea", group_pk=backend.pk)
+
+        assert service.has_ideas_in_group(backend.pk)
+        assert not service.has_ideas_in_group(empty.pk)
+
     def test_delete_group_missing_group_noop(
         self,
         service: IdeaService,

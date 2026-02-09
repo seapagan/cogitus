@@ -149,6 +149,10 @@ class IdeaService:
         """Create a new group."""
         return self._group_repo.create(name)
 
+    def has_ideas_in_group(self, group_pk: int) -> bool:
+        """Return whether the given group currently contains ideas."""
+        return bool(self._idea_repo.list_for_group(group_pk))
+
     def list_ideas_grouped(
         self,
         query: str | None = None,
