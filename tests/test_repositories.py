@@ -147,6 +147,20 @@ class TestIdeaRepository:
         assert updated.title == "Updated"
         assert updated.body == "New body"
 
+    def test_update_preserves_group_when_group_not_provided(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Update without group_pk should keep existing group assignment."""
+        source = group_repo.create("source")
+        created = idea_repo.create("Original", group_pk=source.pk)
+
+        updated = idea_repo.update(created.pk, "Updated", "New body")
+
+        assert updated is not None
+        assert updated.group.pk == source.pk
+
     def test_update_idea_tags(self, idea_repo: IdeaRepository) -> None:
         """Tags are replaced by update."""
         created = idea_repo.create("Test", tag_names=["old"])

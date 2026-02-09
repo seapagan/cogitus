@@ -119,7 +119,8 @@ class IdeaRepository:
 
         idea.title = title
         idea.body = body
-        idea.group = self._resolve_group(group_pk)
+        if group_pk is not None:
+            idea.group = self._resolve_group(group_pk)
         self._db.update(idea)
 
         if tag_names is not None:
