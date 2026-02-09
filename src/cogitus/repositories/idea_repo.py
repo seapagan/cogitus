@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from cogitus.constants import DEFAULT_GROUP_NAME
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
 
@@ -23,6 +24,8 @@ class IdeaRepository:
         db: SqliterDB,
         tag_repo: TagRepository,
         group_repo: GroupRepository,
+        *,
+        default_group_name: str = DEFAULT_GROUP_NAME,
     ) -> None:
         """Initialize with a database connection and tag repository.
 
@@ -30,10 +33,12 @@ class IdeaRepository:
             db: The SqliterDB instance.
             tag_repo: The TagRepository for tag operations.
             group_repo: The GroupRepository for group operations.
+            default_group_name: Fallback group used when group_pk is None.
         """
         self._db = db
         self._tag_repo = tag_repo
         self._group_repo = group_repo
+        self._default_group_name = default_group_name
 
     def create(
         self,
@@ -216,4 +221,4 @@ class IdeaRepository:
                 return group
             msg = f"Group with pk={group_pk} not found"
             raise ValueError(msg)
-        return self._group_repo.get_or_create("default")
+        return self._group_repo.get_or_create(self._default_group_name)

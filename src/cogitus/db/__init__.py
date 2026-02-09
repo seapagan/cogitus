@@ -6,12 +6,12 @@ from pathlib import Path
 
 from sqliter import SqliterDB
 
+from cogitus.constants import DEFAULT_GROUP_NAME
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
 
 DEFAULT_DB_PATH = "~/.config/cogitus/cogitus.db"
-DEFAULT_GROUP_NAME = "default"
 
 
 def _ensure_default_group(db: SqliterDB) -> int:

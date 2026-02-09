@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from cogitus.constants import DEFAULT_GROUP_NAME as SHARED_DEFAULT_GROUP_NAME
 from cogitus.repositories.group_repo import GroupRepository
 from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.repositories.tag_repo import TagRepository
@@ -23,7 +24,7 @@ class IdeaService:
     Handles tag normalization (lowercase, strip, deduplicate).
     """
 
-    DEFAULT_GROUP_NAME = "default"
+    DEFAULT_GROUP_NAME = SHARED_DEFAULT_GROUP_NAME
 
     def __init__(self, db: SqliterDB) -> None:
         """Initialize with a database connection.
@@ -34,7 +35,12 @@ class IdeaService:
         self._db = db
         self._group_repo = GroupRepository(db)
         self._tag_repo = TagRepository(db)
-        self._idea_repo = IdeaRepository(db, self._tag_repo, self._group_repo)
+        self._idea_repo = IdeaRepository(
+            db,
+            self._tag_repo,
+            self._group_repo,
+            default_group_name=self.DEFAULT_GROUP_NAME,
+        )
 
     def create_idea(
         self,

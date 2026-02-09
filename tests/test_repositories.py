@@ -286,3 +286,23 @@ class TestGroupRepository:
 
         assert found.pk == existing.pk
         assert find_mock.call_count == 2
+
+    def test_get_or_create_reraises_when_refetch_still_missing(
+        self,
+        group_repo: GroupRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Create errors are re-raised if race-recovery refetch still fails."""
+        mocker.patch.object(
+            group_repo,
+            "find_by_name",
+            side_effect=[None, None],
+        )
+        mocker.patch.object(
+            group_repo,
+            "create",
+            side_effect=ValueError("already exists"),
+        )
+
+        with pytest.raises(ValueError, match="already exists"):
+            group_repo.get_or_create("backend")
