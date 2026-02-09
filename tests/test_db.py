@@ -5,7 +5,9 @@ from __future__ import annotations
 import sqlite3
 from typing import TYPE_CHECKING
 
-from cogitus.db import get_db
+import pytest
+
+from cogitus.db import _column_exists, get_db
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
@@ -127,5 +129,15 @@ def test_get_db_file_enables_wal_mode(tmp_path: Path) -> None:
         result = db.connect().execute("PRAGMA journal_mode;").fetchone()
         assert result is not None
         assert str(result[0]).lower() == "wal"
+    finally:
+        db.close()
+
+
+def test_column_exists_rejects_invalid_identifier() -> None:
+    """Invalid table names should be rejected before SQL execution."""
+    db = get_db(memory=True)
+    try:
+        with pytest.raises(ValueError, match="Invalid table name"):
+            _column_exists(db, "ideas;drop", "group_id")
     finally:
         db.close()

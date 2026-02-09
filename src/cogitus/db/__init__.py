@@ -24,6 +24,9 @@ def _ensure_default_group(db: SqliterDB) -> int:
 
 def _column_exists(db: SqliterDB, table_name: str, column_name: str) -> bool:
     """Return True if a column exists in the given table."""
+    if not table_name.isidentifier():
+        msg = f"Invalid table name: {table_name}"
+        raise ValueError(msg)
     result = db.connect().execute(f"PRAGMA table_info({table_name});")
     return any(str(row[1]) == column_name for row in result.fetchall())
 
@@ -92,8 +95,10 @@ def get_db(
     db.create_table(Tag)
     db.create_table(Group)
     default_group_pk = _ensure_default_group(db)
-    if _table_exists(db, "ideas"):
+    ideas_existed = _table_exists(db, "ideas")
+    if ideas_existed:
         _migrate_ideas_group_fk(db, default_group_pk)
     db.create_table(Idea)
-    _migrate_ideas_group_fk(db, default_group_pk)
+    if not ideas_existed:
+        _migrate_ideas_group_fk(db, default_group_pk)
     return db
