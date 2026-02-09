@@ -538,6 +538,15 @@ def test_main_screen_group_helper_branches(mocker: MockerFixture) -> None:
     notify.assert_called_with("Group created")
     refresh.assert_called_once()
 
+    # delete confirm: cancelled
+    notify.reset_mock()
+    refresh.reset_mock()
+    service_mock.delete_group.reset_mock()
+    screen._on_delete_group_confirm(1, confirmed=False)
+    service_mock.delete_group.assert_not_called()
+    notify.assert_not_called()
+    refresh.assert_not_called()
+
     # delete confirm: success
     notify.reset_mock()
     refresh.reset_mock()
