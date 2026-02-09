@@ -214,4 +214,6 @@ class IdeaRepository:
             group = self._group_repo.get(group_pk)
             if group is not None:
                 return group
+            msg = f"Group with pk={group_pk} not found"
+            raise ValueError(msg)
         return self._group_repo.get_or_create("default")

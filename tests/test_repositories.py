@@ -111,6 +111,14 @@ class TestIdeaRepository:
         tag_names = {t.name for t in tags}
         assert tag_names == {"python", "testing"}
 
+    def test_create_with_missing_group_raises(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Explicitly invalid group IDs should raise."""
+        with pytest.raises(ValueError, match="not found"):
+            idea_repo.create("Bad group", group_pk=99999)
+
     def test_get_idea(self, idea_repo: IdeaRepository) -> None:
         """Idea is retrieved by primary key."""
         created = idea_repo.create("My idea")
@@ -170,6 +178,20 @@ class TestIdeaRepository:
         tags = fetched.tags.fetch_all()
         assert len(tags) == 1
         assert tags[0].name == "new"
+
+    def test_update_with_missing_group_raises(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Explicitly invalid group IDs should raise."""
+        created = idea_repo.create("Test")
+        with pytest.raises(ValueError, match="not found"):
+            idea_repo.update(
+                created.pk,
+                "Updated",
+                "Body",
+                group_pk=99999,
+            )
 
     def test_update_nonexistent(self, idea_repo: IdeaRepository) -> None:
         """None is returned when updating a missing idea."""
