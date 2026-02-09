@@ -121,20 +121,11 @@ class IdeaListPanel(Vertical):
             )
             self._group_nodes_by_pk[group.pk] = group_node
             for idea in ideas:
-                ts = _format_timestamp(idea.updated_at)
-                label = Text(idea.title, style="bold")
-                if ts:
-                    label.append(f" [{ts}]", style="dim")
-                idea_node = group_node.add_leaf(
-                    label,
-                    data=IdeaTreeNodeData(
-                        kind="idea",
-                        group_pk=group.pk,
-                        idea_pk=idea.pk,
-                    ),
+                idea_node = self._add_idea_node(
+                    group_node,
+                    idea,
+                    group_pk=group.pk,
                 )
-                self._ideas_by_pk[idea.pk] = idea
-                self._idea_nodes_by_pk[idea.pk] = idea_node
                 if first_idea_node is None:
                     first_idea_node = idea_node
         tree.root.expand()
@@ -153,22 +144,40 @@ class IdeaListPanel(Vertical):
         tree.root.data = IdeaTreeNodeData(kind="root")
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
         for idea in ideas:
-            ts = _format_timestamp(idea.updated_at)
-            label = Text(idea.title, style="bold")
-            if ts:
-                label.append(f" [{ts}]", style="dim")
-            idea_node = tree.root.add_leaf(
-                label,
-                data=IdeaTreeNodeData(kind="idea", idea_pk=idea.pk),
+            idea_node = self._add_idea_node(
+                tree.root,
+                idea,
             )
-            self._ideas_by_pk[idea.pk] = idea
-            self._idea_nodes_by_pk[idea.pk] = idea_node
             if first_idea_node is None:
                 first_idea_node = idea_node
         tree.root.expand()
         if first_idea_node is not None:
             tree.select_node(first_idea_node)
             tree.move_cursor(first_idea_node, animate=False)
+
+    def _add_idea_node(
+        self,
+        parent: TreeNode[IdeaTreeNodeData],
+        idea: Idea,
+        *,
+        group_pk: int | None = None,
+    ) -> TreeNode[IdeaTreeNodeData]:
+        """Add an idea leaf node under parent and track it by primary key."""
+        ts = _format_timestamp(idea.updated_at)
+        label = Text(idea.title, style="bold")
+        if ts:
+            label.append(f" [{ts}]", style="dim")
+        node = parent.add_leaf(
+            label,
+            data=IdeaTreeNodeData(
+                kind="idea",
+                group_pk=group_pk,
+                idea_pk=idea.pk,
+            ),
+        )
+        self._ideas_by_pk[idea.pk] = idea
+        self._idea_nodes_by_pk[idea.pk] = node
+        return node
 
     def select_idea(self, idea_pk: int) -> bool:
         """Select an idea node by primary key."""
