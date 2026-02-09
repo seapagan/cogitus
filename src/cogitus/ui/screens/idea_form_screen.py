@@ -147,7 +147,10 @@ class IdeaFormScreen(ModalScreen[int | None]):
             if tags_str.strip()
             else []
         )
-        group_pk = group_value if isinstance(group_value, int) else None
+        if not isinstance(group_value, int):
+            self.notify("Invalid group selection", severity="error")
+            return
+        group_pk = group_value
 
         if self._idea is not None:
             result = self._service.update_idea(

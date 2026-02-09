@@ -137,6 +137,38 @@ async def test_idea_form_screen_edit_and_buttons(
         await pilot.pause()
 
 
+@pytest.mark.asyncio
+async def test_idea_form_screen_invalid_group_selection(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Invalid group selection should block save."""
+    idea = service.create_idea("Original", body="old")
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+        dismiss = mocker.patch.object(screen, "dismiss")
+        screen.query_one("#title-input", Input).value = "Updated"
+        group_select = screen.query_one("#group-select", Select)
+        mocker.patch.object(
+            type(group_select),
+            "value",
+            new_callable=PropertyMock,
+            return_value=Select.BLANK,
+        )
+
+        screen.action_save()
+
+        notify.assert_called_once_with(
+            "Invalid group selection",
+            severity="error",
+        )
+        dismiss.assert_not_called()
+        await pilot.pause()
+
+
 def test_idea_form_default_group_fallback(
     service: IdeaService,
     mocker: MockerFixture,
