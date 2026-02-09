@@ -114,6 +114,11 @@ class IdeaFormScreen(ModalScreen[int | None]):
     def _get_default_group_pk(self) -> int:
         """Return default group pk (fallback to first available group)."""
         groups = self._service.list_groups()
+        if not groups:
+            created = self._service.create_group(
+                self._service.DEFAULT_GROUP_NAME
+            )
+            return created.pk
         for group in groups:
             if group.name == self._service.DEFAULT_GROUP_NAME:
                 return group.pk

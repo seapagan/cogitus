@@ -65,7 +65,7 @@ Cogitus is also a real-world validation project for `sqliter-py`.
 
 ---
 
-## Current Funtionality
+## Current Functionality
 
 Functionality available in the current MVP includes:
 

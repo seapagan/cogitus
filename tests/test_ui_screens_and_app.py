@@ -151,6 +151,25 @@ def test_idea_form_default_group_fallback(
     assert screen._get_default_group_pk() == 99
 
 
+def test_idea_form_default_group_created_when_missing(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Should create default group when no groups are available."""
+    screen = IdeaFormScreen(service)
+    created = mocker.Mock()
+    created.pk = 123
+    create_group = mocker.patch.object(
+        service,
+        "create_group",
+        return_value=created,
+    )
+    mocker.patch.object(service, "list_groups", return_value=[])
+
+    assert screen._get_default_group_pk() == 123
+    create_group.assert_called_once_with(service.DEFAULT_GROUP_NAME)
+
+
 @pytest.mark.asyncio
 async def test_confirm_dialog_and_help_screen(
     mocker: MockerFixture,
