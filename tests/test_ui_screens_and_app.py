@@ -203,10 +203,8 @@ def test_idea_form_default_group_created_when_missing(
 
 
 @pytest.mark.asyncio
-async def test_confirm_dialog_and_help_screen(
-    mocker: MockerFixture,
-) -> None:
-    """Confirmation and help modal actions should dismiss correctly."""
+async def test_confirm_dialog_actions(mocker: MockerFixture) -> None:
+    """Confirmation dialog actions should dismiss correctly."""
     confirm = ConfirmDialog("Are you sure?")
     app = _SingleScreenApp(confirm)
     async with app.run_test() as pilot:
@@ -219,6 +217,12 @@ async def test_confirm_dialog_and_help_screen(
         dismiss.assert_called_once_with(False)
         await pilot.pause()
 
+
+@pytest.mark.asyncio
+async def test_group_form_and_reassign_cancel_actions(
+    mocker: MockerFixture,
+) -> None:
+    """Group-related modal cancel actions should dismiss correctly."""
     group_form = GroupFormScreen(service=mocker.Mock())
     app_group = _SingleScreenApp(group_form)
     async with app_group.run_test() as pilot:
@@ -238,6 +242,10 @@ async def test_confirm_dialog_and_help_screen(
         dismiss.assert_called_once_with(None)
         await pilot.pause()
 
+
+@pytest.mark.asyncio
+async def test_help_screen_close_action(mocker: MockerFixture) -> None:
+    """Help modal close action should dismiss correctly."""
     help_screen = HelpScreen()
     app2 = _SingleScreenApp(help_screen)
     async with app2.run_test() as pilot:

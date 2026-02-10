@@ -64,6 +64,10 @@ class TestGroupModel:
         with pytest.raises(RecordInsertionError):
             db.insert(Group(name="backend"))
 
+    def test_group_table_name(self) -> None:
+        """Group model uses correct table name."""
+        assert Group.get_table_name() == "groups"
+
 
 class TestIdeaModel:
     """Tests for the Idea model."""
