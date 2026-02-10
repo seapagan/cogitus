@@ -200,6 +200,13 @@ class IdeaRepository:
             .fetch_all()
         )
 
+    def has_for_group(self, group_pk: int) -> bool:
+        """Return whether a group has at least one idea."""
+        return (
+            self._db.select(Idea).filter(group_id=group_pk).limit(1).fetch_one()
+            is not None
+        )
+
     def bulk_move_group(
         self,
         source_group_pk: int,

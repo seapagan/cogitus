@@ -230,6 +230,19 @@ class TestIdeaRepository:
         assert fetched is not None
         assert fetched.group.pk == target.pk
 
+    def test_has_for_group(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """has_for_group should return true only when group has ideas."""
+        source = group_repo.create("source")
+        empty = group_repo.create("empty")
+        idea_repo.create("In source", group_pk=source.pk)
+
+        assert idea_repo.has_for_group(source.pk)
+        assert not idea_repo.has_for_group(empty.pk)
+
 
 class TestGroupRepository:
     """Tests for GroupRepository."""
