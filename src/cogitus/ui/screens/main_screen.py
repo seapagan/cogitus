@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
     from textual.app import ComposeResult
 
+    from cogitus.models.group import Group
     from cogitus.services.idea_service import IdeaService
 
 
@@ -217,9 +218,18 @@ class MainScreen(Screen[None]):
             self.notify("Default group cannot be deleted", severity="warning")
             return
 
+        self._show_delete_group_flow(group_pk, group.name, groups)
+
+    def _show_delete_group_flow(
+        self,
+        group_pk: int,
+        group_name: str,
+        groups: list[Group],
+    ) -> None:
+        """Open confirm or reassignment dialog for group deletion."""
         if not self._service.has_ideas_in_group(group_pk):
             self.app.push_screen(
-                ConfirmDialog(f'Delete group "{group.name}"?'),
+                ConfirmDialog(f'Delete group "{group_name}"?'),
                 callback=lambda confirmed: self._on_delete_group_confirm(
                     group_pk,
                     confirmed=confirmed,
@@ -231,7 +241,7 @@ class MainScreen(Screen[None]):
             (item.name, item.pk) for item in groups if item.pk != group_pk
         ]
         self.app.push_screen(
-            GroupDeleteReassignScreen(group.name, options),
+            GroupDeleteReassignScreen(group_name, options),
             callback=lambda target_pk: self._on_delete_group_reassign(
                 group_pk,
                 target_pk,
