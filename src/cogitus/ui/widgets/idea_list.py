@@ -99,11 +99,8 @@ class IdeaListPanel(Vertical):
             id="idea-list",
         )
 
-    def load_grouped_ideas(
-        self,
-        grouped_ideas: list[tuple[Group, list[Idea]]],
-    ) -> None:
-        """Replace the displayed grouped ideas."""
+    def _reset_tree(self) -> Tree[IdeaTreeNodeData]:
+        """Clear tree and internal state, returning the tree widget."""
         tree = self.query_one("#idea-list", Tree)
         tree.clear()
         self._ideas_by_pk.clear()
@@ -111,6 +108,14 @@ class IdeaListPanel(Vertical):
         self._idea_nodes_by_pk.clear()
         tree.root.label = "Ideas"
         tree.root.data = IdeaTreeNodeData(kind="root")
+        return tree
+
+    def load_grouped_ideas(
+        self,
+        grouped_ideas: list[tuple[Group, list[Idea]]],
+    ) -> None:
+        """Replace the displayed grouped ideas."""
+        tree = self._reset_tree()
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
 
         for group, ideas in grouped_ideas:
@@ -135,13 +140,7 @@ class IdeaListPanel(Vertical):
 
     def load_ideas(self, ideas: list[Idea]) -> None:
         """Compatibility helper to load ideas under a synthetic group."""
-        tree = self.query_one("#idea-list", Tree)
-        tree.clear()
-        self._ideas_by_pk.clear()
-        self._group_nodes_by_pk.clear()
-        self._idea_nodes_by_pk.clear()
-        tree.root.label = "Ideas"
-        tree.root.data = IdeaTreeNodeData(kind="root")
+        tree = self._reset_tree()
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
         for idea in ideas:
             idea_node = self._add_idea_node(
