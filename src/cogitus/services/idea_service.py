@@ -159,31 +159,14 @@ class IdeaService:
     ) -> list[tuple[Group, list[Idea]]]:
         """List ideas grouped by group with activity-based ordering."""
         groups = self._group_repo.list_all()
-        ideas = (
-            self._idea_repo.search(query)
-            if query is not None and query.strip()
-            else self._idea_repo.list_all()
-        )
-        by_group: dict[int, list[Idea]] = {group.pk: [] for group in groups}
-        for idea in ideas:
-            by_group.setdefault(idea.group.pk, []).append(idea)
-
-        sorted_groups = sorted(
+        query_active = self._query_has_text(query)
+        ideas = self._ideas_for_query(query, query_active=query_active)
+        by_group = self._group_ideas(groups, ideas)
+        return self._build_grouped_result(
             groups,
-            key=lambda group: self._group_sort_key(
-                group.updated_at,
-                by_group.get(group.pk, []),
-            ),
-            reverse=True,
+            by_group,
+            query_active=query_active,
         )
-
-        grouped: list[tuple[Group, list[Idea]]] = []
-        for group in sorted_groups:
-            group_ideas = by_group.get(group.pk, [])
-            if query is not None and query.strip() and not group_ideas:
-                continue
-            grouped.append((group, group_ideas))
-        return grouped
 
     def delete_group(
         self,
@@ -222,6 +205,59 @@ class IdeaService:
         if ideas:
             return max(idea.updated_at for idea in ideas)
         return group_updated_at
+
+    @staticmethod
+    def _query_has_text(query: str | None) -> bool:
+        """Return whether a query string is present and non-empty."""
+        return query is not None and bool(query.strip())
+
+    def _ideas_for_query(
+        self,
+        query: str | None,
+        *,
+        query_active: bool,
+    ) -> list[Idea]:
+        """Return ideas for grouped display based on query state."""
+        if query_active:
+            # query is guaranteed non-empty by query_active.
+            return self._idea_repo.search(query or "")
+        return self._idea_repo.list_all()
+
+    @staticmethod
+    def _group_ideas(
+        groups: list[Group],
+        ideas: list[Idea],
+    ) -> dict[int, list[Idea]]:
+        """Map ideas by group primary key."""
+        by_group: dict[int, list[Idea]] = {group.pk: [] for group in groups}
+        for idea in ideas:
+            by_group.setdefault(idea.group.pk, []).append(idea)
+        return by_group
+
+    def _build_grouped_result(
+        self,
+        groups: list[Group],
+        by_group: dict[int, list[Idea]],
+        *,
+        query_active: bool,
+    ) -> list[tuple[Group, list[Idea]]]:
+        """Build sorted grouped idea tuples, filtering empty query groups."""
+        sorted_groups = sorted(
+            groups,
+            key=lambda group: self._group_sort_key(
+                group.updated_at,
+                by_group.get(group.pk, []),
+            ),
+            reverse=True,
+        )
+
+        grouped: list[tuple[Group, list[Idea]]] = []
+        for group in sorted_groups:
+            group_ideas = by_group.get(group.pk, [])
+            if query_active and not group_ideas:
+                continue
+            grouped.append((group, group_ideas))
+        return grouped
 
     @staticmethod
     def _normalize_tags(
