@@ -22,3 +22,7 @@ Ideas to add to Cogitus
 - add graph-oriented idea exploration views.
 - add scoring heuristics (impact/effort/confidence).
 - explore optional AI-assisted idea expansion and prompt-to-structure workflows.
+- optimize group-reassignment path to avoid per-row updates in
+  `IdeaRepository.bulk_move_group` (prefer set-based `UPDATE ... WHERE`).
+- investigate adding bulk update support to `sqliter-py` (similar to existing
+  bulk insert support) for efficient repository operations.
