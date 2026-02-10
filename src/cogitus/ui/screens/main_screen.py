@@ -112,8 +112,8 @@ class MainScreen(Screen[None]):
         panel.load_grouped_ideas(grouped)
 
         view = self.query_one("#content-panel", IdeaView)
-        ideas = [idea for _, group_ideas in grouped for idea in group_ideas]
-        if ideas:
+        has_ideas = any(group_ideas for _, group_ideas in grouped)
+        if has_ideas:
             if select_pk is not None:
                 panel.select_idea(select_pk)
             selected = panel.get_selected_idea()
