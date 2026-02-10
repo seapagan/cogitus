@@ -236,9 +236,10 @@ class TestGroupRepository:
 
     def test_create_and_find(self, group_repo: GroupRepository) -> None:
         """Group can be created and found by name."""
-        group = group_repo.create("backend")
+        group = group_repo.create("BackEnd")
         found = group_repo.find_by_name("backend")
         assert group.pk > 0
+        assert group.name == "backend"
         assert found is not None
         assert found.pk == group.pk
 
@@ -246,7 +247,7 @@ class TestGroupRepository:
         """Duplicate names are rejected."""
         group_repo.create("backend")
         with pytest.raises(ValueError, match="already exists"):
-            group_repo.create("backend")
+            group_repo.create("BackEnd")
 
     def test_create_empty_name_raises(
         self,
@@ -260,7 +261,7 @@ class TestGroupRepository:
         self, group_repo: GroupRepository
     ) -> None:
         """get_or_create should create a new group when none exists."""
-        created = group_repo.get_or_create("new-group")
+        created = group_repo.get_or_create("New-Group")
         assert created.name == "new-group"
         assert created.pk > 0
 

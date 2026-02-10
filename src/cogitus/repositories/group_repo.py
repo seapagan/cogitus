@@ -21,7 +21,7 @@ class GroupRepository:
 
     def create(self, name: str) -> Group:
         """Create and return a new group."""
-        normalized = name.strip()
+        normalized = name.strip().lower()
         if not normalized:
             msg = "Group name cannot be empty"
             raise ValueError(msg)
@@ -37,11 +37,12 @@ class GroupRepository:
 
     def find_by_name(self, name: str) -> Group | None:
         """Find a group by exact name."""
-        return self._db.select(Group).filter(name=name.strip()).fetch_one()
+        normalized = name.strip().lower()
+        return self._db.select(Group).filter(name=normalized).fetch_one()
 
     def get_or_create(self, name: str) -> Group:
         """Find or create a group by name."""
-        normalized = name.strip()
+        normalized = name.strip().lower()
         found = self.find_by_name(normalized)
         if found is not None:
             return found
