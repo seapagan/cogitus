@@ -550,12 +550,21 @@ async def test_main_screen_refresh_empty_selection_branch(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         view = screen.query_one("#content-panel", IdeaView)
+        search = panel.query_one("#search-input", Input)
         mocker.patch.object(panel, "get_selected_idea", return_value=None)
         set_selected = mocker.patch.object(screen, "_set_selected_idea")
         show_empty = mocker.patch.object(view, "show_empty")
+        list_grouped = mocker.patch.object(
+            screen._service,
+            "list_ideas_grouped",
+            wraps=screen._service.list_ideas_grouped,
+        )
 
+        search.value = "First"
+        list_grouped.reset_mock()
         screen.refresh_ideas()
 
+        list_grouped.assert_called_once_with("First")
         set_selected.assert_called_with(None)
         show_empty.assert_called()
         await pilot.pause()

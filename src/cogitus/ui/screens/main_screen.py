@@ -109,7 +109,8 @@ class MainScreen(Screen[None]):
     def refresh_ideas(self, select_pk: int | None = None) -> None:
         """Reload the idea list from the service."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        grouped = self._service.list_ideas_grouped()
+        search_query = panel.query_one("#search-input", Input).value.strip()
+        grouped = self._service.list_ideas_grouped(search_query or None)
         panel.load_grouped_ideas(grouped)
 
         view = self.query_one("#content-panel", IdeaView)
