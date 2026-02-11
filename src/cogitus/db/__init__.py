@@ -44,13 +44,26 @@ def _table_exists(db: SqliterDB, table_name: str) -> bool:
     return row is not None
 
 
+def _index_exists(db: SqliterDB, index_name: str) -> bool:
+    """Return True if the index exists."""
+    row = (
+        db.connect()
+        .execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?;",
+            (index_name,),
+        )
+        .fetchone()
+    )
+    return row is not None
+
+
 def _migrate_ideas_group_fk(db: SqliterDB, default_group_pk: int) -> None:
     """Add ideas.group_id and backfill existing rows when missing."""
     with db.connect() as conn:
+        column_added = False
         if not _column_exists(db, "ideas", "group_id"):
             conn.execute("ALTER TABLE ideas ADD COLUMN group_id INTEGER;")
-        # Rebuild the index to recover from stale/corrupt index entries.
-        conn.execute("DROP INDEX IF EXISTS idx_ideas_group_id;")
+            column_added = True
         conn.execute(
             """
             UPDATE ideas
@@ -64,9 +77,19 @@ def _migrate_ideas_group_fk(db: SqliterDB, default_group_pk: int) -> None:
             """,
             (default_group_pk,),
         )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_ideas_group_id ON ideas (group_id);"
+        changes_row = conn.execute("SELECT changes();").fetchone()
+        repaired_rows = int(changes_row[0]) if changes_row is not None else 0
+        index_missing = not _index_exists(
+            db,
+            "idx_ideas_group_id",
         )
+        if column_added or index_missing or repaired_rows > 0:
+            # Rebuild index only when migration actually changed state.
+            conn.execute("DROP INDEX IF EXISTS idx_ideas_group_id;")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ideas_group_id "
+                "ON ideas (group_id);"
+            )
         conn.commit()
 
 
