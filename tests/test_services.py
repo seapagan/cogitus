@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 if TYPE_CHECKING:
     from cogitus.services.idea_service import IdeaService
 
@@ -16,6 +18,7 @@ class TestIdeaService:
         idea = service.create_idea("Test idea")
         assert idea.pk > 0
         assert idea.title == "Test idea"
+        assert idea.group.name == "default"
 
     def test_create_idea_with_tags(self, service: IdeaService) -> None:
         """Idea is created with tags correctly."""
@@ -86,6 +89,58 @@ class TestIdeaService:
             "zebra",
         ]
 
+    def test_create_and_list_groups(self, service: IdeaService) -> None:
+        """Groups can be created and listed."""
+        service.create_group("backend")
+        names = [group.name for group in service.list_groups()]
+        assert "default" in names
+        assert "backend" in names
+
+    def test_create_idea_in_selected_group(self, service: IdeaService) -> None:
+        """Idea can be assigned to a selected group."""
+        group = service.create_group("backend")
+        idea = service.create_idea("Test", group_pk=group.pk)
+        assert idea.group.pk == group.pk
+
+    def test_update_idea_moves_group(self, service: IdeaService) -> None:
+        """Existing idea can be moved between groups."""
+        source = service.create_group("source")
+        target = service.create_group("target")
+        idea = service.create_idea("Test", group_pk=source.pk)
+        updated = service.update_idea(
+            idea.pk,
+            "Test",
+            "",
+            group_pk=target.pk,
+        )
+        assert updated is not None
+        assert updated.group.pk == target.pk
+
+    def test_delete_group_moves_ideas(self, service: IdeaService) -> None:
+        """Deleting a group moves ideas to destination group."""
+        source = service.create_group("source")
+        target = service.create_group("target")
+        idea = service.create_idea("Test", group_pk=source.pk)
+
+        service.delete_group(source.pk, move_to_group_pk=target.pk)
+
+        moved = service.get_idea(idea.pk)
+        assert moved is not None
+        assert moved.group.pk == target.pk
+
+    def test_default_group_cannot_be_deleted(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Default group cannot be deleted."""
+        default = next(
+            group
+            for group in service.list_groups()
+            if group.name == service.DEFAULT_GROUP_NAME
+        )
+        with pytest.raises(ValueError, match="cannot be deleted"):
+            service.delete_group(default.pk)
+
     def test_none_tags_passthrough(self, service: IdeaService) -> None:
         """Passing None for tags leaves them unchanged."""
         idea = service.create_idea("Test", tags=["python"])
@@ -93,3 +148,55 @@ class TestIdeaService:
         assert updated is not None
         tags = updated.tags.fetch_all()
         assert len(tags) == 1
+
+    def test_list_ideas_grouped_filters_empty_groups_on_query(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Query mode should exclude groups with zero matching ideas."""
+        backend = service.create_group("backend")
+        service.create_idea("Matching idea", group_pk=backend.pk)
+        service.create_group("empty-group")
+
+        grouped = service.list_ideas_grouped("matching")
+        names = [group.name for group, _ in grouped]
+
+        assert "backend" in names
+        assert "empty-group" not in names
+
+    def test_has_ideas_in_group(self, service: IdeaService) -> None:
+        """Group occupancy check should report true/false correctly."""
+        backend = service.create_group("backend")
+        empty = service.create_group("empty")
+        service.create_idea("Idea", group_pk=backend.pk)
+
+        assert service.has_ideas_in_group(backend.pk)
+        assert not service.has_ideas_in_group(empty.pk)
+
+    def test_delete_group_missing_group_noop(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Deleting a non-existent group should no-op."""
+        service.delete_group(99999)
+
+    def test_delete_group_target_missing_raises(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Deleting with a missing target should raise."""
+        source = service.create_group("source")
+        with pytest.raises(ValueError, match="Target group not found"):
+            service.delete_group(source.pk, move_to_group_pk=99999)
+
+    def test_delete_group_same_target_raises(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Deleting with source == target should raise."""
+        source = service.create_group("source")
+        with pytest.raises(
+            ValueError,
+            match="same group being deleted",
+        ):
+            service.delete_group(source.pk, move_to_group_pk=source.pk)

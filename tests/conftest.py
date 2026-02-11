@@ -5,10 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from sqliter import SqliterDB
 
-from cogitus.models.idea import Idea
-from cogitus.models.tag import Tag
+from cogitus.db import get_db
+from cogitus.repositories.group_repo import GroupRepository
 from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.repositories.tag_repo import TagRepository
 from cogitus.services.idea_service import IdeaService
@@ -16,13 +15,15 @@ from cogitus.services.idea_service import IdeaService
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from sqliter import SqliterDB
+
+    from cogitus.models.idea import Idea
+
 
 @pytest.fixture
 def db() -> Generator[SqliterDB]:
     """Provide a fresh in-memory database with tables."""
-    database = SqliterDB(memory=True)
-    database.create_table(Tag)
-    database.create_table(Idea)
+    database = get_db(memory=True)
     yield database
     database.close()
 
@@ -34,9 +35,19 @@ def tag_repo(db: SqliterDB) -> TagRepository:
 
 
 @pytest.fixture
-def idea_repo(db: SqliterDB, tag_repo: TagRepository) -> IdeaRepository:
+def group_repo(db: SqliterDB) -> GroupRepository:
+    """Provide a GroupRepository backed by in-memory db."""
+    return GroupRepository(db)
+
+
+@pytest.fixture
+def idea_repo(
+    db: SqliterDB,
+    tag_repo: TagRepository,
+    group_repo: GroupRepository,
+) -> IdeaRepository:
     """Provide an IdeaRepository backed by in-memory db."""
-    return IdeaRepository(db, tag_repo)
+    return IdeaRepository(db, tag_repo, group_repo)
 
 
 @pytest.fixture

@@ -35,6 +35,7 @@ can include:
 - Body/description (Markdown-friendly text - edit in markdown, display rendered
   using `Textual`/`Rich` native functionality)
 - Tags
+- Group (ideas are organized under groups in the left tree view)
 - Timestamps (created/updated)
 
 Future versions may introduce:
@@ -64,11 +65,15 @@ Cogitus is also a real-world validation project for `sqliter-py`.
 
 ---
 
-## Current Release (v0.2)
+## Current Functionality
+
+Functionality available in the current MVP includes:
 
 - Create new ideas
 - Edit existing ideas
-- List ideas
+- List ideas in a grouped tree view
+- **Arrange ideas into groups (with bulk idea move to the default group on group
+  delete)**
 - Tag ideas
 - Basic search (SQLite `LIKE`)
 - View idea details
@@ -76,41 +81,11 @@ Cogitus is also a real-world validation project for `sqliter-py`.
 
 Search will initially be simple but structured to evolve into FTS5.
 
----
-
-## Roadmap
-
-### v0.3
-
-- SQLite FTS5 search backend
-- Better ranking/snippet presentation
-- Tag filtering and combined query UX
-- Navigation and keybinding polish
-- In-place right-pane Markdown edit mode (view/edit toggle in content pane)
-- Contextual dynamic toolbar/actions by mode
-- Evaluate SQLite write tuning (`PRAGMA synchronous=NORMAL`) as an optional
-  performance optimization, backed by benchmark and risk assessment.
-
-### v0.4
-
-- Idea linking (explicit relationships)
-- Relationship browsing primitives
-- Richer metadata and prioritization signals
-
-### v0.5
-
-- Add non-TUI CLI tasks for idea management:
-  - list ideas,
-  - dump/export ideas,
-  - delete ideas.
-- Ensure CLI task layer reuses the same repository/service abstractions as the
-  TUI.
-
-### v0.6+
-
-- Graph-oriented idea exploration views
-- Scoring heuristics (impact/effort/confidence)
-- Optional AI-assisted idea expansion and prompt-to-structure workflows
+> [!NOTE]
+>
+> items in **bold** are in the current HEAD but not yet in the pypi release.
+> They will be included in the next release, but you can always install from the
+> repo to get the latest features.
 
 ---
 
@@ -148,6 +123,18 @@ pip install cogitus
 ```bash
 cogitus
 ```
+
+## Key Shortcuts (Main Screen)
+
+- `n`: New idea
+- `e`: Edit selected idea
+- `d`: Delete selected idea
+- `g`: New group
+- `Shift+G`: Delete selected group
+- `/`: Focus search
+- `y`: Copy selected idea body
+- `?`: Show help
+- `q`: Quit
 
 ---
 

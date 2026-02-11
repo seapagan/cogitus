@@ -1,6 +1,7 @@
 """Data models for Cogitus."""
 
+from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
 
-__all__ = ["Idea", "Tag"]
+__all__ = ["Group", "Idea", "Tag"]

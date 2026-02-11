@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
 from sqliter.exceptions import RecordInsertionError
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
+    from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.idea_repo import IdeaRepository
     from cogitus.repositories.tag_repo import TagRepository
 
@@ -94,6 +96,7 @@ class TestIdeaRepository:
         assert idea.pk > 0
         assert idea.title == "My idea"
         assert idea.body == ""
+        assert idea.group.name == "default"
 
     def test_create_idea_with_body(self, idea_repo: IdeaRepository) -> None:
         """Idea is inserted with body text."""
@@ -107,6 +110,14 @@ class TestIdeaRepository:
         assert len(tags) == 2
         tag_names = {t.name for t in tags}
         assert tag_names == {"python", "testing"}
+
+    def test_create_with_missing_group_raises(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Explicitly invalid group IDs should raise."""
+        with pytest.raises(ValueError, match="not found"):
+            idea_repo.create("Bad group", group_pk=99999)
 
     def test_get_idea(self, idea_repo: IdeaRepository) -> None:
         """Idea is retrieved by primary key."""
@@ -144,6 +155,20 @@ class TestIdeaRepository:
         assert updated.title == "Updated"
         assert updated.body == "New body"
 
+    def test_update_preserves_group_when_group_not_provided(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Update without group_pk should keep existing group assignment."""
+        source = group_repo.create("source")
+        created = idea_repo.create("Original", group_pk=source.pk)
+
+        updated = idea_repo.update(created.pk, "Updated", "New body")
+
+        assert updated is not None
+        assert updated.group.pk == source.pk
+
     def test_update_idea_tags(self, idea_repo: IdeaRepository) -> None:
         """Tags are replaced by update."""
         created = idea_repo.create("Test", tag_names=["old"])
@@ -153,6 +178,20 @@ class TestIdeaRepository:
         tags = fetched.tags.fetch_all()
         assert len(tags) == 1
         assert tags[0].name == "new"
+
+    def test_update_with_missing_group_raises(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Explicitly invalid group IDs should raise."""
+        created = idea_repo.create("Test")
+        with pytest.raises(ValueError, match="not found"):
+            idea_repo.update(
+                created.pk,
+                "Updated",
+                "Body",
+                group_pk=99999,
+            )
 
     def test_update_nonexistent(self, idea_repo: IdeaRepository) -> None:
         """None is returned when updating a missing idea."""
@@ -173,3 +212,127 @@ class TestIdeaRepository:
         ideas = idea_repo.list_all()
         assert len(ideas) == 1
         assert ideas[0].title == "Keep"
+
+    def test_bulk_move_group(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Ideas can be bulk-moved between groups."""
+        source = group_repo.create("source")
+        target = group_repo.create("target")
+        idea = idea_repo.create("Move me", group_pk=source.pk)
+
+        moved_count = idea_repo.bulk_move_group(source.pk, target.pk)
+
+        fetched = idea_repo.get(idea.pk)
+        assert moved_count == 1
+        assert fetched is not None
+        assert fetched.group.pk == target.pk
+
+    def test_bulk_move_group_noop_for_same_group(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Bulk move should no-op when source and target groups are same."""
+        source = group_repo.create("source")
+        idea = idea_repo.create("Stay put", group_pk=source.pk)
+
+        moved_count = idea_repo.bulk_move_group(source.pk, source.pk)
+
+        fetched = idea_repo.get(idea.pk)
+        assert moved_count == 0
+        assert fetched is not None
+        assert fetched.group.pk == source.pk
+
+    def test_has_for_group(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """has_for_group should return true only when group has ideas."""
+        source = group_repo.create("source")
+        empty = group_repo.create("empty")
+        idea_repo.create("In source", group_pk=source.pk)
+
+        assert idea_repo.has_for_group(source.pk)
+        assert not idea_repo.has_for_group(empty.pk)
+
+
+class TestGroupRepository:
+    """Tests for GroupRepository."""
+
+    def test_create_and_find(self, group_repo: GroupRepository) -> None:
+        """Group can be created and found by name."""
+        group = group_repo.create("BackEnd")
+        found = group_repo.find_by_name("backend")
+        assert group.pk > 0
+        assert group.name == "backend"
+        assert found is not None
+        assert found.pk == group.pk
+
+    def test_create_duplicate_raises(self, group_repo: GroupRepository) -> None:
+        """Duplicate names are rejected."""
+        group_repo.create("backend")
+        with pytest.raises(ValueError, match="already exists"):
+            group_repo.create("BackEnd")
+
+    def test_create_empty_name_raises(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Empty group names are rejected."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            group_repo.create("   ")
+
+    def test_get_or_create_creates_when_missing(
+        self, group_repo: GroupRepository
+    ) -> None:
+        """get_or_create should create a new group when none exists."""
+        created = group_repo.get_or_create("New-Group")
+        assert created.name == "new-group"
+        assert created.pk > 0
+
+    def test_get_or_create_recovers_after_insert_race(
+        self,
+        group_repo: GroupRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Insert race should recover by re-fetching after create error."""
+        existing = group_repo.create("backend")
+        find_mock = mocker.patch.object(
+            group_repo,
+            "find_by_name",
+            side_effect=[None, existing],
+        )
+        mocker.patch.object(
+            group_repo,
+            "create",
+            side_effect=ValueError("already exists"),
+        )
+
+        found = group_repo.get_or_create("backend")
+
+        assert found.pk == existing.pk
+        assert find_mock.call_count == 2
+
+    def test_get_or_create_reraises_when_refetch_still_missing(
+        self,
+        group_repo: GroupRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Create errors are re-raised if race-recovery refetch still fails."""
+        mocker.patch.object(
+            group_repo,
+            "find_by_name",
+            side_effect=[None, None],
+        )
+        mocker.patch.object(
+            group_repo,
+            "create",
+            side_effect=ValueError("already exists"),
+        )
+
+        with pytest.raises(ValueError, match="already exists"):
+            group_repo.get_or_create("backend")
