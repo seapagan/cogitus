@@ -230,6 +230,22 @@ class TestIdeaRepository:
         assert fetched is not None
         assert fetched.group.pk == target.pk
 
+    def test_bulk_move_group_noop_for_same_group(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Bulk move should no-op when source and target groups are same."""
+        source = group_repo.create("source")
+        idea = idea_repo.create("Stay put", group_pk=source.pk)
+
+        moved_count = idea_repo.bulk_move_group(source.pk, source.pk)
+
+        fetched = idea_repo.get(idea.pk)
+        assert moved_count == 0
+        assert fetched is not None
+        assert fetched.group.pk == source.pk
+
     def test_has_for_group(
         self,
         idea_repo: IdeaRepository,

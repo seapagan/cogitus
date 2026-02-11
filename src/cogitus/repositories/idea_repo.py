@@ -213,13 +213,22 @@ class IdeaRepository:
         source_group_pk: int,
         target_group_pk: int,
     ) -> int:
-        """Move all ideas from source group to target group."""
+        """Move all ideas from source group to target group.
+
+        Returns:
+            The number of ideas that were moved.
+        """
+        if source_group_pk == target_group_pk:
+            return 0
+
         target_group = self._resolve_group(target_group_pk)
-        ideas = self.list_for_group(source_group_pk)
-        for idea in ideas:
-            idea.group = target_group
-            self._db.update(idea)
-        return len(ideas)
+        with self._db.connect() as conn:
+            cursor = conn.execute(
+                "UPDATE ideas SET group_id = ? WHERE group_id = ?",
+                (target_group.pk, source_group_pk),
+            )
+            conn.commit()
+        return cursor.rowcount
 
     def _resolve_group(self, group_pk: int | None) -> Group:
         """Resolve a group by primary key, falling back to default."""
