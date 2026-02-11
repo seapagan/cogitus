@@ -5,6 +5,14 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/seapagan/cogitus/releases/tag/0.3.0) (February 11, 2026)
+
+**New Features**
+
+- Add idea groups with tree navigation, safe DB backfill, and responsive edit modal ([#3](https://github.com/seapagan/cogitus/pull/3)) by [seapagan](https://github.com/seapagan)
+
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.2.0...0.3.0) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.2.0...0.3.0.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.2.0...0.3.0.patch)
+
 ## [0.2.0](https://github.com/seapagan/cogitus/releases/tag/0.2.0) (February 08, 2026)
 
 **New Features**

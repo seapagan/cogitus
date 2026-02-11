@@ -1,6 +1,6 @@
 [project]
 name = "cogitus"
-version = "0.2.0"
+version = "0.3.0"
 description = "Cogitus — a fast, searchable terminal workspace for capturing and evolving programming ideas."
 readme = "README.md"
 authors = [{ name = "Grant Ramsay", email = "seapagan@gmail.com" }]
