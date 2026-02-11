@@ -72,8 +72,8 @@ Functionality available in the current MVP includes:
 - Create new ideas
 - Edit existing ideas
 - List ideas in a grouped tree view
-- **Arrange ideas into groups (with bulk idea move to the default group on group
-  delete)**
+- Arrange ideas into groups (with bulk idea move to the default group on group
+  delete)
 - Tag ideas
 - Basic search (SQLite `LIKE`)
 - View idea details
