@@ -259,6 +259,22 @@ class TestIdeaRepository:
         assert idea_repo.has_for_group(source.pk)
         assert not idea_repo.has_for_group(empty.pk)
 
+    def test_list_for_group(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """list_for_group should return only ideas for selected group."""
+        source = group_repo.create("source")
+        other = group_repo.create("other")
+        source_idea = idea_repo.create("In source", group_pk=source.pk)
+        idea_repo.create("In other", group_pk=other.pk)
+
+        ideas = idea_repo.list_for_group(source.pk)
+
+        assert len(ideas) == 1
+        assert ideas[0].pk == source_idea.pk
+
 
 class TestGroupRepository:
     """Tests for GroupRepository."""
