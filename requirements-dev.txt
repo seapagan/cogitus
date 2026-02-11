@@ -28,7 +28,7 @@ colorama==0.4.6
     #   pytest
 coverage==7.13.3
     # via pytest-cov
-cryptography==46.0.4
+cryptography==46.0.5
     # via pyjwt
 csscompressor==0.9.5
     # via mkdocs-minify-plugin
