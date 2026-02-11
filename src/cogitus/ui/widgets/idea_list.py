@@ -227,16 +227,7 @@ class IdeaListPanel(Vertical):
         event: Tree.NodeSelected[IdeaTreeNodeData],
     ) -> None:
         """Handle idea selection from tree."""
-        data = event.node.data
-        if (
-            data is not None
-            and data.kind == "idea"
-            and data.idea_pk is not None
-            and data.idea_pk in self._ideas_by_pk
-        ):
-            self.post_message(
-                self.IdeaSelected(self._ideas_by_pk[data.idea_pk])
-            )
+        self._post_if_idea_node(event.node.data)
 
     def on_tree_node_highlighted(
         self,
@@ -244,6 +235,10 @@ class IdeaListPanel(Vertical):
     ) -> None:
         """Handle highlight change in tree."""
         data = event.node.data if event.node is not None else None
+        self._post_if_idea_node(data)
+
+    def _post_if_idea_node(self, data: IdeaTreeNodeData | None) -> None:
+        """Post IdeaSelected if data represents a valid idea node."""
         if (
             data is not None
             and data.kind == "idea"
