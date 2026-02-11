@@ -52,6 +52,8 @@ class IdeaFormScreen(ModalScreen[int | None]):
         idea = self._idea
         is_edit = idea is not None
         form_title = "Edit Idea" if is_edit else "New Idea"
+        group_value = self._get_existing_group_pk()
+        group_options = self._group_options()
 
         with Vertical(id="idea-form-container"):
             yield Static(form_title, id="form-title")
@@ -76,8 +78,8 @@ class IdeaFormScreen(ModalScreen[int | None]):
                 )
                 yield Label("Group")
                 yield Select[int](
-                    options=self._group_options(),
-                    value=self._get_existing_group_pk(),
+                    options=group_options,
+                    value=group_value,
                     allow_blank=False,
                     id="group-select",
                 )
