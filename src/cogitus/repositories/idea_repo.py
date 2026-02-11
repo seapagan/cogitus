@@ -113,7 +113,8 @@ class IdeaRepository:
             title: The new title.
             body: The new body text.
             tag_names: If provided, replace all tags with these.
-            group_pk: Optional group primary key.
+            group_pk: Optional group primary key. When None, preserve the
+                existing group assignment.
 
         Returns:
             The updated Idea, or None if not found.

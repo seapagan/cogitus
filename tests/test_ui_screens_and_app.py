@@ -572,6 +572,9 @@ async def test_main_screen_refresh_empty_selection_branch(
 
 def test_main_screen_group_helper_branches(mocker: MockerFixture) -> None:
     """Internal group callbacks should cover all branch paths."""
+    # These callbacks are intentionally exercised without mounting the screen.
+    # If callbacks start querying widgets, this test should be converted to
+    # a mounted async screen test.
     service = mocker.Mock()
     screen = MainScreen(service)
     service_mock = mocker.Mock()
