@@ -108,12 +108,44 @@ IdeaFormScreen {
     margin-bottom: 1;
 }
 
-#tags-input {
+#tags-group-row {
+    layout: horizontal;
+    width: 100%;
+    height: auto;
     margin-bottom: 1;
 }
 
+#tags-column,
+#group-column {
+    width: 1fr;
+    height: auto;
+}
+
+#tags-column {
+    margin-right: 1;
+}
+
+#group-column {
+    margin-left: 1;
+}
+
+#tags-group-row.narrow {
+    layout: vertical;
+    height: auto;
+}
+
+#tags-group-row.narrow #tags-column,
+#tags-group-row.narrow #group-column {
+    width: 100%;
+    margin: 0;
+}
+
+#tags-input {
+    margin-bottom: 0;
+}
+
 #group-select {
-    margin-bottom: 1;
+    margin-bottom: 0;
 }
 
 #form-buttons {

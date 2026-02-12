@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from textual.binding import Binding, BindingType
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import (
+    Container,
+    Horizontal,
+    Vertical,
+    VerticalScroll,
+)
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Select, Static
 
@@ -13,6 +18,7 @@ from cogitus.ui.widgets.text_area import CogitusTextArea
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
+    from textual.events import Resize
 
     from cogitus.models.idea import Idea
     from cogitus.services.idea_service import IdeaService
@@ -20,6 +26,8 @@ if TYPE_CHECKING:
 
 class IdeaFormScreen(ModalScreen[int | None]):
     """Modal form for creating or editing an idea."""
+
+    INLINE_TAGS_GROUP_MIN_WIDTH: ClassVar[int] = 90
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "cancel", "Cancel", show=False),
@@ -70,19 +78,26 @@ class IdeaFormScreen(ModalScreen[int | None]):
                     id="body-input",
                     language="markdown",
                 )
-                yield Label("Tags (comma-separated)")
-                yield Input(
-                    value=(self._get_existing_tags() if is_edit else ""),
-                    placeholder=("python, architecture, performance..."),
-                    id="tags-input",
-                )
-                yield Label("Group")
-                yield Select[int](
-                    options=group_options,
-                    value=group_value,
-                    allow_blank=False,
-                    id="group-select",
-                )
+                with Container(id="tags-group-row"):
+                    with Vertical(id="tags-column"):
+                        yield Label("Tags (comma-separated)")
+                        yield Input(
+                            value=(
+                                self._get_existing_tags() if is_edit else ""
+                            ),
+                            placeholder=(
+                                "python, architecture, performance..."
+                            ),
+                            id="tags-input",
+                        )
+                    with Vertical(id="group-column"):
+                        yield Label("Group")
+                        yield Select[int](
+                            options=group_options,
+                            value=group_value,
+                            allow_blank=False,
+                            id="group-select",
+                        )
             with Horizontal(id="form-buttons"):
                 yield Button(
                     "Save [Ctrl+S]",
@@ -94,6 +109,19 @@ class IdeaFormScreen(ModalScreen[int | None]):
                     variant="default",
                     id="cancel-btn",
                 )
+
+    def on_mount(self) -> None:
+        """Initialize responsive row layout after mounting."""
+        self._update_tags_group_row_layout(self.size.width)
+
+    def on_resize(self, event: Resize) -> None:
+        """Stack tags/group controls on narrow viewports."""
+        self._update_tags_group_row_layout(event.size.width)
+
+    def _update_tags_group_row_layout(self, width: int) -> None:
+        """Toggle tags/group row between horizontal and stacked layout."""
+        row = self.query_one("#tags-group-row", Container)
+        row.set_class(width < self.INLINE_TAGS_GROUP_MIN_WIDTH, "narrow")
 
     def _get_existing_tags(self) -> str:
         """Get comma-separated tags from the idea."""
