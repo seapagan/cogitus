@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 def test_main_runs_app(mocker: MockerFixture) -> None:
     """Main should instantiate CogitusApp and run it."""
+    mocker.patch("sys.argv", ["cogitus"])
     app_cls = mocker.patch("cogitus.main.CogitusApp")
     app = app_cls.return_value
 
