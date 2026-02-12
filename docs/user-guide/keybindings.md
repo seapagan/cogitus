@@ -2,20 +2,24 @@
 
 ## Main Screen
 
-- `n`: new idea
-- `e`: edit selected idea
-- `d`: delete selected idea
-- `g`: new group
-- `Shift+G`: delete selected group
-- `/`: focus search
-- `Esc`: cancel search/back
-- `Tab`: switch pane
-- `Ctrl+B`: toggle list pane visibility
-- `y`: copy body or selected text (context-sensitive)
-- `?`: help
-- `q`: quit
+| Key       | Action                                         |
+| --------- | ---------------------------------------------- |
+| `n`       | New idea                                       |
+| `e`       | Edit selected idea                             |
+| `d`       | Delete selected idea                           |
+| `g`       | New group                                      |
+| `Shift+G` | Delete selected group                          |
+| `/`       | Focus search                                   |
+| `Esc`     | Cancel search/back                             |
+| `Tab`     | Switch pane                                    |
+| `Ctrl+B`  | Toggle list pane visibility                    |
+| `y`       | Copy body or selected text (context-sensitive) |
+| `?`       | Help                                           |
+| `q`       | Quit                                           |
 
 ## Idea Form
 
-- `Ctrl+S`: save
-- `Esc`: cancel
+| Key      | Action |
+| -------- | ------ |
+| `Ctrl+S` | Save   |
+| `Esc`    | Cancel |
