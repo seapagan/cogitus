@@ -244,6 +244,7 @@ dependencies = [
     { name = "simple-toml-settings" },
     { name = "sqliter-py" },
     { name = "textual" },
+    { name = "typer" },
 ]
 
 [package.dev-dependencies]
@@ -277,6 +278,7 @@ requires-dist = [
     { name = "simple-toml-settings", specifier = ">=0.10.0" },
     { name = "sqliter-py", specifier = ">=0.18.0" },
     { name = "textual", specifier = ">=7.5.0" },
+    { name = "typer", specifier = ">=0.21.1" },
 ]
 
 [package.metadata.requires-dev]

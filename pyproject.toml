@@ -29,6 +29,7 @@ dependencies = [
     "simple-toml-settings>=0.10.0",
     "sqliter-py>=0.18.0",
     "textual>=7.5.0",
+    "typer>=0.21.1",
 ]
 
 [project.urls]
