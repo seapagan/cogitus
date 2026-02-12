@@ -858,7 +858,7 @@ async def test_main_screen_copy_idea_body(
     mocker: MockerFixture,
 ) -> None:
     """Copy action should handle all branches."""
-    idea = service.create_idea("Test", body="# Hello")
+    idea = service.create_idea("Test", body="hello world")
     no_body = service.create_idea("Empty")
     screen = MainScreen(service)
     app = _SingleScreenApp(screen)
@@ -891,14 +891,50 @@ async def test_main_screen_copy_idea_body(
         screen._selected_idea_pk = idea.pk
         copy.return_value = True
         screen.action_copy_idea_body()
-        copy.assert_called_once_with("# Hello", app)
+        copy.assert_called_once_with("hello world", app)
         notify.assert_called_with("Copied idea body to clipboard")
+
+        # Selection copy takes precedence
+        copy.reset_mock()
+        notify.reset_mock()
+        selected_text = "selected text"
+        mocker.patch.object(
+            screen,
+            "get_selected_text",
+            return_value=selected_text,
+        )
+
+        screen.action_copy_idea_body()
+        copy.assert_called_once_with(selected_text, app)
+        notify.assert_called_with("Copied selection to clipboard")
 
         # Clipboard unavailable
         notify.reset_mock()
+        copy.reset_mock()
         copy.return_value = False
         screen.action_copy_idea_body()
         notify.assert_called_with("Clipboard unavailable", severity="warning")
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_selection_helper_falls_back_to_screen_selection(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Helper should use Screen-level selection text first."""
+    service.create_idea("Test", body="hello world")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        selected_text = "selected via screen"
+        mocker.patch.object(
+            screen,
+            "get_selected_text",
+            return_value=selected_text,
+        )
+        assert screen._get_selected_rendered_body_text() == selected_text
         await pilot.pause()
 
 
@@ -996,4 +1032,32 @@ async def test_main_screen_y_binding_not_triggered_by_text_area_selection_copy(
 
         copy.assert_called_once_with("hello world", app)
         copy_body.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_y_binding_copies_rendered_body_selection(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Pressing y should copy selected text from rendered idea view."""
+    service.create_idea("First", body="hello world")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        copy = mocker.patch("cogitus.ui.screens.main_screen.copy_to_clipboard")
+        notify = mocker.patch.object(screen, "notify")
+        copy.return_value = True
+        selected_text = "selected text"
+        mocker.patch.object(
+            screen,
+            "get_selected_text",
+            return_value=selected_text,
+        )
+
+        await pilot.press("y")
+
+        copy.assert_called_once_with(selected_text, app)
+        notify.assert_called_with("Copied selection to clipboard")
         await pilot.pause()
