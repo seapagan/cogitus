@@ -287,8 +287,8 @@ class MainScreen(Screen[None]):
         selected = body.get_selection(selection)
         if selected is None:
             return None
-        selected_text, _ = selected
-        return selected_text or None
+        widget_text, _ = selected
+        return widget_text or None
 
     def _on_delete_confirm(
         self,
