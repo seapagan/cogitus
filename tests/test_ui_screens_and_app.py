@@ -199,6 +199,35 @@ async def test_idea_form_tags_group_row_responsive_layout(
         await pilot.pause()
 
 
+@pytest.mark.asyncio
+async def test_idea_form_initial_focus_new_mode(
+    service: IdeaService,
+) -> None:
+    """New idea mode should focus title input on mount."""
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        title = screen.query_one("#title-input", Input)
+        assert app.focused is title
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_initial_focus_edit_mode(
+    service: IdeaService,
+) -> None:
+    """Edit mode should focus body editor on mount."""
+    idea = service.create_idea("Original", body="old")
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        body = screen.query_one("#body-input", CogitusTextArea)
+        assert app.focused is body
+        await pilot.pause()
+
+
 def test_idea_form_default_group_fallback(
     service: IdeaService,
     mocker: MockerFixture,

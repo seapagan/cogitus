@@ -111,8 +111,12 @@ class IdeaFormScreen(ModalScreen[int | None]):
                 )
 
     def on_mount(self) -> None:
-        """Initialize responsive row layout after mounting."""
+        """Initialize responsive layout and initial form focus."""
         self._update_tags_group_row_layout(self.size.width)
+        if self._idea is None:
+            self.query_one("#title-input", Input).focus()
+        else:
+            self.query_one("#body-input", CogitusTextArea).focus()
 
     def on_resize(self, event: Resize) -> None:
         """Stack tags/group controls on narrow viewports."""
