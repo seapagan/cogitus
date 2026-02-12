@@ -4,9 +4,6 @@ Ideas to add to Cogitus
 
 ## UI
 
-- when editing existing idea, highlight the Body by default? its the most
-  likely place to want to edit and saves a tab press? Perhaps make this a
-  config file option? Likewise for `New` it should auto-hilight the title.
 - Allow key customization (using the `Textual` built-in functionality and the
   config file). eg Ctrl-S on my system is mapped to tmux
 - continue navigation and keybinding polish.
