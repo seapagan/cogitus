@@ -175,16 +175,15 @@ class IdeaFormScreen(ModalScreen[int | None]):
     def _cursor_location_from_index(text: str, index: int) -> tuple[int, int]:
         """Convert a linear cursor index to a (line, column) location."""
         clamped = max(0, min(len(text), index))
-        lines = text.split("\n")
-        remaining = clamped
-        for line_no, line in enumerate(lines):
-            line_len = len(line)
-            if remaining <= line_len:
-                return (line_no, remaining)
-            if line_no == len(lines) - 1:
-                return (line_no, line_len)
-            remaining -= line_len + 1
-        return (0, 0)
+        line_no = 0
+        column = 0
+        for char in text[:clamped]:
+            if char == "\n":
+                line_no += 1
+                column = 0
+            else:
+                column += 1
+        return (line_no, column)
 
     @staticmethod
     def _cursor_index_from_location(
@@ -193,9 +192,6 @@ class IdeaFormScreen(ModalScreen[int | None]):
     ) -> int:
         """Convert a (line, column) cursor location to a linear index."""
         lines = text.split("\n")
-        if not lines:
-            return 0
-
         line_no = max(0, min(location[0], len(lines) - 1))
         column = max(0, min(location[1], len(lines[line_no])))
         line_prefix_len = sum(len(line) + 1 for line in lines[:line_no])

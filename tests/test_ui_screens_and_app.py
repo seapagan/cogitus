@@ -411,6 +411,14 @@ def test_idea_form_persist_cursor_noop_for_new_mode(
     set_cursor.assert_not_called()
 
 
+def test_idea_form_cursor_location_from_index_handles_newlines(
+    service: IdeaService,
+) -> None:
+    """Index-to-location conversion should step lines on newline chars."""
+    screen = IdeaFormScreen(service)
+    assert screen._cursor_location_from_index("ab\ncd", 3) == (1, 0)
+
+
 def test_idea_form_default_group_created_when_missing(
     service: IdeaService,
     mocker: MockerFixture,
