@@ -53,8 +53,13 @@ class _SingleScreenApp(App[None]):
 class _FakeSettings:
     """Minimal settings double for CogitusApp tests."""
 
-    def __init__(self, last_viewed_idea_pk: int = 0) -> None:
+    def __init__(
+        self,
+        last_viewed_idea_pk: int = 0,
+        edit_body_cursor_mode: str = "remember",
+    ) -> None:
         self.last_viewed_idea_pk = last_viewed_idea_pk
+        self.edit_body_cursor_mode = edit_body_cursor_mode
         self.saved = False
 
     def save(self) -> None:
@@ -225,6 +230,142 @@ async def test_idea_form_initial_focus_edit_mode(
     async with app.run_test() as pilot:
         body = screen.query_one("#body-input", CogitusTextArea)
         assert app.focused is body
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_edit_cursor_mode_start(
+    service: IdeaService,
+) -> None:
+    """Start mode should place edit body cursor at index zero."""
+    idea = service.create_idea("Original", body="abcdef")
+    screen = IdeaFormScreen(
+        service,
+        idea=idea,
+        edit_body_cursor_mode="start",
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        body = screen.query_one("#body-input", CogitusTextArea)
+        assert body.document.get_index_from_location(body.cursor_location) == 0
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_edit_cursor_mode_end(
+    service: IdeaService,
+) -> None:
+    """End mode should place edit body cursor at end of text."""
+    idea = service.create_idea("Original", body="abcdef")
+    screen = IdeaFormScreen(
+        service,
+        idea=idea,
+        edit_body_cursor_mode="end",
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        body = screen.query_one("#body-input", CogitusTextArea)
+        assert body.document.get_index_from_location(
+            body.cursor_location
+        ) == len(body.text)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_edit_cursor_mode_remember(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Remember mode should use saved cursor position when available."""
+    idea = service.create_idea("Original", body="abcdef")
+    get_cursor = mocker.patch.object(
+        service,
+        "get_idea_cursor_position",
+        return_value=4,
+    )
+    screen = IdeaFormScreen(
+        service,
+        idea=idea,
+        edit_body_cursor_mode="remember",
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        body = screen.query_one("#body-input", CogitusTextArea)
+        assert body.document.get_index_from_location(body.cursor_location) == 4
+        get_cursor.assert_called_once_with(idea.pk)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_edit_cursor_mode_remember_clamps_out_of_range(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Remember mode should clamp stored cursor positions to text bounds."""
+    idea = service.create_idea("Original", body="abc")
+    mocker.patch.object(
+        service,
+        "get_idea_cursor_position",
+        return_value=999,
+    )
+    screen = IdeaFormScreen(
+        service,
+        idea=idea,
+        edit_body_cursor_mode="remember",
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        body = screen.query_one("#body-input", CogitusTextArea)
+        assert body.document.get_index_from_location(
+            body.cursor_location
+        ) == len(body.text)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_persists_cursor_position_on_edit_save(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Edit save should persist current body cursor position."""
+    idea = service.create_idea("Original", body="abcdef")
+    set_cursor = mocker.patch.object(service, "set_idea_cursor_position")
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        body = screen.query_one("#body-input", CogitusTextArea)
+        body.cursor_location = body.document.get_location_from_index(2)
+        screen.query_one("#title-input", Input).value = "Updated"
+
+        screen.action_save()
+
+        set_cursor.assert_called_with(idea.pk, 2)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_persists_cursor_position_on_edit_cancel(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Edit cancel should persist current body cursor position."""
+    idea = service.create_idea("Original", body="abcdef")
+    set_cursor = mocker.patch.object(service, "set_idea_cursor_position")
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        body = screen.query_one("#body-input", CogitusTextArea)
+        body.cursor_location = body.document.get_location_from_index(5)
+
+        screen.action_cancel()
+
+        set_cursor.assert_called_with(idea.pk, 5)
         await pilot.pause()
 
 

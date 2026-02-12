@@ -10,6 +10,7 @@ import pytest
 from cogitus.db import _column_exists, get_db
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
+from cogitus.models.idea_cursor_state import IdeaCursorState
 from cogitus.models.tag import Tag
 
 if TYPE_CHECKING:
@@ -25,8 +26,10 @@ def test_get_db_memory_creates_tables() -> None:
         assert group is not None
         idea = db.insert(Idea(title="Test", group=group))
         idea.tags.add(tag)
+        state = db.insert(IdeaCursorState(idea=idea, body_cursor_position=3))
         assert tag.pk > 0
         assert idea.pk > 0
+        assert state.pk > 0
     finally:
         db.close()
 

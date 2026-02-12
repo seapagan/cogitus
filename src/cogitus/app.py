@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         """Settings interface required by the app."""
 
         last_viewed_idea_pk: int
+        edit_body_cursor_mode: str
 
         def save(self) -> None:
             """Persist settings."""
@@ -69,6 +70,7 @@ class CogitusApp(App[None]):
                 self._service,
                 initial_select_pk=self._last_viewed_idea_pk,
                 on_selected_idea_changed=self._on_selected_idea_changed,
+                edit_body_cursor_mode=self._settings.edit_body_cursor_mode,
             )
         )
 

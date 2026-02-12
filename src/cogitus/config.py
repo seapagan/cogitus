@@ -10,6 +10,7 @@ class AppSettings(TOMLSettings):
 
     # 0 means "no last-selected idea yet".
     last_viewed_idea_pk: int = 0
+    edit_body_cursor_mode: str = "remember"
 
 
 def get_settings() -> AppSettings:

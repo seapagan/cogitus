@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING
 
 from cogitus.constants import DEFAULT_GROUP_NAME as SHARED_DEFAULT_GROUP_NAME
 from cogitus.repositories.group_repo import GroupRepository
+from cogitus.repositories.idea_cursor_state_repo import (
+    IdeaCursorStateRepository,
+)
 from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.repositories.tag_repo import TagRepository
 
@@ -35,6 +38,7 @@ class IdeaService:
         self._db = db
         self._group_repo = GroupRepository(db)
         self._tag_repo = TagRepository(db)
+        self._cursor_state_repo = IdeaCursorStateRepository(db)
         self._idea_repo = IdeaRepository(
             db,
             self._tag_repo,
@@ -101,6 +105,7 @@ class IdeaService:
         Args:
             pk: Primary key of the idea to delete.
         """
+        self._cursor_state_repo.delete_for_idea(pk)
         self._idea_repo.delete(pk)
 
     def get_idea(self, pk: int) -> Idea | None:
@@ -140,6 +145,14 @@ class IdeaService:
             List of all tags.
         """
         return self._tag_repo.list_all()
+
+    def get_idea_cursor_position(self, idea_pk: int) -> int | None:
+        """Return persisted body cursor position for an idea, if present."""
+        return self._cursor_state_repo.get_position(idea_pk)
+
+    def set_idea_cursor_position(self, idea_pk: int, position: int) -> None:
+        """Persist body cursor position for an idea."""
+        self._cursor_state_repo.set_position(idea_pk, position)
 
     def list_groups(self) -> list[Group]:
         """List all groups alphabetically."""

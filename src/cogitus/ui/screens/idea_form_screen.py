@@ -28,6 +28,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
     """Modal form for creating or editing an idea."""
 
     INLINE_TAGS_GROUP_MIN_WIDTH: ClassVar[int] = 90
+    EDIT_CURSOR_MODES: ClassVar[set[str]] = {"remember", "start", "end"}
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "cancel", "Cancel", show=False),
@@ -44,16 +45,22 @@ class IdeaFormScreen(ModalScreen[int | None]):
         self,
         service: IdeaService,
         idea: Idea | None = None,
+        *,
+        edit_body_cursor_mode: str = "remember",
     ) -> None:
         """Initialize the idea form.
 
         Args:
             service: The IdeaService instance.
             idea: Existing idea to edit, or None for new.
+            edit_body_cursor_mode: Cursor mode for edit form body.
         """
         super().__init__()
         self._service = service
         self._idea = idea
+        self._edit_body_cursor_mode = self._normalize_edit_cursor_mode(
+            edit_body_cursor_mode
+        )
 
     def compose(self) -> ComposeResult:
         """Compose the idea form."""
@@ -114,9 +121,16 @@ class IdeaFormScreen(ModalScreen[int | None]):
         """Initialize responsive layout and initial form focus."""
         self._update_tags_group_row_layout(self.size.width)
         if self._idea is None:
-            self.query_one("#title-input", Input).focus()
-        else:
-            self.query_one("#body-input", CogitusTextArea).focus()
+            title = self.query_one("#title-input", Input)
+            title.focus()
+            title.cursor_position = 0
+            return
+
+        body = self.query_one("#body-input", CogitusTextArea)
+        body.focus()
+        body.cursor_location = body.document.get_location_from_index(
+            self._initial_edit_body_cursor_index(body)
+        )
 
     def on_resize(self, event: Resize) -> None:
         """Stack tags/group controls on narrow viewports."""
@@ -126,6 +140,33 @@ class IdeaFormScreen(ModalScreen[int | None]):
         """Toggle tags/group row between horizontal and stacked layout."""
         row = self.query_one("#tags-group-row", Container)
         row.set_class(width < self.INLINE_TAGS_GROUP_MIN_WIDTH, "narrow")
+
+    @classmethod
+    def _normalize_edit_cursor_mode(cls, mode: str) -> str:
+        """Normalize edit cursor mode with a safe default."""
+        return mode if mode in cls.EDIT_CURSOR_MODES else "remember"
+
+    def _initial_edit_body_cursor_index(self, body: CogitusTextArea) -> int:
+        """Return initial cursor index for edit mode body."""
+        body_len = len(body.text)
+        if self._edit_body_cursor_mode == "start":
+            return 0
+        if self._edit_body_cursor_mode == "end":
+            return body_len
+        if self._idea is None:
+            return 0
+        remembered = self._service.get_idea_cursor_position(self._idea.pk)
+        if remembered is None:
+            return 0
+        return max(0, min(body_len, remembered))
+
+    def _persist_edit_cursor_position(self) -> None:
+        """Persist current edit body cursor position when editing an idea."""
+        if self._idea is None:
+            return
+        body = self.query_one("#body-input", CogitusTextArea)
+        index = body.document.get_index_from_location(body.cursor_location)
+        self._service.set_idea_cursor_position(self._idea.pk, index)
 
     def _get_existing_tags(self) -> str:
         """Get comma-separated tags from the idea."""
@@ -195,6 +236,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
                 group_pk=group_pk,
             )
             pk = result.pk if result else None
+            self._persist_edit_cursor_position()
         else:
             idea = self._service.create_idea(
                 title=title,
@@ -208,6 +250,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
 
     def action_cancel(self) -> None:
         """Cancel and dismiss."""
+        self._persist_edit_cursor_position()
         self.dismiss(None)
 
 

@@ -9,6 +9,7 @@ from sqliter import SqliterDB
 from cogitus.constants import DEFAULT_GROUP_NAME
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
+from cogitus.models.idea_cursor_state import IdeaCursorState
 from cogitus.models.tag import Tag
 
 DEFAULT_DB_PATH = "~/.config/cogitus/cogitus.db"
@@ -122,6 +123,7 @@ def get_db(
     if ideas_existed:
         _migrate_ideas_group_fk(db, default_group_pk)
     db.create_table(Idea)
+    db.create_table(IdeaCursorState)
     if not ideas_existed:
         _migrate_ideas_group_fk(db, default_group_pk)
     return db

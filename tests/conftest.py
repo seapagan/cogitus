@@ -8,6 +8,9 @@ import pytest
 
 from cogitus.db import get_db
 from cogitus.repositories.group_repo import GroupRepository
+from cogitus.repositories.idea_cursor_state_repo import (
+    IdeaCursorStateRepository,
+)
 from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.repositories.tag_repo import TagRepository
 from cogitus.services.idea_service import IdeaService
@@ -48,6 +51,12 @@ def idea_repo(
 ) -> IdeaRepository:
     """Provide an IdeaRepository backed by in-memory db."""
     return IdeaRepository(db, tag_repo, group_repo)
+
+
+@pytest.fixture
+def idea_cursor_state_repo(db: SqliterDB) -> IdeaCursorStateRepository:
+    """Provide IdeaCursorStateRepository backed by in-memory db."""
+    return IdeaCursorStateRepository(db)
 
 
 @pytest.fixture
