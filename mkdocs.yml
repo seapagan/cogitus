@@ -50,7 +50,6 @@ nav:
       - Clipboard: user-guide/clipboard.md
       - Settings: user-guide/settings.md
       - Troubleshooting: user-guide/troubleshooting.md
-      - Development Workflow: developer/development-workflow.md
   - Changelog: project/changelog.md
   - Contributing: project/contributing.md
   - TODO List: project/todo.md

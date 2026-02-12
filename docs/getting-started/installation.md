@@ -7,6 +7,9 @@
 
 ## Recommended Install (uv tool)
 
+[uv](https://docs.astral.sh/uv/) is a modern and very fast tool to manage python
+projects and dependencies.
+
 ```bash
 uv tool install cogitus
 ```
