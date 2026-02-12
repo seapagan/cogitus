@@ -7,6 +7,7 @@ from unittest.mock import PropertyMock
 
 import pytest
 from textual.app import App, ComposeResult
+from textual.containers import Container
 from textual.widgets import Button, Input, Select, TextArea, Tree
 
 from cogitus.app import CogitusApp
@@ -74,6 +75,9 @@ async def test_idea_form_screen_create_and_validation(
         assert screen._get_existing_tags() == ""
         assert screen.query_one("#idea-form-scroll") is not None
         assert screen.query_one("#form-buttons") is not None
+        tags_group_row = screen.query_one("#tags-group-row", Container)
+        assert tags_group_row.query_one("#tags-input", Input) is not None
+        assert tags_group_row.query_one("#group-select", Select) is not None
 
         dismiss = mocker.patch.object(screen, "dismiss")
         notify = mocker.patch.object(screen, "notify")
@@ -166,6 +170,32 @@ async def test_idea_form_screen_invalid_group_selection(
             severity="error",
         )
         dismiss.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_tags_group_row_responsive_layout(
+    service: IdeaService,
+) -> None:
+    """Tags/group row should stack only on narrow widths."""
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        row = screen.query_one("#tags-group-row", Container)
+        screen._update_tags_group_row_layout(
+            screen.INLINE_TAGS_GROUP_MIN_WIDTH - 1
+        )
+        assert row.has_class("narrow")
+
+        screen._update_tags_group_row_layout(
+            screen.INLINE_TAGS_GROUP_MIN_WIDTH + 1
+        )
+        assert not row.has_class("narrow")
+
+        # Exact threshold should remain inline.
+        screen._update_tags_group_row_layout(screen.INLINE_TAGS_GROUP_MIN_WIDTH)
+        assert not row.has_class("narrow")
         await pilot.pause()
 
 
