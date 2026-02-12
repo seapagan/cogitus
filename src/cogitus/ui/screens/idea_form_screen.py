@@ -14,6 +14,7 @@ from textual.containers import (
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Select, Static
 
+from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
 from cogitus.ui.widgets.text_area import CogitusTextArea
 
 if TYPE_CHECKING:
@@ -28,7 +29,6 @@ class IdeaFormScreen(ModalScreen[int | None]):
     """Modal form for creating or editing an idea."""
 
     INLINE_TAGS_GROUP_MIN_WIDTH: ClassVar[int] = 90
-    EDIT_CURSOR_MODES: ClassVar[set[str]] = {"remember", "start", "end"}
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "cancel", "Cancel", show=False),
@@ -46,7 +46,9 @@ class IdeaFormScreen(ModalScreen[int | None]):
         service: IdeaService,
         idea: Idea | None = None,
         *,
-        edit_body_cursor_mode: str = "remember",
+        edit_body_cursor_mode: EditBodyCursorMode = (
+            DEFAULT_EDIT_BODY_CURSOR_MODE
+        ),
     ) -> None:
         """Initialize the idea form.
 
@@ -58,9 +60,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         super().__init__()
         self._service = service
         self._idea = idea
-        self._edit_body_cursor_mode = self._normalize_edit_cursor_mode(
-            edit_body_cursor_mode
-        )
+        self._edit_body_cursor_mode = edit_body_cursor_mode
 
     def compose(self) -> ComposeResult:
         """Compose the idea form."""
@@ -142,17 +142,12 @@ class IdeaFormScreen(ModalScreen[int | None]):
         row = self.query_one("#tags-group-row", Container)
         row.set_class(width < self.INLINE_TAGS_GROUP_MIN_WIDTH, "narrow")
 
-    @classmethod
-    def _normalize_edit_cursor_mode(cls, mode: str) -> str:
-        """Normalize edit cursor mode with a safe default."""
-        return mode if mode in cls.EDIT_CURSOR_MODES else "remember"
-
     def _initial_edit_body_cursor_index(self, body: CogitusTextArea) -> int:
         """Return initial cursor index for edit mode body."""
         body_len = len(body.text)
-        if self._edit_body_cursor_mode == "start":
+        if self._edit_body_cursor_mode == EditBodyCursorMode.START:
             return 0
-        if self._edit_body_cursor_mode == "end":
+        if self._edit_body_cursor_mode == EditBodyCursorMode.END:
             return body_len
         if self._idea is None:
             return 0

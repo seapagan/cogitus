@@ -8,6 +8,7 @@ from textual.binding import Binding, BindingType
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, Markdown, Tree
 
+from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
 from cogitus.ui.clipboard import copy_to_clipboard
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
@@ -77,7 +78,9 @@ class MainScreen(Screen[None]):
         *,
         initial_select_pk: int | None = None,
         on_selected_idea_changed: Callable[[int | None], None] | None = None,
-        edit_body_cursor_mode: str = "remember",
+        edit_body_cursor_mode: EditBodyCursorMode = (
+            DEFAULT_EDIT_BODY_CURSOR_MODE
+        ),
     ) -> None:
         """Initialize with the idea service.
 

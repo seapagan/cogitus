@@ -11,6 +11,7 @@ from textual.containers import Container
 from textual.widgets import Button, Input, Select, TextArea, Tree
 
 from cogitus.app import CogitusApp
+from cogitus.config import EditBodyCursorMode
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
     GroupDeleteReassignScreen,
@@ -242,7 +243,7 @@ async def test_idea_form_edit_cursor_mode_start(
     screen = IdeaFormScreen(
         service,
         idea=idea,
-        edit_body_cursor_mode="start",
+        edit_body_cursor_mode=EditBodyCursorMode.START,
     )
     app = _SingleScreenApp(screen)
 
@@ -264,7 +265,7 @@ async def test_idea_form_edit_cursor_mode_end(
     screen = IdeaFormScreen(
         service,
         idea=idea,
-        edit_body_cursor_mode="end",
+        edit_body_cursor_mode=EditBodyCursorMode.END,
     )
     app = _SingleScreenApp(screen)
 
@@ -292,7 +293,7 @@ async def test_idea_form_edit_cursor_mode_remember(
     screen = IdeaFormScreen(
         service,
         idea=idea,
-        edit_body_cursor_mode="remember",
+        edit_body_cursor_mode=EditBodyCursorMode.REMEMBER,
     )
     app = _SingleScreenApp(screen)
 
@@ -321,7 +322,7 @@ async def test_idea_form_edit_cursor_mode_remember_clamps_out_of_range(
     screen = IdeaFormScreen(
         service,
         idea=idea,
-        edit_body_cursor_mode="remember",
+        edit_body_cursor_mode=EditBodyCursorMode.REMEMBER,
     )
     app = _SingleScreenApp(screen)
 
