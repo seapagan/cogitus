@@ -20,6 +20,7 @@ app = typer.Typer(
     name="cogitus",
     help="Cogitus — a terminal workspace for capturing and evolving ideas.",
     no_args_is_help=False,
+    add_completion=False,
 )
 
 
