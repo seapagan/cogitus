@@ -14,6 +14,7 @@ from textual.containers import (
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Select, Static
 
+from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
 from cogitus.ui.widgets.text_area import CogitusTextArea
 
 if TYPE_CHECKING:
@@ -44,16 +45,22 @@ class IdeaFormScreen(ModalScreen[int | None]):
         self,
         service: IdeaService,
         idea: Idea | None = None,
+        *,
+        edit_body_cursor_mode: EditBodyCursorMode = (
+            DEFAULT_EDIT_BODY_CURSOR_MODE
+        ),
     ) -> None:
         """Initialize the idea form.
 
         Args:
             service: The IdeaService instance.
             idea: Existing idea to edit, or None for new.
+            edit_body_cursor_mode: Cursor mode for edit form body.
         """
         super().__init__()
         self._service = service
         self._idea = idea
+        self._edit_body_cursor_mode = edit_body_cursor_mode
 
     def compose(self) -> ComposeResult:
         """Compose the idea form."""
@@ -111,8 +118,20 @@ class IdeaFormScreen(ModalScreen[int | None]):
                 )
 
     def on_mount(self) -> None:
-        """Initialize responsive row layout after mounting."""
+        """Initialize responsive layout and initial form focus."""
         self._update_tags_group_row_layout(self.size.width)
+        if self._idea is None:
+            title = self.query_one("#title-input", Input)
+            title.focus()
+            title.cursor_position = 0
+            return
+
+        body = self.query_one("#body-input", CogitusTextArea)
+        body.focus()
+        body.cursor_location = self._cursor_location_from_index(
+            body.text,
+            self._initial_edit_body_cursor_index(body),
+        )
 
     def on_resize(self, event: Resize) -> None:
         """Stack tags/group controls on narrow viewports."""
@@ -122,6 +141,56 @@ class IdeaFormScreen(ModalScreen[int | None]):
         """Toggle tags/group row between horizontal and stacked layout."""
         row = self.query_one("#tags-group-row", Container)
         row.set_class(width < self.INLINE_TAGS_GROUP_MIN_WIDTH, "narrow")
+
+    def _initial_edit_body_cursor_index(self, body: CogitusTextArea) -> int:
+        """Return initial cursor index for edit mode body."""
+        body_len = len(body.text)
+        if self._edit_body_cursor_mode == EditBodyCursorMode.START:
+            return 0
+        if self._edit_body_cursor_mode == EditBodyCursorMode.END:
+            return body_len
+        if self._idea is None:
+            return 0
+        remembered = self._service.get_idea_cursor_position(self._idea.pk)
+        if remembered is None:
+            return 0
+        return max(0, min(body_len, remembered))
+
+    def _persist_edit_cursor_position(self) -> None:
+        """Persist current edit body cursor position when editing an idea."""
+        if self._idea is None:
+            return
+        body = self.query_one("#body-input", CogitusTextArea)
+        index = self._cursor_index_from_location(
+            body.text, body.cursor_location
+        )
+        self._service.set_idea_cursor_position(self._idea.pk, index)
+
+    @staticmethod
+    def _cursor_location_from_index(text: str, index: int) -> tuple[int, int]:
+        """Convert a linear cursor index to a (line, column) location."""
+        clamped = max(0, min(len(text), index))
+        line_no = 0
+        column = 0
+        for char in text[:clamped]:
+            if char == "\n":
+                line_no += 1
+                column = 0
+            else:
+                column += 1
+        return (line_no, column)
+
+    @staticmethod
+    def _cursor_index_from_location(
+        text: str,
+        location: tuple[int, int],
+    ) -> int:
+        """Convert a (line, column) cursor location to a linear index."""
+        lines = text.split("\n")
+        line_no = max(0, min(location[0], len(lines) - 1))
+        column = max(0, min(location[1], len(lines[line_no])))
+        line_prefix_len = sum(len(line) + 1 for line in lines[:line_no])
+        return min(len(text), line_prefix_len + column)
 
     def _get_existing_tags(self) -> str:
         """Get comma-separated tags from the idea."""
@@ -191,6 +260,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
                 group_pk=group_pk,
             )
             pk = result.pk if result else None
+            self._persist_edit_cursor_position()
         else:
             idea = self._service.create_idea(
                 title=title,
@@ -204,6 +274,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
 
     def action_cancel(self) -> None:
         """Cancel and dismiss."""
+        self._persist_edit_cursor_position()
         self.dismiss(None)
 
 

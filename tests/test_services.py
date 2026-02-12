@@ -58,8 +58,10 @@ class TestIdeaService:
     def test_delete_idea(self, service: IdeaService) -> None:
         """Idea is removed by delete."""
         idea = service.create_idea("To delete")
+        service.set_idea_cursor_position(idea.pk, 5)
         service.delete_idea(idea.pk)
         assert service.get_idea(idea.pk) is None
+        assert service.get_idea_cursor_position(idea.pk) is None
 
     def test_get_idea(self, service: IdeaService) -> None:
         """Idea is retrieved by primary key."""
@@ -88,6 +90,17 @@ class TestIdeaService:
             "alpha",
             "zebra",
         ]
+
+    def test_idea_cursor_position_roundtrip(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Cursor position should be persisted and retrieved by idea PK."""
+        idea = service.create_idea("Cursor")
+        assert service.get_idea_cursor_position(idea.pk) is None
+
+        service.set_idea_cursor_position(idea.pk, 8)
+        assert service.get_idea_cursor_position(idea.pk) == 8
 
     def test_create_and_list_groups(self, service: IdeaService) -> None:
         """Groups can be created and listed."""

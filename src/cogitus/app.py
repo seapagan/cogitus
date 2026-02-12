@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from textual.app import App
 
-from cogitus.config import get_settings
+from cogitus.config import get_settings, normalize_edit_body_cursor_mode
 from cogitus.db import get_db
 from cogitus.services.idea_service import IdeaService
 from cogitus.ui.screens.main_screen import MainScreen
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         """Settings interface required by the app."""
 
         last_viewed_idea_pk: int
+        edit_body_cursor_mode: str
 
         def save(self) -> None:
             """Persist settings."""
@@ -51,6 +52,9 @@ class CogitusApp(App[None]):
         """
         super().__init__(css_path=CSS_PATH)
         self._settings = settings if settings is not None else get_settings()
+        self._edit_body_cursor_mode = normalize_edit_body_cursor_mode(
+            self._settings.edit_body_cursor_mode
+        )
         last_viewed = self._settings.last_viewed_idea_pk
         self._last_viewed_idea_pk = last_viewed if last_viewed > 0 else None
 
@@ -69,6 +73,7 @@ class CogitusApp(App[None]):
                 self._service,
                 initial_select_pk=self._last_viewed_idea_pk,
                 on_selected_idea_changed=self._on_selected_idea_changed,
+                edit_body_cursor_mode=self._edit_body_cursor_mode,
             )
         )
 

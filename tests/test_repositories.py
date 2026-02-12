@@ -11,6 +11,9 @@ if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
     from cogitus.repositories.group_repo import GroupRepository
+    from cogitus.repositories.idea_cursor_state_repo import (
+        IdeaCursorStateRepository,
+    )
     from cogitus.repositories.idea_repo import IdeaRepository
     from cogitus.repositories.tag_repo import TagRepository
 
@@ -238,7 +241,6 @@ class TestIdeaRepository:
         """Bulk move should no-op when source and target groups are same."""
         source = group_repo.create("source")
         idea = idea_repo.create("Stay put", group_pk=source.pk)
-
         moved_count = idea_repo.bulk_move_group(source.pk, source.pk)
 
         fetched = idea_repo.get(idea.pk)
@@ -274,6 +276,48 @@ class TestIdeaRepository:
 
         assert len(ideas) == 1
         assert ideas[0].pk == source_idea.pk
+
+
+class TestIdeaCursorStateRepository:
+    """Tests for IdeaCursorStateRepository."""
+
+    def test_get_position_returns_none_when_missing(
+        self,
+        idea_cursor_state_repo: IdeaCursorStateRepository,
+    ) -> None:
+        """Missing cursor state should return None."""
+        assert idea_cursor_state_repo.get_position(12345) is None
+
+    def test_set_position_creates_and_updates(
+        self,
+        idea_cursor_state_repo: IdeaCursorStateRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """set_position should create and then update existing state."""
+        idea = idea_repo.create("Cursor")
+        idea_cursor_state_repo.set_position(idea.pk, 3)
+        assert idea_cursor_state_repo.get_position(idea.pk) == 3
+
+        idea_cursor_state_repo.set_position(idea.pk, 7)
+        assert idea_cursor_state_repo.get_position(idea.pk) == 7
+
+    def test_set_position_clamps_negative_values(
+        self,
+        idea_cursor_state_repo: IdeaCursorStateRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Negative cursor positions should be clamped to zero."""
+        idea = idea_repo.create("Cursor")
+        idea_cursor_state_repo.set_position(idea.pk, -10)
+        assert idea_cursor_state_repo.get_position(idea.pk) == 0
+
+    def test_set_position_missing_idea_noop(
+        self,
+        idea_cursor_state_repo: IdeaCursorStateRepository,
+    ) -> None:
+        """Missing idea should no-op when setting cursor position."""
+        idea_cursor_state_repo.set_position(99999, 4)
+        assert idea_cursor_state_repo.get_position(99999) is None
 
 
 class TestGroupRepository:

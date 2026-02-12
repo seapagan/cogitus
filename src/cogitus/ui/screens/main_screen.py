@@ -8,6 +8,7 @@ from textual.binding import Binding, BindingType
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, Markdown, Tree
 
+from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
 from cogitus.ui.clipboard import copy_to_clipboard
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
@@ -77,6 +78,9 @@ class MainScreen(Screen[None]):
         *,
         initial_select_pk: int | None = None,
         on_selected_idea_changed: Callable[[int | None], None] | None = None,
+        edit_body_cursor_mode: EditBodyCursorMode = (
+            DEFAULT_EDIT_BODY_CURSOR_MODE
+        ),
     ) -> None:
         """Initialize with the idea service.
 
@@ -84,11 +88,13 @@ class MainScreen(Screen[None]):
             service: The IdeaService instance.
             initial_select_pk: Idea primary key to select on first load.
             on_selected_idea_changed: Callback for selected idea changes.
+            edit_body_cursor_mode: Edit form body cursor mode.
         """
         super().__init__()
         self._service = service
         self._initial_select_pk = initial_select_pk
         self._on_selected_idea_changed = on_selected_idea_changed
+        self._edit_body_cursor_mode = edit_body_cursor_mode
         self._selected_idea_pk: int | None = None
         self._active_pane: str = "list"
         self._focus_before_search: str = "list"
@@ -161,7 +167,10 @@ class MainScreen(Screen[None]):
     def action_new_idea(self) -> None:
         """Open the new idea form."""
         self.app.push_screen(
-            IdeaFormScreen(self._service),
+            IdeaFormScreen(
+                self._service,
+                edit_body_cursor_mode=self._edit_body_cursor_mode,
+            ),
             callback=self._on_form_dismiss,
         )
 
@@ -184,7 +193,11 @@ class MainScreen(Screen[None]):
             self.notify("Idea not found", severity="error")
             return
         self.app.push_screen(
-            IdeaFormScreen(self._service, idea=fresh),
+            IdeaFormScreen(
+                self._service,
+                idea=fresh,
+                edit_body_cursor_mode=self._edit_body_cursor_mode,
+            ),
             callback=self._on_form_dismiss,
         )
 

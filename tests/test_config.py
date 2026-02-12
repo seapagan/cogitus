@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from cogitus.config import AppSettings, get_settings
+from cogitus.config import (
+    AppSettings,
+    EditBodyCursorMode,
+    get_settings,
+    normalize_edit_body_cursor_mode,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -48,3 +53,31 @@ def test_settings_persist_last_viewed_pk(
     loaded = get_settings()
 
     assert loaded.last_viewed_idea_pk == 42
+
+
+def test_settings_persist_edit_body_cursor_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Settings should persist and reload edit cursor mode."""
+    monkeypatch.setattr(
+        "simple_toml_settings.settings.xdg_config_home",
+        lambda: tmp_path,
+    )
+    AppSettings._instances.clear()
+
+    settings = get_settings()
+    settings.edit_body_cursor_mode = EditBodyCursorMode.END.value
+    settings.save()
+
+    AppSettings._instances.clear()
+    loaded = get_settings()
+
+    assert loaded.edit_body_cursor_mode == EditBodyCursorMode.END.value
+
+
+def test_normalize_edit_body_cursor_mode_invalid_defaults_to_remember() -> None:
+    """Invalid edit cursor mode should fallback to remember."""
+    assert normalize_edit_body_cursor_mode("remmeber") == (
+        EditBodyCursorMode.REMEMBER
+    )
