@@ -892,7 +892,7 @@ async def test_main_screen_copy_idea_body(
         copy.return_value = True
         screen.action_copy_idea_body()
         copy.assert_called_once_with("hello world", app)
-        notify.assert_called_with("Copied idea body to clipboard")
+        notify.assert_called_with("No in-app selection; copied full body")
 
         # Selection copy takes precedence
         copy.reset_mock()

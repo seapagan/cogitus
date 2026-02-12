@@ -268,7 +268,7 @@ class MainScreen(Screen[None]):
             if selected_text is not None:
                 self.notify("Copied selection to clipboard")
             else:
-                self.notify("Copied idea body to clipboard")
+                self.notify("No in-app selection; copied full body")
         else:
             self.notify("Clipboard unavailable", severity="warning")
 
