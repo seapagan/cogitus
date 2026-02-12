@@ -192,6 +192,10 @@ async def test_idea_form_tags_group_row_responsive_layout(
             screen.INLINE_TAGS_GROUP_MIN_WIDTH + 1
         )
         assert not row.has_class("narrow")
+
+        # Exact threshold should remain inline.
+        screen._update_tags_group_row_layout(screen.INLINE_TAGS_GROUP_MIN_WIDTH)
+        assert not row.has_class("narrow")
         await pilot.pause()
 
 
