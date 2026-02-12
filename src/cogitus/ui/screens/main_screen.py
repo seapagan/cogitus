@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from textual.binding import Binding, BindingType
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Input, Tree
+from textual.widgets import Footer, Header, Input, Markdown, Tree
 
 from cogitus.ui.clipboard import copy_to_clipboard
 from cogitus.ui.screens.idea_form_screen import (
@@ -261,10 +261,34 @@ class MainScreen(Screen[None]):
         if not idea.body:
             self.notify("Idea has no body to copy", severity="warning")
             return
-        if copy_to_clipboard(idea.body, self.app):
-            self.notify("Copied idea body to clipboard")
+
+        selected_text = self._get_selected_rendered_body_text()
+        text_to_copy = selected_text if selected_text is not None else idea.body
+        if copy_to_clipboard(text_to_copy, self.app):
+            if selected_text is not None:
+                self.notify("Copied selection to clipboard")
+            else:
+                self.notify("Copied idea body to clipboard")
         else:
             self.notify("Clipboard unavailable", severity="warning")
+
+    def _get_selected_rendered_body_text(self) -> str | None:
+        """Return selected text in rendered body, if any."""
+        selected_text = self.get_selected_text()
+        if selected_text:
+            return selected_text
+
+        view = self.query_one("#content-panel", IdeaView)
+        body = view.query_one("#idea-view-body", Markdown)
+        selection = body.text_selection
+        if selection is None:
+            return None
+
+        selected = body.get_selection(selection)
+        if selected is None:
+            return None
+        widget_text, _ = selected
+        return widget_text or None
 
     def _on_delete_confirm(
         self,

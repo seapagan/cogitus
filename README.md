@@ -164,6 +164,11 @@ sudo pacman -S xclip          # Arch
 sudo dnf install xclip        # Fedora
 ```
 
+**`y` copy is context-sensitive:** In the editor, `y` copies the current
+selection. In rendered Markdown view, `y` copies selected text when detected;
+otherwise it copies the full idea body. In some terminals/cases, Textual may
+not detect rendered-view selection and will fall back to full-body copy.
+
 ---
 
 ## Development
