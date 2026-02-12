@@ -128,8 +128,9 @@ class IdeaFormScreen(ModalScreen[int | None]):
 
         body = self.query_one("#body-input", CogitusTextArea)
         body.focus()
-        body.cursor_location = body.document.get_location_from_index(
-            self._initial_edit_body_cursor_index(body)
+        body.cursor_location = self._cursor_location_from_index(
+            body.text,
+            self._initial_edit_body_cursor_index(body),
         )
 
     def on_resize(self, event: Resize) -> None:
@@ -165,8 +166,40 @@ class IdeaFormScreen(ModalScreen[int | None]):
         if self._idea is None:
             return
         body = self.query_one("#body-input", CogitusTextArea)
-        index = body.document.get_index_from_location(body.cursor_location)
+        index = self._cursor_index_from_location(
+            body.text, body.cursor_location
+        )
         self._service.set_idea_cursor_position(self._idea.pk, index)
+
+    @staticmethod
+    def _cursor_location_from_index(text: str, index: int) -> tuple[int, int]:
+        """Convert a linear cursor index to a (line, column) location."""
+        clamped = max(0, min(len(text), index))
+        lines = text.split("\n")
+        remaining = clamped
+        for line_no, line in enumerate(lines):
+            line_len = len(line)
+            if remaining <= line_len:
+                return (line_no, remaining)
+            if line_no == len(lines) - 1:
+                return (line_no, line_len)
+            remaining -= line_len + 1
+        return (0, 0)
+
+    @staticmethod
+    def _cursor_index_from_location(
+        text: str,
+        location: tuple[int, int],
+    ) -> int:
+        """Convert a (line, column) cursor location to a linear index."""
+        lines = text.split("\n")
+        if not lines:
+            return 0
+
+        line_no = max(0, min(location[0], len(lines) - 1))
+        column = max(0, min(location[1], len(lines[line_no])))
+        line_prefix_len = sum(len(line) + 1 for line in lines[:line_no])
+        return min(len(text), line_prefix_len + column)
 
     def _get_existing_tags(self) -> str:
         """Get comma-separated tags from the idea."""

@@ -248,7 +248,10 @@ async def test_idea_form_edit_cursor_mode_start(
 
     async with app.run_test() as pilot:
         body = screen.query_one("#body-input", CogitusTextArea)
-        assert body.document.get_index_from_location(body.cursor_location) == 0
+        assert (
+            screen._cursor_index_from_location(body.text, body.cursor_location)
+            == 0
+        )
         await pilot.pause()
 
 
@@ -267,8 +270,9 @@ async def test_idea_form_edit_cursor_mode_end(
 
     async with app.run_test() as pilot:
         body = screen.query_one("#body-input", CogitusTextArea)
-        assert body.document.get_index_from_location(
-            body.cursor_location
+        assert screen._cursor_index_from_location(
+            body.text,
+            body.cursor_location,
         ) == len(body.text)
         await pilot.pause()
 
@@ -294,7 +298,10 @@ async def test_idea_form_edit_cursor_mode_remember(
 
     async with app.run_test() as pilot:
         body = screen.query_one("#body-input", CogitusTextArea)
-        assert body.document.get_index_from_location(body.cursor_location) == 4
+        assert (
+            screen._cursor_index_from_location(body.text, body.cursor_location)
+            == 4
+        )
         get_cursor.assert_called_once_with(idea.pk)
         await pilot.pause()
 
@@ -320,8 +327,9 @@ async def test_idea_form_edit_cursor_mode_remember_clamps_out_of_range(
 
     async with app.run_test() as pilot:
         body = screen.query_one("#body-input", CogitusTextArea)
-        assert body.document.get_index_from_location(
-            body.cursor_location
+        assert screen._cursor_index_from_location(
+            body.text,
+            body.cursor_location,
         ) == len(body.text)
         await pilot.pause()
 
@@ -339,7 +347,7 @@ async def test_idea_form_persists_cursor_position_on_edit_save(
 
     async with app.run_test() as pilot:
         body = screen.query_one("#body-input", CogitusTextArea)
-        body.cursor_location = body.document.get_location_from_index(2)
+        body.cursor_location = screen._cursor_location_from_index(body.text, 2)
         screen.query_one("#title-input", Input).value = "Updated"
 
         screen.action_save()
@@ -361,7 +369,7 @@ async def test_idea_form_persists_cursor_position_on_edit_cancel(
 
     async with app.run_test() as pilot:
         body = screen.query_one("#body-input", CogitusTextArea)
-        body.cursor_location = body.document.get_location_from_index(5)
+        body.cursor_location = screen._cursor_location_from_index(body.text, 5)
 
         screen.action_cancel()
 
