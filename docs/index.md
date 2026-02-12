@@ -1,17 +1,25 @@
-# Welcome to MkDocs
+# Cogitus Documentation
 
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
+Cogitus is a fast terminal workspace for capturing and evolving programming
+ideas.
 
-## Commands
+!!! note
 
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
+    Cogitus is currently in MVP/alpha stage. Core workflows are available and UI
+    details may continue to evolve.
 
-## Project layout
+## What Cogitus Focuses On
 
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
+- Fast, local-first idea capture
+- Keyboard-driven workflows
+- Structured idea organization with groups and tags
+- Searchable idea history
+
+## Quick Links
+
+- [Installation](getting-started/installation.md)
+- [Quickstart](getting-started/quickstart.md)
+- [Guide Overview](user-guide/overview.md)
+- [Project TODO](project/todo.md)
+- [Project Changelog](project/changelog.md)
+- [Contributing](project/contributing.md)

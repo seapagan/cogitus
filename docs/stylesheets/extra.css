@@ -1,0 +1,30 @@
+/* Zebra striping for plain Markdown tables rendered by Material */
+.md-typeset table:not([class]) tbody tr:nth-child(odd) {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+[data-md-color-scheme="slate"]
+  .md-typeset
+  table:not([class])
+  tbody
+  tr:nth-child(odd) {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Keep Markdown tables visually aligned */
+.md-typeset .md-typeset__table {
+  display: block;
+  width: 100%;
+}
+
+.md-typeset table:not([class]) {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.md-typeset table:not([class]) th:first-child,
+.md-typeset table:not([class]) td:first-child {
+  width: 22%;
+  white-space: nowrap;
+}
