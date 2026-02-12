@@ -36,7 +36,10 @@ class IdeaCursorStateRepository:
 
         clamped_position = max(0, position)
         existing = (
-            self._db.select(IdeaCursorState).filter(idea_id=idea_pk).fetch_one()
+            self._db.select(IdeaCursorState)
+            .filter(idea_id=idea_pk)
+            .order("updated_at", reverse=True)
+            .fetch_one()
         )
         if existing is None:
             self._db.insert(
