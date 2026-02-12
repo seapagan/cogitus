@@ -383,6 +383,26 @@ def test_idea_form_default_group_fallback(
     assert screen._get_default_group_pk() == 99
 
 
+def test_idea_form_initial_edit_cursor_index_for_new_mode(
+    service: IdeaService,
+) -> None:
+    """New mode should return cursor index zero for edit helper."""
+    screen = IdeaFormScreen(service)
+    body = CogitusTextArea("abc")
+    assert screen._initial_edit_body_cursor_index(body) == 0
+
+
+def test_idea_form_persist_cursor_noop_for_new_mode(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Persist helper should no-op when no existing idea is being edited."""
+    screen = IdeaFormScreen(service)
+    set_cursor = mocker.patch.object(service, "set_idea_cursor_position")
+    screen._persist_edit_cursor_position()
+    set_cursor.assert_not_called()
+
+
 def test_idea_form_default_group_created_when_missing(
     service: IdeaService,
     mocker: MockerFixture,

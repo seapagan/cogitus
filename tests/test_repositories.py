@@ -311,6 +311,14 @@ class TestIdeaCursorStateRepository:
         idea_cursor_state_repo.set_position(idea.pk, -10)
         assert idea_cursor_state_repo.get_position(idea.pk) == 0
 
+    def test_set_position_missing_idea_noop(
+        self,
+        idea_cursor_state_repo: IdeaCursorStateRepository,
+    ) -> None:
+        """Missing idea should no-op when setting cursor position."""
+        idea_cursor_state_repo.set_position(99999, 4)
+        assert idea_cursor_state_repo.get_position(99999) is None
+
 
 class TestGroupRepository:
     """Tests for GroupRepository."""
