@@ -939,6 +939,58 @@ async def test_main_screen_selection_helper_falls_back_to_screen_selection(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_selection_helper_returns_none_for_missing_extract(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Helper should return None when widget extraction returns None."""
+    service.create_idea("Test", body="hello world")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        mocker.patch.object(screen, "get_selected_text", return_value="")
+        body = screen.query_one("#idea-view-body")
+        mocker.patch.object(
+            type(body),
+            "text_selection",
+            new_callable=PropertyMock,
+            return_value=object(),
+        )
+        mocker.patch.object(body, "get_selection", return_value=None)
+
+        assert screen._get_selected_rendered_body_text() is None
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_selection_helper_returns_widget_selection_text(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Helper should return widget-level selected text when available."""
+    service.create_idea("Test", body="hello world")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        mocker.patch.object(screen, "get_selected_text", return_value="")
+        body = screen.query_one("#idea-view-body")
+        mocker.patch.object(
+            type(body),
+            "text_selection",
+            new_callable=PropertyMock,
+            return_value=object(),
+        )
+        mocker.patch.object(
+            body, "get_selection", return_value=("picked", "\n")
+        )
+
+        assert screen._get_selected_rendered_body_text() == "picked"
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_cogitus_text_area_y_copies_selection(
     mocker: MockerFixture,
 ) -> None:
