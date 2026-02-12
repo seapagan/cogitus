@@ -20,7 +20,7 @@ or use `pipx`
 pipx install cogitus
 ```
 
-Finally if you just prefer to use `pip`:
+Finally, if you just prefer to use `pip`:
 
 ```bash
 pip install cogitus

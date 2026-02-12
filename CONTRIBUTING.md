@@ -35,7 +35,7 @@ If you already have a Python version installed, uv will use this.
 Before you start contributing, please make sure you have read and understood our
 [Code of
 Conduct](https://github.com/seapagan/cogitus/blob/main/CODE_OF_CONDUCT.md) and
-[License](https://github.com/seapagan/cogitus/blob/main/LICENSE).
+[License](https://github.com/seapagan/cogitus/blob/main/LICENSE.txt).
 
 To get started, follow these steps:
 
