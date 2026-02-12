@@ -27,3 +27,4 @@ htmlcov/
 
 # local tool config
 .changelog_generator.toml
+site

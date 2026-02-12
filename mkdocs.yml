@@ -1,1 +1,57 @@
-site_name: My Docs
+site_name: Cogitus Documentation
+site_description: Documentation for Cogitus, a terminal idea workspace
+site_url: https://seapagan.github.io/
+repo_url: https://github.com/seapagan/cogitus
+repo_name: seapagan/cogitus
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - mdx_truly_sane_lists
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      linenums: false
+      auto_title: false
+  - pymdownx.snippets:
+      base_path:
+        - docs
+        - .
+      check_paths: true
+  - attr_list
+
+nav:
+  - Home:
+      - Introduction: index.md
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+  - Guide:
+      - Overview: user-guide/overview.md
+      - Keybindings: user-guide/keybindings.md
+      - Ideas, Groups, and Tags: user-guide/ideas-groups-tags.md
+      - Search: user-guide/search.md
+      - Clipboard: user-guide/clipboard.md
+      - Settings: user-guide/settings.md
+      - Troubleshooting: user-guide/troubleshooting.md
+      - Development Workflow: developer/development-workflow.md
+  - Changelog: project/changelog.md
+  - Contributing: project/contributing.md
+  - TODO List: project/todo.md
+  - License: project/license.md
