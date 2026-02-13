@@ -175,3 +175,6 @@ markers = []
 [tool.coverage.run]
 source = ["src"]
 omit = ["*/tests/*"]
+
+[tool.uv.sources]
+sqliter-py = { git = "https://github.com/seapagan/sqliter-py" }

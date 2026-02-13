@@ -276,7 +276,7 @@ dev = [
 requires-dist = [
     { name = "pyperclip", specifier = ">=1.11.0" },
     { name = "simple-toml-settings", specifier = ">=0.10.0" },
-    { name = "sqliter-py", specifier = ">=0.18.0" },
+    { name = "sqliter-py", git = "https://github.com/seapagan/sqliter-py" },
     { name = "textual", specifier = ">=7.5.0" },
     { name = "typer", specifier = ">=0.21.1" },
 ]
@@ -1659,13 +1659,9 @@ wheels = [
 [[package]]
 name = "sqliter-py"
 version = "0.18.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/seapagan/sqliter-py#8a2a85752061aeb81589cc9fd1ceeb5ae311a643" }
 dependencies = [
     { name = "pydantic" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4e/d5/366b1f3a5244e31350e142ef10ca4c6f5b9d7265c9ccc93ffeb76a354d6f/sqliter_py-0.18.0.tar.gz", hash = "sha256:4bfaafad30d43d263a620453da0bbae1d6aaee2663296702d063b4f6b869a62a", size = 79469, upload-time = "2026-02-02T14:30:48.438Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/6f/f9/1bd1164a7d9dcb13052c371acd07c213ab87da4929a868de2b729d70ba31/sqliter_py-0.18.0-py3-none-any.whl", hash = "sha256:50e017eb54ade9eba2dd1fbfd5131de99700244b05f64e7444a39b1367fbe1f5", size = 101016, upload-time = "2026-02-02T14:30:49.586Z" },
 ]
 
 [[package]]

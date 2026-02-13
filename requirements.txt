@@ -39,7 +39,7 @@ shellingham==1.5.4
     # via typer
 simple-toml-settings==0.10.0
     # via cogitus
-sqliter-py==0.18.0
+sqliter-py @ git+https://github.com/seapagan/sqliter-py@8a2a85752061aeb81589cc9fd1ceeb5ae311a643
     # via cogitus
 textual==7.5.0
     # via cogitus

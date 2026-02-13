@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from cogitus.constants import DEFAULT_GROUP_NAME
-from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
 
 if TYPE_CHECKING:
     from sqliter import SqliterDB
 
+    from cogitus.models.group import Group
     from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.tag_repo import TagRepository
 
@@ -78,16 +78,13 @@ class IdeaRepository:
 
     def get_with_relations(self, pk: int) -> Idea | None:
         """Fetch one idea with group/tags loaded for formatter paths."""
-        idea = (
+        return (
             self._db.select(Idea)
+            .select_related("group")
             .prefetch_related("tags")
             .filter(pk=pk)
             .fetch_one()
         )
-        if idea is None:
-            return None
-        self._attach_groups_to_ideas([idea])
-        return idea
 
     def list_all(
         self,
@@ -240,51 +237,13 @@ class IdeaRepository:
         if not tag_idea_pks:
             return []
 
-        tag_ideas = (
+        return (
             self._db.select(Idea)
+            .select_related("group")
             .prefetch_related("tags")
             .filter(pk__in=list(tag_idea_pks))
             .fetch_all()
         )
-        self._attach_groups_to_ideas(tag_ideas)
-        return tag_ideas
-
-    @staticmethod
-    def _collect_group_pks(ideas: list[Idea]) -> set[int]:
-        """Collect valid group primary keys from ideas."""
-        group_pks: set[int] = set()
-        for idea in ideas:
-            group_id = idea.group_id
-            if isinstance(group_id, int):
-                group_pks.add(group_id)
-        return group_pks
-
-    def _attach_groups_to_ideas(self, ideas: list[Idea]) -> None:
-        """Hydrate group FK cache on ideas in one batched group query."""
-        group_pks = self._collect_group_pks(ideas)
-        if not group_pks:
-            return
-
-        groups_by_pk: dict[int, Group] = {}
-        for group in (
-            self._db.select(Group).filter(pk__in=list(group_pks)).fetch_all()
-        ):
-            if group.pk is not None:
-                groups_by_pk[group.pk] = group
-
-        for idea in ideas:
-            group_id = idea.group_id
-            if not isinstance(group_id, int):
-                continue
-            related_group = groups_by_pk.get(group_id)
-            if related_group is not None:
-                # SQLiter 0.18.0 workaround: seed internal FK cache so
-                # `idea.group` access avoids per-item lazy loads. This relies on
-                # sqliter-py internals (`_fk_cache`) and should be removed when
-                # upstream JOIN + pk filter ambiguity is fixed.
-                fk_cache = idea.__dict__.get("_fk_cache", {})
-                fk_cache["group"] = related_group
-                object.__setattr__(idea, "_fk_cache", fk_cache)
 
     def list_for_group(self, group_pk: int) -> list[Idea]:
         """Return ideas for a specific group ordered by recency."""
