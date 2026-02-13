@@ -119,6 +119,10 @@ class IdeaService:
         """
         return self._idea_repo.get(pk)
 
+    def get_idea_with_relations(self, pk: int) -> Idea | None:
+        """Fetch one idea with group and tags eagerly loaded."""
+        return self._idea_repo.get_with_relations(pk)
+
     def list_ideas(self) -> list[Idea]:
         """List all ideas, most recently updated first.
 

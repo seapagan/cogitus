@@ -76,6 +76,19 @@ class IdeaRepository:
         """
         return self._db.get(Idea, pk)
 
+    def get_with_relations(self, pk: int) -> Idea | None:
+        """Fetch one idea with group/tags loaded for formatter paths."""
+        idea = (
+            self._db.select(Idea)
+            .prefetch_related("tags")
+            .filter(pk=pk)
+            .fetch_one()
+        )
+        if idea is None:
+            return None
+        self._attach_groups_to_ideas([idea])
+        return idea
+
     def list_all(
         self,
         limit: int = 100,

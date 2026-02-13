@@ -93,7 +93,7 @@ def export(
     """
     with _db_session() as service:
         if pk is not None:
-            idea = service.get_idea(pk)
+            idea = service.get_idea_with_relations(pk)
             if idea is None:
                 typer.secho(
                     f"Error: Idea {pk} not found.",
