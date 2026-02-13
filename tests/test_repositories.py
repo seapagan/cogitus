@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import pytest
 from sqliter.exceptions import RecordInsertionError
@@ -11,7 +10,6 @@ from sqliter.exceptions import RecordInsertionError
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
-    from cogitus.models.idea import Idea
     from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.idea_cursor_state_repo import (
         IdeaCursorStateRepository,
@@ -152,12 +150,25 @@ class TestIdeaRepository:
         ideas = idea_repo.list_all(limit=2)
         assert len(ideas) == 2
 
-    def test_attach_groups_noop_for_empty_input(
+    def test_get_with_relations_loads_group_and_tags(
         self,
         idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
     ) -> None:
-        """Hydration should no-op when called with no ideas."""
-        idea_repo._attach_groups_to_ideas([])
+        """get_with_relations should return group and tags."""
+        source = group_repo.create("source")
+        created = idea_repo.create(
+            "Idea with relations",
+            body="body",
+            tag_names=["python"],
+            group_pk=source.pk,
+        )
+
+        fetched = idea_repo.get_with_relations(created.pk)
+
+        assert fetched is not None
+        assert fetched.group.pk == source.pk
+        assert [tag.name for tag in fetched.tags.fetch_all()] == ["python"]
 
     def test_update_idea(self, idea_repo: IdeaRepository) -> None:
         """Idea fields are modified by update."""
@@ -286,20 +297,24 @@ class TestIdeaRepository:
         assert len(ideas) == 1
         assert ideas[0].pk == source_idea.pk
 
-    def test_attach_groups_skips_non_integer_group_ids(
+    def test_search_tag_matches_include_group_relations(
         self,
         idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
     ) -> None:
-        """Non-integer group IDs should be ignored during hydration."""
-        persisted = idea_repo.create("Persisted")
-        mixed_ideas = [
-            persisted,
-            cast("Idea", SimpleNamespace(group_id="not-an-int")),
-        ]
+        """Tag-only matches should still return ideas with group loaded."""
+        source = group_repo.create("source")
+        created = idea_repo.create(
+            "No query text in title",
+            body="No query text in body",
+            tag_names=["needle"],
+            group_pk=source.pk,
+        )
 
-        idea_repo._attach_groups_to_ideas(mixed_ideas)
-        assert persisted.__dict__.get("_fk_cache", {}).get("group") is not None
-        assert not hasattr(mixed_ideas[1], "_fk_cache")
+        results = idea_repo.search("needle")
+
+        assert [idea.pk for idea in results] == [created.pk]
+        assert results[0].group.pk == source.pk
 
 
 class TestIdeaCursorStateRepository:
