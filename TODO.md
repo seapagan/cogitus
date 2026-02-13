@@ -28,6 +28,10 @@ None
 
 - add export to assorted file-types both on the tags, group and idea level.
 - save and load either entire database or individual ideas
+- On creating an Idea, allow to use a local or remote file as the seed (ie get a
+  todo from a github repo or local code)
+- Allow to export an Idea to a remote file (this would be more difficult and
+  need assorted auth additions)
 
 ## Undo and History
 

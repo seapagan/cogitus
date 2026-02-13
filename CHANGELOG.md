@@ -5,6 +5,21 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1](https://github.com/seapagan/cogitus/releases/tag/0.4.1) (February 13, 2026)
+
+**New Features**
+
+- Remove sqliter fk-cache workaround and use eager loading ([#17](https://github.com/seapagan/cogitus/pull/17)) by [seapagan](https://github.com/seapagan)
+
+**Testing**
+
+- Add tests for idea repo group hydration branches ([#16](https://github.com/seapagan/cogitus/pull/16)) by [seapagan](https://github.com/seapagan)
+
+**GitHub Actions**
+
+- Enable renovate bot and github action to update req*.txt ([#14](https://github.com/seapagan/cogitus/pull/14)) by [seapagan](https://github.com/seapagan)
+
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.4.0...0.4.1) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.4.0...0.4.1.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.4.0...0.4.1.patch)
 
 ## [0.4.0](https://github.com/seapagan/cogitus/releases/tag/0.4.0) (February 13, 2026)
 
