@@ -14,6 +14,8 @@ Ideas to add to Cogitus
 
 - add non-TUI CLI tasks for idea management (`list`, `dump/export`, `delete`).
 - ensure CLI task layer reuses existing repository/service abstractions.
+- consider eager-loading tags to avoid N+1 queries in formatters (low priority -
+  negligible for typical dataset sizes).
 
 ## Search and Filtering
 
