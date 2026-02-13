@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from cogitus.constants import DEFAULT_GROUP_NAME
+from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
 
 if TYPE_CHECKING:
     from sqliter import SqliterDB
 
-    from cogitus.models.group import Group
     from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.tag_repo import TagRepository
 
@@ -166,41 +166,108 @@ class IdeaRepository:
         results: list[Idea] = []
 
         # Search title
-        for idea in (
+        self._append_unique_ideas(
+            results,
+            seen,
             self._db.select(Idea)
             .select_related("group")
             .prefetch_related("tags")
             .filter(title__icontains=query)
-            .fetch_all()
-        ):
-            if idea.pk not in seen:
-                seen.add(idea.pk)
-                results.append(idea)
+            .fetch_all(),
+        )
 
         # Search body
-        for idea in (
+        self._append_unique_ideas(
+            results,
+            seen,
             self._db.select(Idea)
             .select_related("group")
             .prefetch_related("tags")
             .filter(body__icontains=query)
-            .fetch_all()
-        ):
+            .fetch_all(),
+        )
+
+        # Search via tag names
+        self._append_unique_ideas(
+            results,
+            seen,
+            self._fetch_tag_matched_ideas(query, seen),
+        )
+
+        results.sort(key=lambda i: i.updated_at, reverse=True)
+        return results
+
+    @staticmethod
+    def _append_unique_ideas(
+        results: list[Idea],
+        seen: set[int],
+        ideas: list[Idea],
+    ) -> None:
+        """Append ideas to results once, preserving first-seen order."""
+        for idea in ideas:
             if idea.pk not in seen:
                 seen.add(idea.pk)
                 results.append(idea)
 
-        # Search via tag names
+    def _fetch_tag_matched_ideas(
+        self,
+        query: str,
+        seen: set[int],
+    ) -> list[Idea]:
+        """Fetch tag-matched ideas with tags/groups eagerly available."""
         matching_tags = (
             self._db.select(Tag).filter(name__icontains=query).fetch_all()
         )
+        tag_idea_pks: set[int] = set()
         for tag in matching_tags:
             for idea in tag.ideas.fetch_all():  # type: ignore[attr-defined]
                 if idea.pk not in seen:
-                    seen.add(idea.pk)
-                    results.append(idea)
+                    tag_idea_pks.add(idea.pk)
 
-        results.sort(key=lambda i: i.updated_at, reverse=True)
-        return results
+        if not tag_idea_pks:
+            return []
+
+        tag_ideas = (
+            self._db.select(Idea)
+            .prefetch_related("tags")
+            .filter(pk__in=list(tag_idea_pks))
+            .fetch_all()
+        )
+        self._attach_groups_to_ideas(tag_ideas)
+        return tag_ideas
+
+    @staticmethod
+    def _collect_group_pks(ideas: list[Idea]) -> set[int]:
+        """Collect valid group primary keys from ideas."""
+        group_pks: set[int] = set()
+        for idea in ideas:
+            group_id = idea.group_id
+            if isinstance(group_id, int):
+                group_pks.add(group_id)
+        return group_pks
+
+    def _attach_groups_to_ideas(self, ideas: list[Idea]) -> None:
+        """Hydrate group FK cache on ideas in one batched group query."""
+        group_pks = self._collect_group_pks(ideas)
+        if not group_pks:
+            return
+
+        groups_by_pk: dict[int, Group] = {}
+        for group in (
+            self._db.select(Group).filter(pk__in=list(group_pks)).fetch_all()
+        ):
+            if group.pk is not None:
+                groups_by_pk[group.pk] = group
+
+        for idea in ideas:
+            group_id = idea.group_id
+            if not isinstance(group_id, int):
+                continue
+            related_group = groups_by_pk.get(group_id)
+            if related_group is not None:
+                fk_cache = idea.__dict__.get("_fk_cache", {})
+                fk_cache["group"] = related_group
+                object.__setattr__(idea, "_fk_cache", fk_cache)
 
     def list_for_group(self, group_pk: int) -> list[Idea]:
         """Return ideas for a specific group ordered by recency."""
