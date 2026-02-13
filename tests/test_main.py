@@ -8,6 +8,7 @@ import pytest
 
 from cogitus import main
 from cogitus.cli import run_cli
+from cogitus.db import get_db
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -29,6 +30,10 @@ def test_main_exits_on_cli_command(mocker: MockerFixture) -> None:
     """Main should exit when CLI command runs (Typer calls sys.exit)."""
     mocker.patch("sys.argv", ["cogitus", "list"])
     mocker.patch("cogitus.main.CogitusApp")
+    mocker.patch(
+        "cogitus.cli.commands.get_db",
+        return_value=get_db(memory=True),
+    )
 
     with pytest.raises(SystemExit) as exc_info:
         main.main()
