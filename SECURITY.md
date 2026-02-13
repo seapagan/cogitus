@@ -2,9 +2,9 @@
 
 ## Supported Versions
 
-| Version  | Supported          |
-| -------  | ------------------ |
-| >=0.3.0 | :white_check_mark: |
+| Version | Supported          |
+| ------- | ------------------ |
+| >=0.4.0 | :white_check_mark: |
 
 Until we reach a 1.0 milestone, we will generally only support the latest
 release of the project. If you are having issues with an older version, please
