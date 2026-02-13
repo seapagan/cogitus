@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Annotated
 
 import typer
@@ -16,6 +17,22 @@ from cogitus.cli.formatters import (
 from cogitus.db import get_db
 from cogitus.services.idea_service import IdeaService
 
+
+class ListFormat(str, Enum):
+    """Valid output formats for list command."""
+
+    simple = "simple"
+    json = "json"
+    table = "table"
+
+
+class ExportFormat(str, Enum):
+    """Valid output formats for export command."""
+
+    json = "json"
+    markdown = "markdown"
+
+
 app = typer.Typer(
     name="cogitus",
     help="Cogitus — a terminal workspace for capturing and evolving ideas.",
@@ -27,7 +44,9 @@ app = typer.Typer(
 @app.command("list")
 def cmd_list(
     query: Annotated[str | None, typer.Option("-q", "--query")] = None,
-    output_format: Annotated[str, typer.Option("-f", "--format")] = "simple",
+    output_format: Annotated[
+        ListFormat, typer.Option("-f", "--format")
+    ] = ListFormat.simple,
     limit: Annotated[int, typer.Option("-l", "--limit")] = 50,
 ) -> None:
     """List ideas with optional filtering.
@@ -42,9 +61,9 @@ def cmd_list(
         # Apply limit
         ideas = ideas[:limit]
 
-        if output_format == "json":
+        if output_format == ListFormat.json:
             typer.echo(format_ideas_json(ideas))
-        elif output_format == "table":
+        elif output_format == ListFormat.table:
             typer.echo(format_ideas_table(ideas))
         else:
             typer.echo(format_ideas_simple(ideas))
@@ -55,7 +74,9 @@ def cmd_list(
 @app.command()
 def export(
     pk: Annotated[int | None, typer.Argument()] = None,
-    output_format: Annotated[str, typer.Option("-f", "--format")] = "json",
+    output_format: Annotated[
+        ExportFormat, typer.Option("-f", "--format")
+    ] = ExportFormat.json,
 ) -> None:
     """Export idea(s) to stdout.
 
@@ -74,13 +95,13 @@ def export(
                     fg=typer.colors.RED,
                 )
                 raise typer.Exit(1)
-            if output_format == "markdown":
+            if output_format == ExportFormat.markdown:
                 typer.echo(format_idea_markdown(idea))
             else:
                 typer.echo(format_ideas_json([idea]))
         else:
             ideas = service.list_ideas()
-            if output_format == "markdown":
+            if output_format == ExportFormat.markdown:
                 typer.echo(format_ideas_markdown(ideas))
             else:
                 typer.echo(format_ideas_json(ideas))
