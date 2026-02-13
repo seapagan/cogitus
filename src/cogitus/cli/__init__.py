@@ -9,15 +9,14 @@ from cogitus.cli.commands import app
 __all__ = ["run_cli"]
 
 
-def run_cli() -> int | None:
+def run_cli() -> None:
     """Run CLI commands if arguments are present.
 
-    Returns:
-        None if TUI should be launched, otherwise an exit code.
+    If no arguments are provided, returns to signal TUI should launch.
+    Otherwise runs the CLI command (which calls sys.exit internally).
     """
     if len(sys.argv) == 1:
-        # No arguments - signal TUI launch
-        return None
-    # Run CLI and return 0 (typer handles its own exits on error)
+        # No arguments - return to signal TUI launch
+        return
+    # Run CLI - Typer calls sys.exit() internally
     app()
-    return 0
