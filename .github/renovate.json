@@ -1,0 +1,20 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "gitIgnoredAuthors": [],
+  "enabled": true,
+  "enabledManagers": [
+    "pep621",
+    "github-actions"
+  ],
+  "ignoreDeps": [],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "enabled": true
+  }
+}
