@@ -310,10 +310,15 @@ class TestFormatters:
         """JSON formatter produces correct structure."""
         idea = cli_service.create_idea("Test", "Body", ["py"])
         result = format_ideas_json([idea])
-        assert '"pk"' in result
-        assert '"title"' in result
-        assert '"body"' in result
-        assert '"tags"' in result
-        assert '"group"' in result
-        assert '"created_at"' in result
-        assert '"updated_at"' in result
+        data = json.loads(result)
+        assert len(data) == 1
+        expected_keys = {
+            "pk",
+            "title",
+            "body",
+            "tags",
+            "group",
+            "created_at",
+            "updated_at",
+        }
+        assert expected_keys <= data[0].keys()
