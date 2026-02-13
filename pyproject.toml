@@ -27,7 +27,7 @@ classifiers = [
 dependencies = [
     "pyperclip>=1.11.0",
     "simple-toml-settings>=0.10.0",
-    "sqliter-py>=0.18.0",
+    "sqliter-py>=0.18.1",
     "textual>=7.5.0",
     "typer>=0.21.1",
 ]
@@ -175,6 +175,3 @@ markers = []
 [tool.coverage.run]
 source = ["src"]
 omit = ["*/tests/*"]
-
-[tool.uv.sources]
-sqliter-py = { git = "https://github.com/seapagan/sqliter-py" }
