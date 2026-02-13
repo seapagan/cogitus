@@ -125,8 +125,9 @@ class TestListCommand:
         with patch("cogitus.cli.commands.get_db", return_value=cli_db):
             result = runner.invoke(app, ["list", "--limit", "1"])
             assert result.exit_code == 0
-            # Only first idea (most recent) should appear
-            assert result.output.count("[") == 1
+            # Only one idea line should appear (format: "[pk] Title ...")
+            lines = [line for line in result.output.strip().split("\n") if line]
+            assert len(lines) == 1
 
 
 class TestExportCommand:
