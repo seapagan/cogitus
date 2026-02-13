@@ -6,7 +6,9 @@
   "labels": [
     "dependencies"
   ],
-  "gitIgnoredAuthors": [],
+  "gitIgnoredAuthors": [
+    "github-actions[bot]@users.noreply.github.com"
+  ],
   "enabled": true,
   "enabledManagers": [
     "pep621",
