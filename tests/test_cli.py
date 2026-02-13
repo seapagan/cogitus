@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -202,14 +203,18 @@ class TestDeleteCommand:
     ) -> None:
         """Delete with force skips confirmation."""
         pk = cli_ideas[0].pk
-        with patch("cogitus.cli.commands.get_db", return_value=cli_db):
+        with (
+            patch("cogitus.cli.commands.get_db", return_value=cli_db),
+            patch.object(cli_db, "close"),
+        ):
             result = runner.invoke(app, ["delete", str(pk), "--force"])
             assert result.exit_code == 0
             assert "Deleted" in result.output
 
-            # Verify deletion by running list
+            # Verify deletion by checking pk not in results
             verify_result = runner.invoke(app, ["list", "--format", "json"])
-            assert str(pk) not in verify_result.output
+            remaining = json.loads(verify_result.output)
+            assert pk not in [idea["pk"] for idea in remaining]
 
     def test_delete_confirm_yes(
         self,
@@ -218,14 +223,18 @@ class TestDeleteCommand:
     ) -> None:
         """Delete with confirmation accepts yes."""
         pk = cli_ideas[0].pk
-        with patch("cogitus.cli.commands.get_db", return_value=cli_db):
+        with (
+            patch("cogitus.cli.commands.get_db", return_value=cli_db),
+            patch.object(cli_db, "close"),
+        ):
             result = runner.invoke(app, ["delete", str(pk)], input="y")
             assert result.exit_code == 0
             assert "Deleted" in result.output
 
-            # Verify deletion by running list
+            # Verify deletion by checking pk not in results
             verify_result = runner.invoke(app, ["list", "--format", "json"])
-            assert str(pk) not in verify_result.output
+            remaining = json.loads(verify_result.output)
+            assert pk not in [idea["pk"] for idea in remaining]
 
     def test_delete_confirm_no(
         self,
