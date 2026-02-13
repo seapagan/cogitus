@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from sqliter.exceptions import RecordInsertionError
@@ -10,6 +11,7 @@ from sqliter.exceptions import RecordInsertionError
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
+    from cogitus.models.idea import Idea
     from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.idea_cursor_state_repo import (
         IdeaCursorStateRepository,
@@ -150,6 +152,13 @@ class TestIdeaRepository:
         ideas = idea_repo.list_all(limit=2)
         assert len(ideas) == 2
 
+    def test_attach_groups_noop_for_empty_input(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Hydration should no-op when called with no ideas."""
+        idea_repo._attach_groups_to_ideas([])
+
     def test_update_idea(self, idea_repo: IdeaRepository) -> None:
         """Idea fields are modified by update."""
         created = idea_repo.create("Original")
@@ -276,6 +285,19 @@ class TestIdeaRepository:
 
         assert len(ideas) == 1
         assert ideas[0].pk == source_idea.pk
+
+    def test_attach_groups_skips_non_integer_group_ids(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Non-integer group IDs should be ignored during hydration."""
+        persisted = idea_repo.create("Persisted")
+        mixed_ideas = [
+            persisted,
+            cast("Idea", SimpleNamespace(group_id="not-an-int")),
+        ]
+
+        idea_repo._attach_groups_to_ideas(mixed_ideas)
 
 
 class TestIdeaCursorStateRepository:
