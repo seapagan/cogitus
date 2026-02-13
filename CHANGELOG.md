@@ -5,10 +5,12 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/seapagan/cogitus/tree/HEAD)
+
+## [0.4.0](https://github.com/seapagan/cogitus/releases/tag/0.4.0) (February 13, 2026)
 
 **New Features**
 
+- Add CLI subcommands for list, export, and delete ([#11](https://github.com/seapagan/cogitus/pull/11)) by [seapagan](https://github.com/seapagan)
 - Improve idea form initial focus and persisted edit cursor modes ([#8](https://github.com/seapagan/cogitus/pull/8)) by [seapagan](https://github.com/seapagan)
 - Improve y-copy behavior for rendered idea selection ([#6](https://github.com/seapagan/cogitus/pull/6)) by [seapagan](https://github.com/seapagan)
 - Improve idea form layout on small screens ([#5](https://github.com/seapagan/cogitus/pull/5)) by [seapagan](https://github.com/seapagan)
@@ -18,7 +20,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Add mkdocs documentation site ([#10](https://github.com/seapagan/cogitus/pull/10)) by [seapagan](https://github.com/seapagan)
 - Organize TODO items into thematic sections ([#7](https://github.com/seapagan/cogitus/pull/7)) by [seapagan](https://github.com/seapagan)
 
-[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.3.0...HEAD) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.3.0...HEAD.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.3.0...HEAD.patch)
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.3.0...0.4.0) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.3.0...0.4.0.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.3.0...0.4.0.patch)
 
 ## [0.3.0](https://github.com/seapagan/cogitus/releases/tag/0.3.0) (February 11, 2026)
 
