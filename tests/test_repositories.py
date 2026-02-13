@@ -298,6 +298,8 @@ class TestIdeaRepository:
         ]
 
         idea_repo._attach_groups_to_ideas(mixed_ideas)
+        assert persisted.__dict__.get("_fk_cache", {}).get("group") is not None
+        assert not hasattr(mixed_ideas[1], "_fk_cache")
 
 
 class TestIdeaCursorStateRepository:
