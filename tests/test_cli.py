@@ -17,31 +17,26 @@ from cogitus.cli.formatters import (
     format_ideas_simple,
     format_ideas_table,
 )
-from cogitus.db import get_db
-from cogitus.services.idea_service import IdeaService
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
-
     from sqliter import SqliterDB
 
     from cogitus.models.idea import Idea
+    from cogitus.services.idea_service import IdeaService
 
 runner = CliRunner()
 
 
 @pytest.fixture
-def cli_db() -> Generator[SqliterDB]:
-    """Provide an in-memory database for CLI tests."""
-    database = get_db(memory=True)
-    yield database
-    database.close()
+def cli_db(db: SqliterDB) -> SqliterDB:
+    """Alias the shared db fixture for CLI tests."""
+    return db
 
 
 @pytest.fixture
-def cli_service(cli_db: SqliterDB) -> IdeaService:
-    """Provide an IdeaService for CLI tests."""
-    return IdeaService(cli_db)
+def cli_service(service: IdeaService) -> IdeaService:
+    """Alias the shared service fixture for CLI tests."""
+    return service
 
 
 @pytest.fixture
