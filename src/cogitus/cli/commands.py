@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from enum import Enum
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
@@ -16,6 +17,9 @@ from cogitus.cli.formatters import (
 )
 from cogitus.db import get_db
 from cogitus.services.idea_service import IdeaService
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 
 class ListFormat(str, Enum):
@@ -31,6 +35,16 @@ class ExportFormat(str, Enum):
 
     json = "json"
     markdown = "markdown"
+
+
+@contextmanager
+def _db_session() -> Generator[IdeaService]:
+    """Provide an IdeaService with automatic DB cleanup."""
+    db = get_db()
+    try:
+        yield IdeaService(db)
+    finally:
+        db.close()
 
 
 app = typer.Typer(
@@ -53,12 +67,8 @@ def cmd_list(
 
     By default shows ideas in simple format. Use --format to change output.
     """
-    db = get_db()
-    try:
-        service = IdeaService(db)
+    with _db_session() as service:
         ideas = service.search_ideas(query) if query else service.list_ideas()
-
-        # Apply limit
         ideas = ideas[:limit]
 
         if output_format == ListFormat.json:
@@ -67,8 +77,6 @@ def cmd_list(
             typer.echo(format_ideas_table(ideas))
         else:
             typer.echo(format_ideas_simple(ideas))
-    finally:
-        db.close()
 
 
 @app.command()
@@ -83,10 +91,7 @@ def export(
     With no PK argument, exports all ideas. Use --format markdown for
     markdown output.
     """
-    db = get_db()
-    try:
-        service = IdeaService(db)
-
+    with _db_session() as service:
         if pk is not None:
             idea = service.get_idea(pk)
             if idea is None:
@@ -105,8 +110,6 @@ def export(
                 typer.echo(format_ideas_markdown(ideas))
             else:
                 typer.echo(format_ideas_json(ideas))
-    finally:
-        db.close()
 
 
 @app.command()
@@ -118,9 +121,7 @@ def delete(
 
     Prompts for confirmation unless --force is specified.
     """
-    db = get_db()
-    try:
-        service = IdeaService(db)
+    with _db_session() as service:
         idea = service.get_idea(pk)
 
         if idea is None:
@@ -139,5 +140,3 @@ def delete(
 
         service.delete_idea(pk)
         typer.secho(f"Deleted idea {pk}.", fg=typer.colors.GREEN)
-    finally:
-        db.close()
