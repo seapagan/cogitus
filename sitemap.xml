@@ -1,59 +1,63 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://seapagan.github.io/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/getting-started/installation/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/getting-started/installation/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/getting-started/quickstart/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/getting-started/quickstart/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/project/changelog/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/project/changelog/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/project/contributing/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/project/contributing/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/project/license/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/project/license/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/project/todo/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/project/todo/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/user-guide/clipboard/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/user-guide/cli/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/user-guide/ideas-groups-tags/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/user-guide/clipboard/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/user-guide/keybindings/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/user-guide/ideas-groups-tags/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/user-guide/overview/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/user-guide/keybindings/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/user-guide/search/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/user-guide/overview/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/user-guide/settings/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/user-guide/search/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
     <url>
-         <loc>https://seapagan.github.io/user-guide/troubleshooting/</loc>
-         <lastmod>2026-02-12</lastmod>
+         <loc>https://cogitus.grantramsay.dev/user-guide/settings/</loc>
+         <lastmod>2026-02-13</lastmod>
+    </url>
+    <url>
+         <loc>https://cogitus.grantramsay.dev/user-guide/troubleshooting/</loc>
+         <lastmod>2026-02-13</lastmod>
     </url>
 </urlset>
