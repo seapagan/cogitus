@@ -278,6 +278,10 @@ class IdeaRepository:
                 continue
             related_group = groups_by_pk.get(group_id)
             if related_group is not None:
+                # SQLiter 0.18.0 workaround: seed internal FK cache so
+                # `idea.group` access avoids per-item lazy loads. This relies on
+                # sqliter-py internals (`_fk_cache`) and should be removed when
+                # upstream JOIN + pk filter ambiguity is fixed.
                 fk_cache = idea.__dict__.get("_fk_cache", {})
                 fk_cache["group"] = related_group
                 object.__setattr__(idea, "_fk_cache", fk_cache)
