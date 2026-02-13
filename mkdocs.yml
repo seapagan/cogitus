@@ -50,6 +50,7 @@ nav:
       - Keybindings: user-guide/keybindings.md
       - Ideas, Groups, and Tags: user-guide/ideas-groups-tags.md
       - Search: user-guide/search.md
+      - CLI Reference: user-guide/cli.md
       - Clipboard: user-guide/clipboard.md
       - Settings: user-guide/settings.md
       - Troubleshooting: user-guide/troubleshooting.md

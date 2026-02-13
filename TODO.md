@@ -63,6 +63,9 @@ Ideas to add to Cogitus
   bulk insert support) for efficient repository operations.
 - once `sqliter-py` bulk update support exists, refactor
   `IdeaRepository.bulk_move_group` to remove inline SQL and use the ORM API.
+- once sqliter-py issue #126 is fixed, remove `_fk_cache`-based group
+  hydration workaround from `IdeaRepository` and use pure eager loading in
+  relation-aware fetch paths.
 
 ## AI Assistance
 

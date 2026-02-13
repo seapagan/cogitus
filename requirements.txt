@@ -2,6 +2,10 @@
 #    uv export --no-hashes --no-dev --no-emit-project --output-file=requirements.txt
 annotated-types==0.7.0
     # via pydantic
+click==8.3.1
+    # via typer
+colorama==0.4.6 ; sys_platform == 'win32'
+    # via click
 linkify-it-py==2.0.3
     # via markdown-it-py
 markdown-it-py==4.0.0
@@ -26,20 +30,27 @@ pygments==2.19.2
 pyperclip==1.11.0
     # via cogitus
 rich==14.3.2
-    # via textual
+    # via
+    #   textual
+    #   typer
 rtoml==0.13.0
     # via simple-toml-settings
+shellingham==1.5.4
+    # via typer
 simple-toml-settings==0.10.0
     # via cogitus
 sqliter-py==0.18.0
     # via cogitus
 textual==7.5.0
     # via cogitus
+typer==0.21.1
+    # via cogitus
 typing-extensions==4.15.0
     # via
     #   pydantic
     #   pydantic-core
     #   textual
+    #   typer
     #   typing-inspection
 typing-inspection==0.4.2
     # via pydantic

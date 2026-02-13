@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from cogitus.constants import DEFAULT_GROUP_NAME
+from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
 
 if TYPE_CHECKING:
     from sqliter import SqliterDB
 
-    from cogitus.models.group import Group
     from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.tag_repo import TagRepository
 
@@ -76,6 +76,19 @@ class IdeaRepository:
         """
         return self._db.get(Idea, pk)
 
+    def get_with_relations(self, pk: int) -> Idea | None:
+        """Fetch one idea with group/tags loaded for formatter paths."""
+        idea = (
+            self._db.select(Idea)
+            .prefetch_related("tags")
+            .filter(pk=pk)
+            .fetch_one()
+        )
+        if idea is None:
+            return None
+        self._attach_groups_to_ideas([idea])
+        return idea
+
     def list_all(
         self,
         limit: int = 100,
@@ -92,6 +105,8 @@ class IdeaRepository:
         """
         return (
             self._db.select(Idea)
+            .select_related("group")
+            .prefetch_related("tags")
             .order("updated_at", reverse=True)
             .limit(limit)
             .offset(offset)
@@ -164,38 +179,119 @@ class IdeaRepository:
         results: list[Idea] = []
 
         # Search title
-        for idea in (
-            self._db.select(Idea).filter(title__icontains=query).fetch_all()
-        ):
-            if idea.pk not in seen:
-                seen.add(idea.pk)
-                results.append(idea)
+        self._append_unique_ideas(
+            results,
+            seen,
+            self._db.select(Idea)
+            .select_related("group")
+            .prefetch_related("tags")
+            .filter(title__icontains=query)
+            .fetch_all(),
+        )
 
         # Search body
-        for idea in (
-            self._db.select(Idea).filter(body__icontains=query).fetch_all()
-        ):
-            if idea.pk not in seen:
-                seen.add(idea.pk)
-                results.append(idea)
+        self._append_unique_ideas(
+            results,
+            seen,
+            self._db.select(Idea)
+            .select_related("group")
+            .prefetch_related("tags")
+            .filter(body__icontains=query)
+            .fetch_all(),
+        )
 
         # Search via tag names
-        matching_tags = (
-            self._db.select(Tag).filter(name__icontains=query).fetch_all()
+        self._append_unique_ideas(
+            results,
+            seen,
+            self._fetch_tag_matched_ideas(query, seen),
         )
-        for tag in matching_tags:
-            for idea in tag.ideas.fetch_all():  # type: ignore[attr-defined]
-                if idea.pk not in seen:
-                    seen.add(idea.pk)
-                    results.append(idea)
 
         results.sort(key=lambda i: i.updated_at, reverse=True)
         return results
+
+    @staticmethod
+    def _append_unique_ideas(
+        results: list[Idea],
+        seen: set[int],
+        ideas: list[Idea],
+    ) -> None:
+        """Append ideas to results once, preserving first-seen order."""
+        for idea in ideas:
+            if idea.pk not in seen:
+                seen.add(idea.pk)
+                results.append(idea)
+
+    def _fetch_tag_matched_ideas(
+        self,
+        query: str,
+        seen: set[int],
+    ) -> list[Idea]:
+        """Fetch tag-matched ideas with tags/groups eagerly available."""
+        matching_tags = (
+            self._db.select(Tag).filter(name__icontains=query).fetch_all()
+        )
+        tag_idea_pks: set[int] = set()
+        for tag in matching_tags:
+            for idea in tag.ideas.fetch_all():  # type: ignore[attr-defined]
+                if idea.pk not in seen:
+                    tag_idea_pks.add(idea.pk)
+
+        if not tag_idea_pks:
+            return []
+
+        tag_ideas = (
+            self._db.select(Idea)
+            .prefetch_related("tags")
+            .filter(pk__in=list(tag_idea_pks))
+            .fetch_all()
+        )
+        self._attach_groups_to_ideas(tag_ideas)
+        return tag_ideas
+
+    @staticmethod
+    def _collect_group_pks(ideas: list[Idea]) -> set[int]:
+        """Collect valid group primary keys from ideas."""
+        group_pks: set[int] = set()
+        for idea in ideas:
+            group_id = idea.group_id
+            if isinstance(group_id, int):
+                group_pks.add(group_id)
+        return group_pks
+
+    def _attach_groups_to_ideas(self, ideas: list[Idea]) -> None:
+        """Hydrate group FK cache on ideas in one batched group query."""
+        group_pks = self._collect_group_pks(ideas)
+        if not group_pks:
+            return
+
+        groups_by_pk: dict[int, Group] = {}
+        for group in (
+            self._db.select(Group).filter(pk__in=list(group_pks)).fetch_all()
+        ):
+            if group.pk is not None:
+                groups_by_pk[group.pk] = group
+
+        for idea in ideas:
+            group_id = idea.group_id
+            if not isinstance(group_id, int):
+                continue
+            related_group = groups_by_pk.get(group_id)
+            if related_group is not None:
+                # SQLiter 0.18.0 workaround: seed internal FK cache so
+                # `idea.group` access avoids per-item lazy loads. This relies on
+                # sqliter-py internals (`_fk_cache`) and should be removed when
+                # upstream JOIN + pk filter ambiguity is fixed.
+                fk_cache = idea.__dict__.get("_fk_cache", {})
+                fk_cache["group"] = related_group
+                object.__setattr__(idea, "_fk_cache", fk_cache)
 
     def list_for_group(self, group_pk: int) -> list[Idea]:
         """Return ideas for a specific group ordered by recency."""
         return (
             self._db.select(Idea)
+            .select_related("group")
+            .prefetch_related("tags")
             .filter(group_id=group_pk)
             .order("updated_at", reverse=True)
             .fetch_all()

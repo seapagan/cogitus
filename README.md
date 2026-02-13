@@ -78,6 +78,7 @@ Functionality available in the current MVP includes:
 - Basic search (SQLite `LIKE`)
 - View idea details
 - Copy & Paste support
+- **CLI commands for scripting (`list`, `export`, `delete`)**
 
 Search will initially be simple but structured to evolve into FTS5.
 
