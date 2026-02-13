@@ -92,6 +92,8 @@ class IdeaRepository:
         """
         return (
             self._db.select(Idea)
+            .select_related("group")
+            .prefetch_related("tags")
             .order("updated_at", reverse=True)
             .limit(limit)
             .offset(offset)
@@ -165,7 +167,11 @@ class IdeaRepository:
 
         # Search title
         for idea in (
-            self._db.select(Idea).filter(title__icontains=query).fetch_all()
+            self._db.select(Idea)
+            .select_related("group")
+            .prefetch_related("tags")
+            .filter(title__icontains=query)
+            .fetch_all()
         ):
             if idea.pk not in seen:
                 seen.add(idea.pk)
@@ -173,7 +179,11 @@ class IdeaRepository:
 
         # Search body
         for idea in (
-            self._db.select(Idea).filter(body__icontains=query).fetch_all()
+            self._db.select(Idea)
+            .select_related("group")
+            .prefetch_related("tags")
+            .filter(body__icontains=query)
+            .fetch_all()
         ):
             if idea.pk not in seen:
                 seen.add(idea.pk)
@@ -196,6 +206,8 @@ class IdeaRepository:
         """Return ideas for a specific group ordered by recency."""
         return (
             self._db.select(Idea)
+            .select_related("group")
+            .prefetch_related("tags")
             .filter(group_id=group_pk)
             .order("updated_at", reverse=True)
             .fetch_all()
