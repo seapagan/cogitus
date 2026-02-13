@@ -77,7 +77,7 @@ def format_ideas_table(ideas: list[Idea]) -> str:
         )
 
     output = StringIO()
-    console = Console(file=output, force_terminal=True)
+    console = Console(file=output)
     console.print(table)
     return output.getvalue().rstrip()
 
