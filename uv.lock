@@ -1693,14 +1693,14 @@ wheels = [
 
 [[package]]
 name = "sqliter-py"
-version = "0.18.1"
+version = "0.19.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9b/d2/3ad0b1e6e720ca69e18af65382fb63b77c11ac8457863c1da8fc76ae9044/sqliter_py-0.18.1.tar.gz", hash = "sha256:d3fd3362ac07ff099f33e2de8dd291818e7e126e4ac541ca765965f05f6f33ce", size = 80089, upload-time = "2026-02-13T16:29:23.137Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/06/59/2b83889fcf90d28beba1f149ada653083f104ecc7be4b4c46ecf4462fb52/sqliter_py-0.19.0.tar.gz", hash = "sha256:6c2a56eed4fe2dff498112ea1dc149d80942ac7f14164ac15f48761753de166c", size = 81676, upload-time = "2026-02-14T16:55:08.344Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/68/3d54b617322fcdc311b2b7b9db6c39e27370f7799cec359dedabaff56613/sqliter_py-0.18.1-py3-none-any.whl", hash = "sha256:e3135a127dc547bcfe3db081d121bd1a4483e437cd6dbfdf84f47dbfa3b6e143", size = 101616, upload-time = "2026-02-13T16:29:20.05Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/79/b2b64e7c81df64815b75dc4f68c5801a1b2614bfc638b6e47a76d7071dab/sqliter_py-0.19.0-py3-none-any.whl", hash = "sha256:0047aa9153e5ae623ee7c9b80e4f260735b7ddde599d1d931cff7be380a46538", size = 103307, upload-time = "2026-02-14T16:55:06.26Z" },
 ]
 
 [[package]]

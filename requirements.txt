@@ -41,7 +41,7 @@ shellingham==1.5.4
     # via typer
 simple-toml-settings==0.10.0
     # via cogitus
-sqliter-py==0.18.1
+sqliter-py==0.19.0
     # via cogitus
 textual==7.5.0
     # via cogitus
