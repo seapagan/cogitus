@@ -107,7 +107,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
                         )
             with Horizontal(id="form-buttons"):
                 yield Button(
-                    "Save [Ctrl+S]",
+                    "Save [Ctrl+s]",
                     variant="primary",
                     id="save-btn",
                 )
@@ -351,14 +351,13 @@ class GroupFormScreen(ModalScreen[int | None]):
         """Compose the group form."""
         with Vertical(id="confirm-container"):
             yield Static("New Group", id="form-title")
-            yield Label("Name")
             yield Input(
                 placeholder="Group name...",
                 id="group-name-input",
             )
             with Horizontal(id="confirm-buttons"):
                 yield Button(
-                    "Save [Ctrl+S]",
+                    "Save [Ctrl+s]",
                     variant="primary",
                     id="save-group-btn",
                 )
@@ -425,7 +424,7 @@ class GroupDeleteReassignScreen(ModalScreen[int | None]):
             )
             with Horizontal(id="confirm-buttons"):
                 yield Button(
-                    "Move + Delete [Ctrl+S]",
+                    "Move + Delete [Ctrl+s]",
                     variant="error",
                     id="move-delete-btn",
                 )
@@ -485,7 +484,7 @@ class HelpScreen(ModalScreen[None]):
         "  Escape           Clear search / close\n"
         "\n"
         "[bold]Form[/bold]\n"
-        "  Ctrl+S           Save\n"
+        "  Ctrl+s           Save\n"
         "  y (selection)    Copy selected text\n"
         "  Escape           Cancel\n"
         "\n"

@@ -8,11 +8,11 @@
 | `e`       | Edit selected idea                             |
 | `d`       | Delete selected idea                           |
 | `g`       | New group                                      |
-| `Shift+G` | Delete selected group                          |
+| `G`       | Delete selected group                          |
 | `/`       | Focus search                                   |
 | `Esc`     | Cancel search/back                             |
 | `Tab`     | Switch pane                                    |
-| `Ctrl+B`  | Toggle list pane visibility                    |
+| `ctrl+b`  | Toggle list pane visibility                    |
 | `y`       | Copy body or selected text (context-sensitive) |
 | `?`       | Help                                           |
 | `q`       | Quit                                           |
@@ -21,5 +21,5 @@
 
 | Key      | Action |
 | -------- | ------ |
-| `Ctrl+S` | Save   |
+| `Ctrl+s` | Save   |
 | `Esc`    | Cancel |

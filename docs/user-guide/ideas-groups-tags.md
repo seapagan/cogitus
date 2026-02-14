@@ -14,7 +14,7 @@ An idea is the core record in Cogitus and contains:
 
 - Ideas are displayed in the left tree by group.
 - New groups can be created with `g`.
-- Deleting a group uses `Shift+G`.
+- Deleting a group uses `G` (Shift+g).
 - Default group cannot be deleted.
 
 ## Tags
