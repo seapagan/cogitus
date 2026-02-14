@@ -60,12 +60,6 @@ None
 
 - evaluate optional SQLite write tuning (`PRAGMA synchronous=NORMAL`) with
   benchmark and risk assessment.
-- optimize group-reassignment path to avoid per-row updates in
-  `IdeaRepository.bulk_move_group` (prefer set-based `UPDATE ... WHERE`).
-- investigate adding bulk update support to `sqliter-py` (similar to existing
-  bulk insert support) for efficient repository operations.
-- once `sqliter-py` bulk update support exists, refactor
-  `IdeaRepository.bulk_move_group` to remove inline SQL and use the ORM API.
 
 ## AI Assistance
 

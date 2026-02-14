@@ -276,14 +276,14 @@ class IdeaRepository:
         if source_group_pk == target_group_pk:
             return 0
 
-        target_group = self._resolve_group(target_group_pk)
-        with self._db.connect() as conn:
-            cursor = conn.execute(
-                "UPDATE ideas SET group_id = ? WHERE group_id = ?",
-                (target_group.pk, source_group_pk),
-            )
-            conn.commit()
-        return cursor.rowcount
+        # Validate target group exists
+        self._resolve_group(target_group_pk)
+
+        return self._db.update_where(
+            Idea,
+            where={"group_id": source_group_pk},
+            values={"group_id": target_group_pk},
+        )
 
     def _resolve_group(self, group_pk: int | None) -> Group:
         """Resolve a group by primary key, falling back to default."""
