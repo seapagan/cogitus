@@ -351,7 +351,6 @@ class GroupFormScreen(ModalScreen[int | None]):
         """Compose the group form."""
         with Vertical(id="confirm-container"):
             yield Static("New Group", id="form-title")
-            yield Label("Name")
             yield Input(
                 placeholder="Group name...",
                 id="group-name-input",

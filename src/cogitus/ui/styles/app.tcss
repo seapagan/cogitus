@@ -148,6 +148,10 @@ IdeaFormScreen {
     margin-bottom: 0;
 }
 
+#group-name-input {
+    margin-bottom: 1;
+}
+
 #form-buttons {
     height: 3;
     align: center middle;
@@ -155,6 +159,12 @@ IdeaFormScreen {
 
 #form-buttons Button {
     margin: 0 1;
+}
+
+/* Group dialogs */
+GroupFormScreen,
+GroupDeleteReassignScreen {
+    align: center middle;
 }
 
 /* Delete confirmation */
