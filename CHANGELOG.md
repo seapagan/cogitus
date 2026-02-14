@@ -5,6 +5,15 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.4.2](https://github.com/seapagan/cogitus/releases/tag/0.4.2) (February 14, 2026)
+
+**Bug Fixes**
+
+- Fix keybinding and layout issues ([#19](https://github.com/seapagan/cogitus/pull/19)) by [seapagan](https://github.com/seapagan)
+
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.4.1...0.4.2) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.4.1...0.4.2.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.4.1...0.4.2.patch)
+
 ## [0.4.1](https://github.com/seapagan/cogitus/releases/tag/0.4.1) (February 13, 2026)
 
 **New Features**
