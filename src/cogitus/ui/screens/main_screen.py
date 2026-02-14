@@ -33,16 +33,16 @@ class MainScreen(Screen[None]):
     """Two-pane main screen: idea list + detail view."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("n", "new_idea", "New", key_display="N"),
-        Binding("g", "new_group", "New Group", key_display="G"),
+        Binding("n", "new_idea", "New", key_display="n"),
+        Binding("g", "new_group", "New Group", key_display="g"),
         Binding(
-            "shift+g",
+            "G",
             "delete_group",
             "Delete Group",
-            key_display="Shift+G",
+            key_display="G",
         ),
-        Binding("e", "edit_idea", "Edit", key_display="E"),
-        Binding("d", "delete_idea", "Delete", key_display="D"),
+        Binding("e", "edit_idea", "Edit", key_display="e"),
+        Binding("d", "delete_idea", "Delete", key_display="d"),
         Binding("slash", "focus_search", "Search", key_display="/"),
         Binding("escape", "cancel_search", "Back", show=False),
         Binding(
@@ -61,15 +61,15 @@ class MainScreen(Screen[None]):
             "ctrl+b",
             "toggle_list_panel",
             "Toggle List",
-            key_display="Ctrl+B",
+            key_display="ctrl+b",
         ),
         Binding(
             "y",
             "copy_idea_body",
             "Copy body",
-            key_display="Y",
+            key_display="y",
         ),
-        Binding("q", "quit_app", "Quit", key_display="Q"),
+        Binding("q", "quit_app", "Quit", key_display="q"),
     ]
 
     def __init__(
