@@ -12,7 +12,7 @@
 | `/`       | Focus search                                   |
 | `Esc`     | Cancel search/back                             |
 | `Tab`     | Switch pane                                    |
-| `Ctrl-b`  | Toggle list pane visibility                    |
+| `ctrl+b`  | Toggle list pane visibility                    |
 | `y`       | Copy body or selected text (context-sensitive) |
 | `?`       | Help                                           |
 | `q`       | Quit                                           |
@@ -21,5 +21,5 @@
 
 | Key      | Action |
 | -------- | ------ |
-| `Ctrl+S` | Save   |
+| `Ctrl+s` | Save   |
 | `Esc`    | Cancel |
