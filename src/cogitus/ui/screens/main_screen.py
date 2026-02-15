@@ -8,7 +8,12 @@ from textual.binding import Binding, BindingType
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, Markdown, Tree
 
-from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
+from cogitus.config import (
+    DEFAULT_EDIT_BODY_CURSOR_MODE,
+    DEFAULT_NEW_IDEA_GROUP_PRESELECT_MODE,
+    EditBodyCursorMode,
+    NewIdeaGroupPreselectMode,
+)
 from cogitus.ui.clipboard import copy_to_clipboard
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
@@ -81,6 +86,9 @@ class MainScreen(Screen[None]):
         edit_body_cursor_mode: EditBodyCursorMode = (
             DEFAULT_EDIT_BODY_CURSOR_MODE
         ),
+        new_idea_group_preselect_mode: NewIdeaGroupPreselectMode = (
+            DEFAULT_NEW_IDEA_GROUP_PRESELECT_MODE
+        ),
     ) -> None:
         """Initialize with the idea service.
 
@@ -89,12 +97,14 @@ class MainScreen(Screen[None]):
             initial_select_pk: Idea primary key to select on first load.
             on_selected_idea_changed: Callback for selected idea changes.
             edit_body_cursor_mode: Edit form body cursor mode.
+            new_idea_group_preselect_mode: New idea group preselection mode.
         """
         super().__init__()
         self._service = service
         self._initial_select_pk = initial_select_pk
         self._on_selected_idea_changed = on_selected_idea_changed
         self._edit_body_cursor_mode = edit_body_cursor_mode
+        self._new_idea_group_preselect_mode = new_idea_group_preselect_mode
         self._selected_idea_pk: int | None = None
         self._active_pane: str = "list"
         self._focus_before_search: str = "list"
@@ -166,13 +176,32 @@ class MainScreen(Screen[None]):
 
     def action_new_idea(self) -> None:
         """Open the new idea form."""
+        initial_group_pk = None
+        if (
+            self._new_idea_group_preselect_mode
+            == NewIdeaGroupPreselectMode.CONTEXTUAL
+        ):
+            initial_group_pk = self._get_contextual_new_idea_group_pk()
         self.app.push_screen(
             IdeaFormScreen(
                 self._service,
+                initial_group_pk=initial_group_pk,
                 edit_body_cursor_mode=self._edit_body_cursor_mode,
             ),
             callback=self._on_form_dismiss,
         )
+
+    def _get_contextual_new_idea_group_pk(self) -> int | None:
+        """Return current group context from the left idea tree selection."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        selected_group_pk = panel.get_selected_group_pk()
+        if selected_group_pk is not None:
+            return selected_group_pk
+
+        selected_idea = panel.get_selected_idea()
+        if selected_idea is None:
+            return None
+        return selected_idea.group.pk
 
     def action_new_group(self) -> None:
         """Open the new group form."""
