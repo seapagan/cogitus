@@ -59,10 +59,12 @@ class _FakeSettings:
         last_viewed_idea_pk: int = 0,
         edit_body_cursor_mode: str = "remember",
         new_idea_group_mode: str = "contextual",
+        default_group_name: str = "default",
     ) -> None:
         self.last_viewed_idea_pk = last_viewed_idea_pk
         self.edit_body_cursor_mode = edit_body_cursor_mode
         self.new_idea_group_mode = new_idea_group_mode
+        self.default_group_name = default_group_name
         self.saved = False
 
     def save(self) -> None:
@@ -457,7 +459,7 @@ def test_idea_form_default_group_created_when_missing(
     mocker.patch.object(service, "list_groups", return_value=[])
 
     assert screen._get_default_group_pk() == 123
-    create_group.assert_called_once_with(service.DEFAULT_GROUP_NAME)
+    create_group.assert_called_once_with(service.default_group_name)
 
 
 @pytest.mark.asyncio
@@ -849,7 +851,7 @@ async def test_main_screen_group_actions(
         default = next(
             group
             for group in service.list_groups()
-            if group.name == service.DEFAULT_GROUP_NAME
+            if group.name == service.default_group_name
         )
         notify.reset_mock()
         mocker.patch.object(
@@ -1143,6 +1145,20 @@ async def test_cogitus_app_mount_uses_configured_new_idea_group_mode(
 
 
 @pytest.mark.asyncio
+async def test_cogitus_app_mount_uses_configured_default_group_name(
+    db: SqliterDB,
+) -> None:
+    """Cogitus app should pass configured default group name to service."""
+    settings = _FakeSettings(default_group_name="Inbox")
+    app = CogitusApp(db=db, settings=settings)
+
+    async with app.run_test() as pilot:
+        assert app._service.default_group_name == "inbox"
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_cogitus_app_mount_warns_on_invalid_new_idea_group_mode(
     db: SqliterDB,
     mocker: MockerFixture,
@@ -1167,6 +1183,26 @@ async def test_cogitus_app_mount_warns_on_invalid_new_idea_group_mode(
         await pilot.pause()
 
 
+@pytest.mark.asyncio
+async def test_cogitus_app_mount_warns_on_invalid_default_group_name(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Invalid default group name should notify and fallback to default."""
+    settings = _FakeSettings(default_group_name="   ")
+    app = CogitusApp(db=db, settings=settings)
+    notify = mocker.patch.object(app, "notify")
+
+    async with app.run_test() as pilot:
+        assert app._service.default_group_name == "default"
+        notify.assert_called_once_with(
+            "Invalid config 'default_group_name=   '; using 'default'.",
+            severity="warning",
+        )
+        app.exit()
+        await pilot.pause()
+
+
 def test_cogitus_app_init_uses_db_path(
     mocker: MockerFixture,
     db: SqliterDB,
@@ -1179,7 +1215,10 @@ def test_cogitus_app_init_uses_db_path(
 
     CogitusApp(db_path=db_path, settings=settings)
 
-    get_db.assert_called_once_with(db_path)
+    get_db.assert_called_once_with(
+        db_path,
+        default_group_name="default",
+    )
 
 
 def test_cogitus_app_init_uses_default_db(
@@ -1192,7 +1231,20 @@ def test_cogitus_app_init_uses_default_db(
 
     CogitusApp(settings=settings)
 
-    get_db.assert_called_once_with()
+    get_db.assert_called_once_with(default_group_name="default")
+
+
+def test_cogitus_app_init_normalizes_configured_default_group_name(
+    mocker: MockerFixture,
+    db: SqliterDB,
+) -> None:
+    """App should pass normalized configured default group name to DB."""
+    get_db = mocker.patch("cogitus.app.get_db", return_value=db)
+    settings = _FakeSettings(default_group_name="  Inbox  ")
+
+    CogitusApp(settings=settings)
+
+    get_db.assert_called_once_with(default_group_name="inbox")
 
 
 @pytest.mark.asyncio

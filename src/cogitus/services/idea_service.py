@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from cogitus.config import normalize_default_group_name
 from cogitus.constants import DEFAULT_GROUP_NAME as SHARED_DEFAULT_GROUP_NAME
 from cogitus.repositories.group_repo import GroupRepository
 from cogitus.repositories.idea_cursor_state_repo import (
@@ -29,13 +30,22 @@ class IdeaService:
 
     DEFAULT_GROUP_NAME = SHARED_DEFAULT_GROUP_NAME
 
-    def __init__(self, db: SqliterDB) -> None:
+    def __init__(
+        self,
+        db: SqliterDB,
+        *,
+        default_group_name: str = SHARED_DEFAULT_GROUP_NAME,
+    ) -> None:
         """Initialize with a database connection.
 
         Args:
             db: The SqliterDB instance.
+            default_group_name: Canonical fallback group name.
         """
         self._db = db
+        self._default_group_name = normalize_default_group_name(
+            default_group_name
+        )
         self._group_repo = GroupRepository(db)
         self._tag_repo = TagRepository(db)
         self._cursor_state_repo = IdeaCursorStateRepository(db)
@@ -43,8 +53,13 @@ class IdeaService:
             db,
             self._tag_repo,
             self._group_repo,
-            default_group_name=self.DEFAULT_GROUP_NAME,
+            default_group_name=self._default_group_name,
         )
+
+    @property
+    def default_group_name(self) -> str:
+        """Return the canonical fallback group name."""
+        return self._default_group_name
 
     def create_idea(
         self,
@@ -194,12 +209,12 @@ class IdeaService:
         group = self._group_repo.get(group_pk)
         if group is None:
             return
-        if group.name == self.DEFAULT_GROUP_NAME:
+        if group.name == self._default_group_name:
             msg = "Default group cannot be deleted"
             raise ValueError(msg)
 
         target_group = (
-            self._group_repo.get_or_create(self.DEFAULT_GROUP_NAME)
+            self._group_repo.get_or_create(self._default_group_name)
             if move_to_group_pk is None
             else self._group_repo.get(move_to_group_pk)
         )

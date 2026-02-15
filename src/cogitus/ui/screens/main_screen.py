@@ -252,7 +252,7 @@ class MainScreen(Screen[None]):
         if group is None:
             self.notify("Group not found", severity="error")
             return
-        if group.name == self._service.DEFAULT_GROUP_NAME:
+        if group.name == self._service.default_group_name:
             self.notify("Default group cannot be deleted", severity="warning")
             return
 

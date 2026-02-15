@@ -6,8 +6,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from cogitus.services.idea_service import IdeaService
+
 if TYPE_CHECKING:
-    from cogitus.services.idea_service import IdeaService
+    from sqliter import SqliterDB
 
 
 class TestIdeaService:
@@ -149,10 +151,29 @@ class TestIdeaService:
         default = next(
             group
             for group in service.list_groups()
-            if group.name == service.DEFAULT_GROUP_NAME
+            if group.name == service.default_group_name
         )
         with pytest.raises(ValueError, match="cannot be deleted"):
             service.delete_group(default.pk)
+
+    def test_create_idea_uses_configured_default_group(
+        self,
+        db: SqliterDB,
+    ) -> None:
+        """Idea creation should use configured default group fallback."""
+        custom = IdeaService(db, default_group_name="inbox")
+        idea = custom.create_idea("Test")
+        assert idea.group.name == "inbox"
+
+    def test_configured_default_group_cannot_be_deleted(
+        self,
+        db: SqliterDB,
+    ) -> None:
+        """Configured fallback group should be protected from deletion."""
+        custom = IdeaService(db, default_group_name="inbox")
+        inbox = custom.create_group("inbox")
+        with pytest.raises(ValueError, match="cannot be deleted"):
+            custom.delete_group(inbox.pk)
 
     def test_none_tags_passthrough(self, service: IdeaService) -> None:
         """Passing None for tags leaves them unchanged."""

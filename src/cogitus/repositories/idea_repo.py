@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from cogitus.config import normalize_default_group_name
 from cogitus.constants import DEFAULT_GROUP_NAME
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
@@ -38,7 +39,9 @@ class IdeaRepository:
         self._db = db
         self._tag_repo = tag_repo
         self._group_repo = group_repo
-        self._default_group_name = default_group_name
+        self._default_group_name = normalize_default_group_name(
+            default_group_name
+        )
 
     def create(
         self,
