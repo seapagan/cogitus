@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from cogitus.models.group import Group
     from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.tag_repo import TagRepository
+    from cogitus.search.query import FilterConnector
 
 
 class IdeaRepository:
@@ -227,7 +228,7 @@ class IdeaRepository:
     def _matching_pks_for_filters(
         self,
         filters: tuple[SearchFilter, ...],
-        connectors: tuple[str, ...],
+        connectors: tuple[FilterConnector, ...],
     ) -> set[int]:
         """Evaluate structured filters left-to-right with AND/OR connectors."""
         if not filters:
