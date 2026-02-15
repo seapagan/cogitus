@@ -70,3 +70,30 @@ def test_parse_quoted_filter_value() -> None:
     assert parsed.text is None
     assert [item.value for item in parsed.filters] == ["backend api"]
     assert parsed.connectors == ()
+
+
+def test_parse_consecutive_connectors_preserves_previous_as_text() -> None:
+    """A replaced pending connector should be retained as free text."""
+    parsed = parse_search_query("tag:python and or tag:api")
+
+    assert parsed.text == "and"
+    assert [item.value for item in parsed.filters] == ["python", "api"]
+    assert parsed.connectors == ("or",)
+
+
+def test_parse_pending_connector_before_text_token() -> None:
+    """Pending connector before plain text should degrade into text."""
+    parsed = parse_search_query("tag:python and trailing")
+
+    assert parsed.text == "and trailing"
+    assert [item.value for item in parsed.filters] == ["python"]
+    assert parsed.connectors == ()
+
+
+def test_parse_malformed_quotes_falls_back_to_split() -> None:
+    """Malformed quotes should use fallback tokenization."""
+    parsed = parse_search_query('"unterminated')
+
+    assert parsed.text == '"unterminated'
+    assert parsed.filters == ()
+    assert parsed.connectors == ()

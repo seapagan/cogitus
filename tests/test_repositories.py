@@ -376,6 +376,41 @@ class TestIdeaRepository:
 
         assert [idea.pk for idea in results] == [expected.pk]
 
+    def test_combine_match_sets_returns_empty_for_none_inputs(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Combining with no text/filter matches should yield an empty set."""
+        assert idea_repo._combine_match_sets(None, None) == set()
+
+    def test_matching_pks_for_text_empty_query_returns_empty_set(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Blank text query should return no direct text matches."""
+        assert idea_repo._matching_pks_for_text("   ") == set()
+
+    def test_matching_pks_for_filters_empty_filters_returns_empty_set(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """No structured filters should return an empty folded set."""
+        assert idea_repo._matching_pks_for_filters((), ()) == set()
+
+    def test_matching_pks_for_tag_missing_tag_returns_empty_set(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Unknown tag filter should return no matching idea PKs."""
+        assert idea_repo._matching_pks_for_tag("missing") == set()
+
+    def test_matching_pks_for_group_missing_group_returns_empty_set(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Unknown group filter should return no matching idea PKs."""
+        assert idea_repo._matching_pks_for_group("missing") == set()
+
 
 class TestIdeaCursorStateRepository:
     """Tests for IdeaCursorStateRepository."""

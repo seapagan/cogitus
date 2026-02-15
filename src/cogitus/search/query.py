@@ -47,8 +47,6 @@ def parse_search_query(raw_query: str) -> SearchQuery:
         if parsed_filter is not None:
             if filters:
                 connectors.append(pending_connector or "and")
-            elif pending_connector is not None:
-                text_tokens.append(pending_connector)
             filters.append(parsed_filter)
             pending_connector = None
             continue
