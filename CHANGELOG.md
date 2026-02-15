@@ -5,8 +5,12 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-
 ## [Unreleased](https://github.com/seapagan/cogitus/tree/HEAD)
+
+**New Features**
+
+- Add configurable default group setting ([#23](https://github.com/seapagan/cogitus/pull/23)) by [seapagan](https://github.com/seapagan)
+- Add contextual new-idea group mode and validation warning ([#22](https://github.com/seapagan/cogitus/pull/22)) by [seapagan](https://github.com/seapagan)
 
 **Refactoring**
 
