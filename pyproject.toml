@@ -33,9 +33,11 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/seapagan/cogitus"
-Issues = "https://github.com/seapagan/cogitus/issues"
-Changelog = "https://github.com/seapagan/cogitus/blob/main/CHANGELOG.md"
+"Homepage" = "https://cogitus.grantramsay.dev/"
+"Repository" = "https://github.com/seapagan/cogitus"
+"Pull Requests" = "https://github.com/seapagan/sqliter-py/pulls"
+"Issues" = "https://github.com/seapagan/cogitus/issues"
+"Changelog" = "https://github.com/seapagan/cogitus/blob/main/CHANGELOG.md"
 
 [project.scripts]
 cogitus = "cogitus.main:main"
