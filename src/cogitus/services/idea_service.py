@@ -12,6 +12,7 @@ from cogitus.repositories.idea_cursor_state_repo import (
 )
 from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.repositories.tag_repo import TagRepository
+from cogitus.search import parse_search_query
 
 if TYPE_CHECKING:
     from sqliter import SqliterDB
@@ -153,7 +154,12 @@ class IdeaService:
         Returns:
             Matching ideas, deduplicated and sorted by recency.
         """
-        return self._idea_repo.search(query)
+        return self.search_ideas_advanced(query)
+
+    def search_ideas_advanced(self, query: str) -> list[Idea]:
+        """Search ideas using parsed free-text and structured filters."""
+        parsed = parse_search_query(query)
+        return self._idea_repo.search_advanced(parsed)
 
     def list_tags(self) -> list[Tag]:
         """List all tags alphabetically.
@@ -250,7 +256,7 @@ class IdeaService:
         """Return ideas for grouped display based on query state."""
         if query_active:
             # query is guaranteed non-empty by query_active.
-            return self._idea_repo.search(query or "")
+            return self.search_ideas_advanced(query or "")
         return self._idea_repo.list_all()
 
     @staticmethod

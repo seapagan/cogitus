@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from cogitus.constants import DEFAULT_GROUP_NAME
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
+from cogitus.search import SearchFilter, SearchQuery, parse_search_query
 
 if TYPE_CHECKING:
     from sqliter import SqliterDB
@@ -158,92 +159,124 @@ class IdeaRepository:
         self._db.delete(Idea, pk)
 
     def search(self, query: str) -> list[Idea]:
-        """Search ideas across title, body, and tag names.
+        """Search ideas using raw query text compatibility API."""
+        return self.search_advanced(parse_search_query(query))
 
-        Uses LIKE-based filtering. Results are deduplicated and
-        sorted by updated_at descending.
-
-        Args:
-            query: The search string.
-
-        Returns:
-            List of matching ideas.
-        """
-        if not query.strip():
+    def search_advanced(self, query: SearchQuery) -> list[Idea]:
+        """Search ideas using parsed free text and structured filters."""
+        if query.text is None and not query.filters:
             return self.list_all()
 
-        seen: set[int] = set()
-        results: list[Idea] = []
-
-        # Search title
-        self._append_unique_ideas(
-            results,
-            seen,
-            self._db.select(Idea)
-            .select_related("group")
-            .prefetch_related("tags")
-            .filter(title__icontains=query)
-            .fetch_all(),
+        text_matches = (
+            self._matching_pks_for_text(query.text)
+            if query.text is not None
+            else None
         )
-
-        # Search body
-        self._append_unique_ideas(
-            results,
-            seen,
-            self._db.select(Idea)
-            .select_related("group")
-            .prefetch_related("tags")
-            .filter(body__icontains=query)
-            .fetch_all(),
+        filter_matches = (
+            self._matching_pks_for_filters(
+                query.filters,
+                query.connectors,
+            )
+            if query.filters
+            else None
         )
-
-        # Search via tag names
-        self._append_unique_ideas(
-            results,
-            seen,
-            self._fetch_tag_matched_ideas(query, seen),
-        )
-
-        results.sort(key=lambda i: i.updated_at, reverse=True)
-        return results
+        matched_pks = self._combine_match_sets(text_matches, filter_matches)
+        if not matched_pks:
+            return []
+        return self._fetch_ideas_by_pk(matched_pks)
 
     @staticmethod
-    def _append_unique_ideas(
-        results: list[Idea],
-        seen: set[int],
-        ideas: list[Idea],
-    ) -> None:
-        """Append ideas to results once, preserving first-seen order."""
-        for idea in ideas:
-            if idea.pk not in seen:
-                seen.add(idea.pk)
-                results.append(idea)
+    def _combine_match_sets(
+        text_matches: set[int] | None,
+        filter_matches: set[int] | None,
+    ) -> set[int]:
+        """Combine text and structured filter matches with intersection."""
+        if text_matches is None and filter_matches is None:
+            return set()
+        if text_matches is None:
+            return set(filter_matches or set())
+        if filter_matches is None:
+            return set(text_matches)
+        return text_matches & filter_matches
 
-    def _fetch_tag_matched_ideas(
-        self,
-        query: str,
-        seen: set[int],
-    ) -> list[Idea]:
-        """Fetch tag-matched ideas with tags/groups eagerly available."""
+    def _matching_pks_for_text(self, text_query: str) -> set[int]:
+        """Return idea primary keys matching text across title/body/tag."""
+        query = text_query.strip()
+        if not query:
+            return set()
+
+        matched_pks: set[int] = set()
+        for idea in (
+            self._db.select(Idea).filter(title__icontains=query).fetch_all()
+        ):
+            matched_pks.add(idea.pk)
+        for idea in (
+            self._db.select(Idea).filter(body__icontains=query).fetch_all()
+        ):
+            matched_pks.add(idea.pk)
+
         matching_tags = (
             self._db.select(Tag).filter(name__icontains=query).fetch_all()
         )
-        tag_idea_pks: set[int] = set()
         for tag in matching_tags:
             for idea in tag.ideas.fetch_all():  # type: ignore[attr-defined]
-                if idea.pk not in seen:
-                    tag_idea_pks.add(idea.pk)
+                matched_pks.add(idea.pk)
 
-        if not tag_idea_pks:
-            return []
+        return matched_pks
 
-        return (
+    def _matching_pks_for_filters(
+        self,
+        filters: tuple[SearchFilter, ...],
+        connectors: tuple[str, ...],
+    ) -> set[int]:
+        """Evaluate structured filters left-to-right with AND/OR connectors."""
+        if not filters:
+            return set()
+
+        folded = self._matching_pks_for_filter(filters[0])
+        for index in range(1, len(filters)):
+            connector = (
+                connectors[index - 1] if index - 1 < len(connectors) else "and"
+            )
+            next_matches = self._matching_pks_for_filter(filters[index])
+            if connector == "or":
+                folded |= next_matches
+            else:
+                folded &= next_matches
+        return folded
+
+    def _matching_pks_for_filter(self, search_filter: SearchFilter) -> set[int]:
+        """Return idea primary keys matching one structured filter."""
+        if search_filter.field == "tag":
+            return self._matching_pks_for_tag(search_filter.value)
+        return self._matching_pks_for_group(search_filter.value)
+
+    def _matching_pks_for_tag(self, tag_name: str) -> set[int]:
+        """Return idea primary keys for a single exact tag name."""
+        tag = self._tag_repo.find_by_name(tag_name)
+        if tag is None:
+            return set()
+        return {idea.pk for idea in tag.ideas.fetch_all()}  # type: ignore[attr-defined]
+
+    def _matching_pks_for_group(self, group_name: str) -> set[int]:
+        """Return idea primary keys for a single exact group name."""
+        group = self._group_repo.find_by_name(group_name)
+        if group is None:
+            return set()
+        matched = self._db.select(Idea).filter(group_id=group.pk).fetch_all()
+        return {idea.pk for idea in matched}
+
+    def _fetch_ideas_by_pk(self, idea_pks: set[int]) -> list[Idea]:
+        """Fetch idea models with relations for the given primary keys."""
+        ideas = (
             self._db.select(Idea)
             .select_related("group")
             .prefetch_related("tags")
-            .filter(pk__in=list(tag_idea_pks))
+            .filter(pk__in=list(idea_pks))
             .fetch_all()
         )
+        ideas.sort(key=lambda idea: idea.updated_at, reverse=True)
+        return ideas
 
     def list_for_group(self, group_pk: int) -> list[Idea]:
         """Return ideas for a specific group ordered by recency."""

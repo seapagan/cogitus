@@ -316,6 +316,66 @@ class TestIdeaRepository:
         assert [idea.pk for idea in results] == [created.pk]
         assert results[0].group.pk == source.pk
 
+    def test_search_structured_group_and_tag_filters(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Structured group/tag filters should intersect correctly."""
+        backend = group_repo.create("backend")
+        other = group_repo.create("other")
+        wanted = idea_repo.create(
+            "Wanted",
+            tag_names=["python"],
+            group_pk=backend.pk,
+        )
+        idea_repo.create("Wrong group", tag_names=["python"], group_pk=other.pk)
+        idea_repo.create("Wrong tag", tag_names=["rust"], group_pk=backend.pk)
+
+        results = idea_repo.search("group:backend and tag:python")
+
+        assert [idea.pk for idea in results] == [wanted.pk]
+
+    def test_search_structured_filters_support_or(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """OR connector should union structured filter result sets."""
+        first = idea_repo.create("First", tag_names=["python"])
+        second = idea_repo.create("Second", tag_names=["api"])
+        idea_repo.create("Third", tag_names=["rust"])
+
+        results = idea_repo.search("tag:python or tag:api")
+        found = {idea.pk for idea in results}
+
+        assert found == {first.pk, second.pk}
+
+    def test_search_structured_filters_left_to_right_evaluation(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Structured connectors should fold left-to-right."""
+        idea_repo.create("A", tag_names=["a"])
+        idea_repo.create("B", tag_names=["b"])
+        ac = idea_repo.create("AC", tag_names=["a", "c"])
+        bc = idea_repo.create("BC", tag_names=["b", "c"])
+
+        results = idea_repo.search("tag:a or tag:b and tag:c")
+
+        assert {idea.pk for idea in results} == {ac.pk, bc.pk}
+
+    def test_search_invalid_operator_fragments_degrade_to_text(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Invalid operator fragments should behave like plain text."""
+        expected = idea_repo.create("tag: marker")
+        idea_repo.create("ordinary")
+
+        results = idea_repo.search("tag:")
+
+        assert [idea.pk for idea in results] == [expected.pk]
+
 
 class TestIdeaCursorStateRepository:
     """Tests for IdeaCursorStateRepository."""
