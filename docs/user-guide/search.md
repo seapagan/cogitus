@@ -7,6 +7,7 @@ Search supports free text plus inline structured operators.
 - Free text still matches title/body/tag text.
 - `tag:<name>` filters by exact tag name.
 - `group:<name>` filters by exact group name.
+- Free text and structured filters are combined with an implicit `and`.
 - Multiple structured filters default to `and`.
 - You can use explicit `and` / `or` between structured filters.
 
