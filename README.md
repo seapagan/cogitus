@@ -75,12 +75,12 @@ Functionality available in the current MVP includes:
 - Arrange ideas into groups (with bulk idea move to the default group on group
   delete)
 - Tag ideas
-- Basic search (SQLite `LIKE`)
+- Advanced search with inline operators (`tag:`, `group:`, `and`, `or`)
 - View idea details
 - Copy & Paste support
 - CLI commands for scripting (`list`, `export`, `delete`)
 
-Search will initially be simple but structured to evolve into FTS5.
+Search still uses a `LIKE` backend today and is structured to evolve into FTS5.
 
 > [!NOTE]
 >
