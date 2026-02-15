@@ -644,6 +644,12 @@ async def test_main_screen_selection_and_search(
         search.assert_called_once_with("fir")
         selected_view.assert_called_once_with(first)
 
+        search.reset_mock()
+        screen.on_idea_list_panel_search_changed(
+            IdeaListPanel.SearchChanged("tag:python and group:backend")
+        )
+        search.assert_called_once_with("tag:python and group:backend")
+
         list_all = mocker.patch.object(
             screen._service,
             "list_ideas_grouped",

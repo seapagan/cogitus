@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from sqliter.exceptions import RecordInsertionError
+
+from cogitus.search import SearchFilter
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -315,6 +317,112 @@ class TestIdeaRepository:
 
         assert [idea.pk for idea in results] == [created.pk]
         assert results[0].group.pk == source.pk
+
+    def test_search_structured_group_and_tag_filters(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Structured group/tag filters should intersect correctly."""
+        backend = group_repo.create("backend")
+        other = group_repo.create("other")
+        wanted = idea_repo.create(
+            "Wanted",
+            tag_names=["python"],
+            group_pk=backend.pk,
+        )
+        idea_repo.create("Wrong group", tag_names=["python"], group_pk=other.pk)
+        idea_repo.create("Wrong tag", tag_names=["rust"], group_pk=backend.pk)
+
+        results = idea_repo.search("group:backend and tag:python")
+
+        assert [idea.pk for idea in results] == [wanted.pk]
+
+    def test_search_structured_filters_support_or(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """OR connector should union structured filter result sets."""
+        first = idea_repo.create("First", tag_names=["python"])
+        second = idea_repo.create("Second", tag_names=["api"])
+        idea_repo.create("Third", tag_names=["rust"])
+
+        results = idea_repo.search("tag:python or tag:api")
+        found = {idea.pk for idea in results}
+
+        assert found == {first.pk, second.pk}
+
+    def test_search_structured_filters_left_to_right_evaluation(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Structured connectors should fold left-to-right."""
+        idea_repo.create("A", tag_names=["a"])
+        idea_repo.create("B", tag_names=["b"])
+        ac = idea_repo.create("AC", tag_names=["a", "c"])
+        bc = idea_repo.create("BC", tag_names=["b", "c"])
+
+        results = idea_repo.search("tag:a or tag:b and tag:c")
+
+        assert {idea.pk for idea in results} == {ac.pk, bc.pk}
+
+    def test_search_invalid_operator_fragments_degrade_to_text(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Invalid operator fragments should behave like plain text."""
+        expected = idea_repo.create("tag: marker")
+        idea_repo.create("ordinary")
+
+        results = idea_repo.search("tag:")
+
+        assert [idea.pk for idea in results] == [expected.pk]
+
+    def test_combine_match_sets_returns_empty_for_none_inputs(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Combining with no text/filter matches should yield an empty set."""
+        assert idea_repo._combine_match_sets(None, None) == set()
+
+    def test_matching_pks_for_text_empty_query_returns_empty_set(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Blank text query should return no direct text matches."""
+        assert idea_repo._matching_pks_for_text("   ") == set()
+
+    def test_matching_pks_for_filters_empty_filters_returns_empty_set(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """No structured filters should return an empty folded set."""
+        assert idea_repo._matching_pks_for_filters((), ()) == set()
+
+    def test_matching_pks_for_tag_missing_tag_returns_empty_set(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Unknown tag filter should return no matching idea PKs."""
+        assert idea_repo._matching_pks_for_tag("missing") == set()
+
+    def test_matching_pks_for_group_missing_group_returns_empty_set(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Unknown group filter should return no matching idea PKs."""
+        assert idea_repo._matching_pks_for_group("missing") == set()
+
+    def test_matching_pks_for_filter_rejects_unsupported_field(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Unexpected filter fields should fail loudly."""
+        invalid_field: Any = "status"
+        invalid = SearchFilter(field=invalid_field, value="python")
+
+        with pytest.raises(ValueError, match="Unsupported filter field"):
+            idea_repo._matching_pks_for_filter(invalid)
 
 
 class TestIdeaCursorStateRepository:

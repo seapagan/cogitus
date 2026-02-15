@@ -198,6 +198,38 @@ class TestIdeaService:
         assert "backend" in names
         assert "empty-group" not in names
 
+    def test_list_ideas_grouped_filters_empty_groups_on_structured_query(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Structured query should also hide groups with no matches."""
+        backend = service.create_group("backend")
+        service.create_idea(
+            "Matching idea",
+            tags=["python"],
+            group_pk=backend.pk,
+        )
+        service.create_group("empty-group")
+
+        grouped = service.list_ideas_grouped("tag:python")
+        names = [group.name for group, _ in grouped]
+
+        assert "backend" in names
+        assert "empty-group" not in names
+
+    def test_search_ideas_advanced_aliases_search_behavior(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """search_ideas should delegate to advanced parsed search."""
+        service.create_idea("Python backend", tags=["python"])
+        service.create_idea("Rust", tags=["rust"])
+
+        basic = service.search_ideas("tag:python")
+        advanced = service.search_ideas_advanced("tag:python")
+
+        assert [idea.pk for idea in basic] == [idea.pk for idea in advanced]
+
     def test_has_ideas_in_group(self, service: IdeaService) -> None:
         """Group occupancy check should report true/false correctly."""
         backend = service.create_group("backend")

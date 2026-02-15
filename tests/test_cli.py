@@ -104,6 +104,43 @@ class TestListCommand:
             assert "Second idea" in result.output
             assert "First idea" not in result.output
 
+    def test_list_with_tag_operator_query(
+        self,
+        db: SqliterDB,
+        cli_ideas: list[Idea],
+    ) -> None:
+        """List query should support structured tag operators."""
+        with patch("cogitus.cli.commands.get_db", return_value=db):
+            result = runner.invoke(app, ["list", "--query", "tag:python"])
+            assert result.exit_code == 0
+            assert "First idea" in result.output
+            assert "Second idea" not in result.output
+
+    def test_list_with_group_and_tag_query(
+        self,
+        db: SqliterDB,
+        service: IdeaService,
+    ) -> None:
+        """List query should support combined group and tag operators."""
+        backend = service.create_group("backend")
+        service.create_idea(
+            "Backend python",
+            tags=["python"],
+            group_pk=backend.pk,
+        )
+        service.create_idea("Backend rust", tags=["rust"], group_pk=backend.pk)
+        service.create_idea("Default python", tags=["python"])
+
+        with patch("cogitus.cli.commands.get_db", return_value=db):
+            result = runner.invoke(
+                app,
+                ["list", "--query", "group:backend and tag:python"],
+            )
+            assert result.exit_code == 0
+            assert "Backend python" in result.output
+            assert "Backend rust" not in result.output
+            assert "Default python" not in result.output
+
     def test_list_with_limit(
         self,
         db: SqliterDB,

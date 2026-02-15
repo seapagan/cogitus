@@ -90,7 +90,7 @@ class IdeaListPanel(Vertical):
     def compose(self) -> ComposeResult:
         """Compose the idea list panel."""
         yield Input(
-            placeholder="Search ideas... (/ to focus)",
+            placeholder="Search (text, tag:foo, group:bar)",
             id="search-input",
         )
         yield Tree[IdeaTreeNodeData](

@@ -17,6 +17,8 @@ cogitus list                      # Simple format (default)
 cogitus list --format json        # JSON array
 cogitus list --format table       # Rich table
 cogitus list --query "python"     # Filter by search
+cogitus list --query "tag:python" # Filter by tag
+cogitus list --query "group:backend and tag:api"
 cogitus list --limit 10           # Limit results
 ```
 
