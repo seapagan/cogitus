@@ -16,11 +16,8 @@ None
 
 ## Search and Filtering
 
-- add tag filtering and combined query UX.
 - add SQLite FTS5 search backend.
 - improve result ranking/snippet presentation.
-- define and lock a stable search service interface so `LIKE` can be swapped
-  for FTS5 without UI contract changes.
 - add compatibility tests to ensure UI/search call contracts stay unchanged
   when moving from `LIKE` to FTS5.
 
