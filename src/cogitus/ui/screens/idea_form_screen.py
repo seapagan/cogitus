@@ -46,6 +46,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         service: IdeaService,
         idea: Idea | None = None,
         *,
+        initial_group_pk: int | None = None,
         edit_body_cursor_mode: EditBodyCursorMode = (
             DEFAULT_EDIT_BODY_CURSOR_MODE
         ),
@@ -55,11 +56,13 @@ class IdeaFormScreen(ModalScreen[int | None]):
         Args:
             service: The IdeaService instance.
             idea: Existing idea to edit, or None for new.
+            initial_group_pk: Initial group pk for new-idea mode.
             edit_body_cursor_mode: Cursor mode for edit form body.
         """
         super().__init__()
         self._service = service
         self._idea = idea
+        self._initial_group_pk = initial_group_pk
         self._edit_body_cursor_mode = edit_body_cursor_mode
 
     def compose(self) -> ComposeResult:
@@ -205,10 +208,19 @@ class IdeaFormScreen(ModalScreen[int | None]):
         return [(group.name, group.pk) for group in groups]
 
     def _get_existing_group_pk(self) -> int:
-        """Return current idea group pk for edit mode."""
-        if self._idea is None:
-            return self._get_default_group_pk()
-        return self._idea.group.pk
+        """Return selected group pk for edit mode or create defaults."""
+        if self._idea is not None:
+            return self._idea.group.pk
+        if self._initial_group_pk is not None and self._is_existing_group_pk(
+            self._initial_group_pk
+        ):
+            return self._initial_group_pk
+        return self._get_default_group_pk()
+
+    def _is_existing_group_pk(self, group_pk: int) -> bool:
+        """Return whether the given group pk exists."""
+        groups = self._service.list_groups()
+        return any(group.pk == group_pk for group in groups)
 
     def _get_default_group_pk(self) -> int:
         """Return default group pk (fallback to first available group)."""

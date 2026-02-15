@@ -11,7 +11,7 @@ from textual.containers import Container
 from textual.widgets import Button, Input, Select, TextArea, Tree
 
 from cogitus.app import CogitusApp
-from cogitus.config import EditBodyCursorMode
+from cogitus.config import EditBodyCursorMode, NewIdeaGroupMode
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
     GroupDeleteReassignScreen,
@@ -58,9 +58,11 @@ class _FakeSettings:
         self,
         last_viewed_idea_pk: int = 0,
         edit_body_cursor_mode: str = "remember",
+        new_idea_group_mode: str = "contextual",
     ) -> None:
         self.last_viewed_idea_pk = last_viewed_idea_pk
         self.edit_body_cursor_mode = edit_body_cursor_mode
+        self.new_idea_group_mode = new_idea_group_mode
         self.saved = False
 
     def save(self) -> None:
@@ -392,6 +394,25 @@ def test_idea_form_default_group_fallback(
     assert screen._get_default_group_pk() == 99
 
 
+def test_idea_form_create_mode_uses_initial_group_pk(
+    service: IdeaService,
+) -> None:
+    """Create mode should use initial group pk when it exists."""
+    backend = service.create_group("backend")
+    screen = IdeaFormScreen(service, initial_group_pk=backend.pk)
+
+    assert screen._get_existing_group_pk() == backend.pk
+
+
+def test_idea_form_create_mode_invalid_initial_group_falls_back_default(
+    service: IdeaService,
+) -> None:
+    """Invalid initial group pk should fallback to default group logic."""
+    screen = IdeaFormScreen(service, initial_group_pk=999_999)
+
+    assert screen._get_existing_group_pk() == screen._get_default_group_pk()
+
+
 def test_idea_form_initial_edit_cursor_index_for_new_mode(
     service: IdeaService,
 ) -> None:
@@ -697,6 +718,76 @@ async def test_main_screen_create_edit_delete_and_form_result(
         refresh.assert_not_called()
         screen._on_form_dismiss(first.pk)
         refresh.assert_called_once_with(select_pk=first.pk)
+
+
+@pytest.mark.asyncio
+async def test_main_screen_new_idea_uses_contextual_group_selection(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """New idea should seed group from selected group or selected idea."""
+    backend = service.create_group("backend")
+    idea = service.create_idea("Grouped", group_pk=backend.pk)
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        push = mocker.patch.object(app, "push_screen")
+        selected_group = mocker.patch.object(panel, "get_selected_group_pk")
+        selected_idea = mocker.patch.object(panel, "get_selected_idea")
+
+        selected_group.return_value = backend.pk
+        selected_idea.return_value = None
+        screen.action_new_idea()
+        form = push.call_args.args[0]
+        assert isinstance(form, IdeaFormScreen)
+        assert form._initial_group_pk == backend.pk
+
+        push.reset_mock()
+        selected_group.return_value = None
+        selected_idea.return_value = idea
+        screen.action_new_idea()
+        form = push.call_args.args[0]
+        assert isinstance(form, IdeaFormScreen)
+        assert form._initial_group_pk == backend.pk
+
+        push.reset_mock()
+        selected_group.return_value = None
+        selected_idea.return_value = None
+        screen.action_new_idea()
+        form = push.call_args.args[0]
+        assert isinstance(form, IdeaFormScreen)
+        assert form._initial_group_pk is None
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_new_idea_default_group_mode_ignores_context(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Default-group mode should ignore contextual selection."""
+    backend = service.create_group("backend")
+    idea = service.create_idea("Grouped", group_pk=backend.pk)
+    screen = MainScreen(
+        service,
+        new_idea_group_mode=(NewIdeaGroupMode.DEFAULT_GROUP),
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        push = mocker.patch.object(app, "push_screen")
+        mocker.patch.object(panel, "get_selected_group_pk", return_value=1)
+        mocker.patch.object(panel, "get_selected_idea", return_value=idea)
+
+        screen.action_new_idea()
+
+        form = push.call_args.args[0]
+        assert isinstance(form, IdeaFormScreen)
+        assert form._initial_group_pk is None
+        await pilot.pause()
 
 
 @pytest.mark.asyncio
@@ -1023,12 +1114,57 @@ async def test_cogitus_app_mount_and_exit(db: SqliterDB) -> None:
 
     async with app.run_test() as pilot:
         assert isinstance(app.screen, MainScreen)
+        assert app.screen._new_idea_group_mode == (NewIdeaGroupMode.CONTEXTUAL)
         app._on_selected_idea_changed(7)
         app.exit()
         await pilot.pause()
 
     assert settings.last_viewed_idea_pk == 7
     assert settings.saved is True
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_mount_uses_configured_new_idea_group_mode(
+    db: SqliterDB,
+) -> None:
+    """Cogitus app should pass configured new-idea group mode to screen."""
+    settings = _FakeSettings(
+        new_idea_group_mode=(NewIdeaGroupMode.DEFAULT_GROUP.value)
+    )
+    app = CogitusApp(db=db, settings=settings)
+
+    async with app.run_test() as pilot:
+        assert isinstance(app.screen, MainScreen)
+        assert app.screen._new_idea_group_mode == (
+            NewIdeaGroupMode.DEFAULT_GROUP
+        )
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_mount_warns_on_invalid_new_idea_group_mode(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Invalid new-idea mode should notify and fallback to contextual."""
+    settings = _FakeSettings(new_idea_group_mode="broken-mode")
+    app = CogitusApp(db=db, settings=settings)
+    notify = mocker.patch.object(app, "notify")
+
+    async with app.run_test() as pilot:
+        assert isinstance(app.screen, MainScreen)
+        assert app.screen._new_idea_group_mode == (NewIdeaGroupMode.CONTEXTUAL)
+        valid_values = ", ".join(f"'{mode.value}'" for mode in NewIdeaGroupMode)
+        notify.assert_called_once_with(
+            "Invalid config "
+            "'new_idea_group_mode=broken-mode'; "
+            "using 'contextual'. "
+            f"Valid values: {valid_values}.",
+            severity="warning",
+        )
+        app.exit()
+        await pilot.pause()
 
 
 def test_cogitus_app_init_uses_db_path(
