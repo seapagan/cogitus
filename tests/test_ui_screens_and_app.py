@@ -1148,12 +1148,14 @@ async def test_cogitus_app_mount_uses_configured_new_idea_group_mode(
 async def test_cogitus_app_mount_uses_configured_default_group_name(
     db: SqliterDB,
 ) -> None:
-    """Cogitus app should pass configured default group name to service."""
+    """Cogitus app should reconcile injected DB with configured default."""
     settings = _FakeSettings(default_group_name="Inbox")
     app = CogitusApp(db=db, settings=settings)
 
     async with app.run_test() as pilot:
         assert app._service.default_group_name == "inbox"
+        group_names = {group.name for group in app._service.list_groups()}
+        assert "inbox" in group_names
         app.exit()
         await pilot.pause()
 

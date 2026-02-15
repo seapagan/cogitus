@@ -15,6 +15,7 @@ from cogitus.config import (
     normalize_new_idea_group_mode,
 )
 from cogitus.db import get_db
+from cogitus.repositories.group_repo import GroupRepository
 from cogitus.services.idea_service import IdeaService
 from cogitus.ui.screens.main_screen import MainScreen
 
@@ -84,6 +85,7 @@ class CogitusApp(App[None]):
 
         if db is not None:
             self._db = db
+            GroupRepository(self._db).get_or_create(self._default_group_name)
         elif db_path is not None:
             self._db = get_db(
                 db_path,
