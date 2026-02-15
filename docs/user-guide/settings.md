@@ -42,6 +42,32 @@ Example:
 edit_body_cursor_mode="start"
 ```
 
+### `new_idea_group_mode`
+
+Controls which group is preselected when opening the **New Idea** form.
+
+- Type: string
+- Default: `contextual`
+
+Valid options are:
+
+- `"contextual"`
+  - Uses the current selection in the left tree pane.
+  - If a group is selected, that group is used.
+  - If an idea is selected, that idea's group is used.
+  - If nothing usable is selected, falls back to default-group behavior.
+- `"default_group"`
+  - Uses default-group behavior directly.
+
+If the configured value is invalid, Cogitus falls back to `"contextual"`
+and shows a warning toast at startup.
+
+Example:
+
+```toml
+new_idea_group_mode="default_group"
+```
+
 ## Notes
 
 - Settings are saved on app exit.
