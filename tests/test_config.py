@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 from cogitus.config import (
     AppSettings,
     EditBodyCursorMode,
-    NewIdeaGroupPreselectMode,
+    NewIdeaGroupMode,
     get_settings,
     normalize_edit_body_cursor_mode,
-    normalize_new_idea_group_preselect_mode,
+    normalize_new_idea_group_mode,
 )
 
 if TYPE_CHECKING:
@@ -78,7 +78,7 @@ def test_settings_persist_edit_body_cursor_mode(
     assert loaded.edit_body_cursor_mode == EditBodyCursorMode.END.value
 
 
-def test_settings_persist_new_idea_group_preselect_mode(
+def test_settings_persist_new_idea_group_mode(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -90,17 +90,13 @@ def test_settings_persist_new_idea_group_preselect_mode(
     AppSettings._instances.clear()
 
     settings = get_settings()
-    settings.new_idea_group_preselect_mode = (
-        NewIdeaGroupPreselectMode.DEFAULT_GROUP.value
-    )
+    settings.new_idea_group_mode = NewIdeaGroupMode.DEFAULT_GROUP.value
     settings.save()
 
     AppSettings._instances.clear()
     loaded = get_settings()
 
-    assert loaded.new_idea_group_preselect_mode == (
-        NewIdeaGroupPreselectMode.DEFAULT_GROUP.value
-    )
+    assert loaded.new_idea_group_mode == NewIdeaGroupMode.DEFAULT_GROUP.value
 
 
 def test_normalize_edit_body_cursor_mode_invalid_defaults_to_remember() -> None:
@@ -112,6 +108,6 @@ def test_normalize_edit_body_cursor_mode_invalid_defaults_to_remember() -> None:
 
 def test_normalize_new_idea_group_mode_invalid_defaults_to_contextual() -> None:
     """Invalid new-idea group mode should fallback to contextual."""
-    assert normalize_new_idea_group_preselect_mode("legacy") == (
-        NewIdeaGroupPreselectMode.CONTEXTUAL
+    assert normalize_new_idea_group_mode("legacy") == (
+        NewIdeaGroupMode.CONTEXTUAL
     )

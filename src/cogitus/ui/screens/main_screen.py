@@ -10,9 +10,9 @@ from textual.widgets import Footer, Header, Input, Markdown, Tree
 
 from cogitus.config import (
     DEFAULT_EDIT_BODY_CURSOR_MODE,
-    DEFAULT_NEW_IDEA_GROUP_PRESELECT_MODE,
+    DEFAULT_NEW_IDEA_GROUP_MODE,
     EditBodyCursorMode,
-    NewIdeaGroupPreselectMode,
+    NewIdeaGroupMode,
 )
 from cogitus.ui.clipboard import copy_to_clipboard
 from cogitus.ui.screens.idea_form_screen import (
@@ -86,9 +86,7 @@ class MainScreen(Screen[None]):
         edit_body_cursor_mode: EditBodyCursorMode = (
             DEFAULT_EDIT_BODY_CURSOR_MODE
         ),
-        new_idea_group_preselect_mode: NewIdeaGroupPreselectMode = (
-            DEFAULT_NEW_IDEA_GROUP_PRESELECT_MODE
-        ),
+        new_idea_group_mode: NewIdeaGroupMode = (DEFAULT_NEW_IDEA_GROUP_MODE),
     ) -> None:
         """Initialize with the idea service.
 
@@ -97,14 +95,14 @@ class MainScreen(Screen[None]):
             initial_select_pk: Idea primary key to select on first load.
             on_selected_idea_changed: Callback for selected idea changes.
             edit_body_cursor_mode: Edit form body cursor mode.
-            new_idea_group_preselect_mode: New idea group preselection mode.
+            new_idea_group_mode: New idea group selection mode.
         """
         super().__init__()
         self._service = service
         self._initial_select_pk = initial_select_pk
         self._on_selected_idea_changed = on_selected_idea_changed
         self._edit_body_cursor_mode = edit_body_cursor_mode
-        self._new_idea_group_preselect_mode = new_idea_group_preselect_mode
+        self._new_idea_group_mode = new_idea_group_mode
         self._selected_idea_pk: int | None = None
         self._active_pane: str = "list"
         self._focus_before_search: str = "list"
@@ -177,10 +175,7 @@ class MainScreen(Screen[None]):
     def action_new_idea(self) -> None:
         """Open the new idea form."""
         initial_group_pk = None
-        if (
-            self._new_idea_group_preselect_mode
-            == NewIdeaGroupPreselectMode.CONTEXTUAL
-        ):
+        if self._new_idea_group_mode == NewIdeaGroupMode.CONTEXTUAL:
             initial_group_pk = self._get_contextual_new_idea_group_pk()
         self.app.push_screen(
             IdeaFormScreen(

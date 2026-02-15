@@ -21,17 +21,17 @@ VALID_EDIT_BODY_CURSOR_MODES: tuple[str, ...] = tuple(
 DEFAULT_EDIT_BODY_CURSOR_MODE = EditBodyCursorMode.REMEMBER
 
 
-class NewIdeaGroupPreselectMode(str, Enum):
-    """Supported group preselection modes for the new idea form."""
+class NewIdeaGroupMode(str, Enum):
+    """Supported group selection modes for the new idea form."""
 
     CONTEXTUAL = "contextual"
     DEFAULT_GROUP = "default_group"
 
 
-VALID_NEW_IDEA_GROUP_PRESELECT_MODES: tuple[str, ...] = tuple(
-    mode.value for mode in NewIdeaGroupPreselectMode
+VALID_NEW_IDEA_GROUP_MODES: tuple[str, ...] = tuple(
+    mode.value for mode in NewIdeaGroupMode
 )
-DEFAULT_NEW_IDEA_GROUP_PRESELECT_MODE = NewIdeaGroupPreselectMode.CONTEXTUAL
+DEFAULT_NEW_IDEA_GROUP_MODE = NewIdeaGroupMode.CONTEXTUAL
 
 
 class AppSettings(TOMLSettings):
@@ -40,9 +40,7 @@ class AppSettings(TOMLSettings):
     # 0 means "no last-selected idea yet".
     last_viewed_idea_pk: int = 0
     edit_body_cursor_mode: str = DEFAULT_EDIT_BODY_CURSOR_MODE.value
-    new_idea_group_preselect_mode: str = (
-        DEFAULT_NEW_IDEA_GROUP_PRESELECT_MODE.value
-    )
+    new_idea_group_mode: str = DEFAULT_NEW_IDEA_GROUP_MODE.value
 
 
 def normalize_edit_body_cursor_mode(mode: str) -> EditBodyCursorMode:
@@ -52,13 +50,13 @@ def normalize_edit_body_cursor_mode(mode: str) -> EditBodyCursorMode:
     return DEFAULT_EDIT_BODY_CURSOR_MODE
 
 
-def normalize_new_idea_group_preselect_mode(
+def normalize_new_idea_group_mode(
     mode: str,
-) -> NewIdeaGroupPreselectMode:
+) -> NewIdeaGroupMode:
     """Normalize persisted new-idea group mode to enum with safe default."""
-    if mode in VALID_NEW_IDEA_GROUP_PRESELECT_MODES:
-        return NewIdeaGroupPreselectMode(mode)
-    return DEFAULT_NEW_IDEA_GROUP_PRESELECT_MODE
+    if mode in VALID_NEW_IDEA_GROUP_MODES:
+        return NewIdeaGroupMode(mode)
+    return DEFAULT_NEW_IDEA_GROUP_MODE
 
 
 def get_settings() -> AppSettings:

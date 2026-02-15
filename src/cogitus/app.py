@@ -10,7 +10,7 @@ from textual.app import App
 from cogitus.config import (
     get_settings,
     normalize_edit_body_cursor_mode,
-    normalize_new_idea_group_preselect_mode,
+    normalize_new_idea_group_mode,
 )
 from cogitus.db import get_db
 from cogitus.services.idea_service import IdeaService
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
         last_viewed_idea_pk: int
         edit_body_cursor_mode: str
-        new_idea_group_preselect_mode: str
+        new_idea_group_mode: str
 
         def save(self) -> None:
             """Persist settings."""
@@ -60,16 +60,13 @@ class CogitusApp(App[None]):
         self._edit_body_cursor_mode = normalize_edit_body_cursor_mode(
             self._settings.edit_body_cursor_mode
         )
-        configured_new_idea_mode = self._settings.new_idea_group_preselect_mode
-        self._configured_new_idea_group_preselect_mode = (
+        configured_new_idea_mode = self._settings.new_idea_group_mode
+        self._configured_new_idea_group_mode = configured_new_idea_mode
+        self._new_idea_group_mode = normalize_new_idea_group_mode(
             configured_new_idea_mode
         )
-        self._new_idea_group_preselect_mode = (
-            normalize_new_idea_group_preselect_mode(configured_new_idea_mode)
-        )
-        self._invalid_new_idea_group_preselect_mode = (
-            configured_new_idea_mode
-            != self._new_idea_group_preselect_mode.value
+        self._invalid_new_idea_group_mode = (
+            configured_new_idea_mode != self._new_idea_group_mode.value
         )
         last_viewed = self._settings.last_viewed_idea_pk
         self._last_viewed_idea_pk = last_viewed if last_viewed > 0 else None
@@ -90,16 +87,14 @@ class CogitusApp(App[None]):
                 initial_select_pk=self._last_viewed_idea_pk,
                 on_selected_idea_changed=self._on_selected_idea_changed,
                 edit_body_cursor_mode=self._edit_body_cursor_mode,
-                new_idea_group_preselect_mode=(
-                    self._new_idea_group_preselect_mode
-                ),
+                new_idea_group_mode=self._new_idea_group_mode,
             )
         )
-        if self._invalid_new_idea_group_preselect_mode:
+        if self._invalid_new_idea_group_mode:
             self.notify(
                 "Invalid config "
-                "'new_idea_group_preselect_mode="
-                f"{self._configured_new_idea_group_preselect_mode}'; "
+                "'new_idea_group_mode="
+                f"{self._configured_new_idea_group_mode}'; "
                 "using 'contextual'.",
                 severity="warning",
             )

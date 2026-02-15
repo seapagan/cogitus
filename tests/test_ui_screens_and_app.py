@@ -11,7 +11,7 @@ from textual.containers import Container
 from textual.widgets import Button, Input, Select, TextArea, Tree
 
 from cogitus.app import CogitusApp
-from cogitus.config import EditBodyCursorMode, NewIdeaGroupPreselectMode
+from cogitus.config import EditBodyCursorMode, NewIdeaGroupMode
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
     GroupDeleteReassignScreen,
@@ -58,11 +58,11 @@ class _FakeSettings:
         self,
         last_viewed_idea_pk: int = 0,
         edit_body_cursor_mode: str = "remember",
-        new_idea_group_preselect_mode: str = "contextual",
+        new_idea_group_mode: str = "contextual",
     ) -> None:
         self.last_viewed_idea_pk = last_viewed_idea_pk
         self.edit_body_cursor_mode = edit_body_cursor_mode
-        self.new_idea_group_preselect_mode = new_idea_group_preselect_mode
+        self.new_idea_group_mode = new_idea_group_mode
         self.saved = False
 
     def save(self) -> None:
@@ -772,7 +772,7 @@ async def test_main_screen_new_idea_default_group_mode_ignores_context(
     idea = service.create_idea("Grouped", group_pk=backend.pk)
     screen = MainScreen(
         service,
-        new_idea_group_preselect_mode=(NewIdeaGroupPreselectMode.DEFAULT_GROUP),
+        new_idea_group_mode=(NewIdeaGroupMode.DEFAULT_GROUP),
     )
     app = _SingleScreenApp(screen)
 
@@ -1114,9 +1114,7 @@ async def test_cogitus_app_mount_and_exit(db: SqliterDB) -> None:
 
     async with app.run_test() as pilot:
         assert isinstance(app.screen, MainScreen)
-        assert app.screen._new_idea_group_preselect_mode == (
-            NewIdeaGroupPreselectMode.CONTEXTUAL
-        )
+        assert app.screen._new_idea_group_mode == (NewIdeaGroupMode.CONTEXTUAL)
         app._on_selected_idea_changed(7)
         app.exit()
         await pilot.pause()
@@ -1131,16 +1129,14 @@ async def test_cogitus_app_mount_uses_configured_new_idea_group_mode(
 ) -> None:
     """Cogitus app should pass configured new-idea group mode to screen."""
     settings = _FakeSettings(
-        new_idea_group_preselect_mode=(
-            NewIdeaGroupPreselectMode.DEFAULT_GROUP.value
-        )
+        new_idea_group_mode=(NewIdeaGroupMode.DEFAULT_GROUP.value)
     )
     app = CogitusApp(db=db, settings=settings)
 
     async with app.run_test() as pilot:
         assert isinstance(app.screen, MainScreen)
-        assert app.screen._new_idea_group_preselect_mode == (
-            NewIdeaGroupPreselectMode.DEFAULT_GROUP
+        assert app.screen._new_idea_group_mode == (
+            NewIdeaGroupMode.DEFAULT_GROUP
         )
         app.exit()
         await pilot.pause()
@@ -1152,18 +1148,16 @@ async def test_cogitus_app_mount_warns_on_invalid_new_idea_group_mode(
     mocker: MockerFixture,
 ) -> None:
     """Invalid new-idea mode should notify and fallback to contextual."""
-    settings = _FakeSettings(new_idea_group_preselect_mode="broken-mode")
+    settings = _FakeSettings(new_idea_group_mode="broken-mode")
     app = CogitusApp(db=db, settings=settings)
     notify = mocker.patch.object(app, "notify")
 
     async with app.run_test() as pilot:
         assert isinstance(app.screen, MainScreen)
-        assert app.screen._new_idea_group_preselect_mode == (
-            NewIdeaGroupPreselectMode.CONTEXTUAL
-        )
+        assert app.screen._new_idea_group_mode == (NewIdeaGroupMode.CONTEXTUAL)
         notify.assert_called_once_with(
             "Invalid config "
-            "'new_idea_group_preselect_mode=broken-mode'; "
+            "'new_idea_group_mode=broken-mode'; "
             "using 'contextual'.",
             severity="warning",
         )
