@@ -29,4 +29,5 @@ Search supports free text plus inline structured operators.
 
 - Search is case-insensitive in typical SQLite configurations.
 - Invalid operator fragments like `tag:` are treated as plain text.
+- `and` / `or` between structured filters are evaluated left-to-right.
 - Search does not support parentheses or `not` yet.
