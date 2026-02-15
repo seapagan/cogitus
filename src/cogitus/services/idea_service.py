@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from cogitus.config import normalize_default_group_name
-from cogitus.constants import DEFAULT_GROUP_NAME as SHARED_DEFAULT_GROUP_NAME
+from cogitus.constants import DEFAULT_GROUP_NAME
 from cogitus.repositories.group_repo import GroupRepository
 from cogitus.repositories.idea_cursor_state_repo import (
     IdeaCursorStateRepository,
@@ -28,13 +28,11 @@ class IdeaService:
     Handles tag normalization (lowercase, strip, deduplicate).
     """
 
-    DEFAULT_GROUP_NAME = SHARED_DEFAULT_GROUP_NAME
-
     def __init__(
         self,
         db: SqliterDB,
         *,
-        default_group_name: str = SHARED_DEFAULT_GROUP_NAME,
+        default_group_name: str = DEFAULT_GROUP_NAME,
     ) -> None:
         """Initialize with a database connection.
 
