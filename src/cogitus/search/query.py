@@ -8,6 +8,7 @@ from typing import Literal
 
 FilterField = Literal["tag", "group"]
 FilterConnector = Literal["and", "or"]
+_SUPPORTED_FIELDS: tuple[FilterField, ...] = ("tag", "group")
 
 
 @dataclass(frozen=True)
@@ -85,7 +86,7 @@ def _tokenize(query: str) -> list[str]:
 
 def _parse_filter(token: str) -> SearchFilter | None:
     """Return parsed filter for valid tokens, else None."""
-    for field in ("tag", "group"):
+    for field in _SUPPORTED_FIELDS:
         prefix = f"{field}:"
         if token.lower().startswith(prefix):
             value = token[len(prefix) :].strip().lower()
