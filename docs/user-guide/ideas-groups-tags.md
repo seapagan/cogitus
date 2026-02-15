@@ -15,7 +15,11 @@ An idea is the core record in Cogitus and contains:
 - Ideas are displayed in the left tree by group.
 - New groups can be created with `g`.
 - Deleting a group uses `G` (Shift+g).
-- Default group cannot be deleted.
+- The configured default group cannot be deleted.
+
+!!! note
+    The default group name is configurable with `default_group_name`
+    in `config.toml` (default: `"default"`).
 
 !!! note
     New idea group preselection is configurable via

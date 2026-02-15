@@ -34,6 +34,16 @@ def test_get_db_memory_creates_tables() -> None:
         db.close()
 
 
+def test_get_db_memory_creates_configured_default_group() -> None:
+    """In-memory DB should create configured default group."""
+    db = get_db(memory=True, default_group_name="Inbox")
+    try:
+        group = db.select(Group).filter(name="inbox").fetch_one()
+        assert group is not None
+    finally:
+        db.close()
+
+
 def test_get_db_file_path_creates_parent(tmp_path: Path) -> None:
     """File database path should create its parent directory automatically."""
     db_file = tmp_path / "nested" / "cogitus.db"
@@ -115,6 +125,47 @@ def test_get_db_backfills_null_group_id_for_existing_column(
     try:
         migrated_default = (
             migrated.select(Group).filter(name="default").fetch_one()
+        )
+        assert migrated_default is not None
+        ideas = migrated.select(Idea).fetch_all()
+        assert len(ideas) == 1
+        assert ideas[0].group.pk == migrated_default.pk
+    finally:
+        migrated.close()
+
+
+def test_get_db_backfills_legacy_ideas_to_configured_default_group(
+    tmp_path: Path,
+) -> None:
+    """Legacy rows should be repaired into configured fallback group."""
+    db_file = tmp_path / "legacy-custom-default" / "cogitus.db"
+    db_file.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_file))
+    try:
+        conn.execute(
+            """
+            CREATE TABLE ideas (
+                pk INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                title TEXT NOT NULL,
+                body TEXT NOT NULL DEFAULT '',
+                group_id INTEGER
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO ideas (title, body, group_id) VALUES (?, ?, ?)",
+            ("Legacy NULL group", "", None),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    migrated = get_db(str(db_file), default_group_name="inbox")
+    try:
+        migrated_default = (
+            migrated.select(Group).filter(name="inbox").fetch_one()
         )
         assert migrated_default is not None
         ideas = migrated.select(Idea).fetch_all()

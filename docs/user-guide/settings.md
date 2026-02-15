@@ -68,6 +68,28 @@ Example:
 new_idea_group_mode="default_group"
 ```
 
+### `default_group_name`
+
+Controls the canonical fallback group name used when no explicit group is
+selected.
+
+- Type: string
+- Default: `default`
+
+Behavior:
+
+- Value is normalized to lowercase and trimmed.
+- Empty values are treated as invalid and fall back to `default`.
+- Cogitus ensures this group exists at startup.
+- This configured group is treated as the protected default group and cannot
+  be deleted.
+
+Example:
+
+```toml
+default_group_name="inbox"
+```
+
 ## Notes
 
 - Settings are saved on app exit.

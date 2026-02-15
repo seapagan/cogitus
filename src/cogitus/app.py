@@ -10,10 +10,12 @@ from textual.app import App
 from cogitus.config import (
     VALID_NEW_IDEA_GROUP_MODES,
     get_settings,
+    normalize_default_group_name,
     normalize_edit_body_cursor_mode,
     normalize_new_idea_group_mode,
 )
 from cogitus.db import get_db
+from cogitus.repositories.group_repo import GroupRepository
 from cogitus.services.idea_service import IdeaService
 from cogitus.ui.screens.main_screen import MainScreen
 
@@ -29,6 +31,7 @@ if TYPE_CHECKING:
         last_viewed_idea_pk: int
         edit_body_cursor_mode: str
         new_idea_group_mode: str
+        default_group_name: str
 
         def save(self) -> None:
             """Persist settings."""
@@ -66,19 +69,34 @@ class CogitusApp(App[None]):
         self._new_idea_group_mode = normalize_new_idea_group_mode(
             configured_new_idea_mode
         )
+        configured_default_group_name = self._settings.default_group_name
+        self._configured_default_group_name = configured_default_group_name
+        self._default_group_name = normalize_default_group_name(
+            configured_default_group_name
+        )
         self._invalid_new_idea_group_mode = (
             configured_new_idea_mode != self._new_idea_group_mode.value
+        )
+        self._invalid_default_group_name = (
+            not configured_default_group_name.strip()
         )
         last_viewed = self._settings.last_viewed_idea_pk
         self._last_viewed_idea_pk = last_viewed if last_viewed > 0 else None
 
         if db is not None:
             self._db = db
+            GroupRepository(self._db).get_or_create(self._default_group_name)
         elif db_path is not None:
-            self._db = get_db(db_path)
+            self._db = get_db(
+                db_path,
+                default_group_name=self._default_group_name,
+            )
         else:
-            self._db = get_db()
-        self._service = IdeaService(self._db)
+            self._db = get_db(default_group_name=self._default_group_name)
+        self._service = IdeaService(
+            self._db,
+            default_group_name=self._default_group_name,
+        )
 
     def on_mount(self) -> None:
         """Push the main screen on mount."""
@@ -101,6 +119,13 @@ class CogitusApp(App[None]):
                 f"{self._configured_new_idea_group_mode}'; "
                 "using 'contextual'. "
                 f"Valid values: {valid_values}.",
+                severity="warning",
+            )
+        if self._invalid_default_group_name:
+            self.notify(
+                "Invalid config "
+                f"'default_group_name={self._configured_default_group_name}'; "
+                f"using '{self._default_group_name}'.",
                 severity="warning",
             )
 

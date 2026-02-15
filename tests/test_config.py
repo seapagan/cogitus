@@ -9,6 +9,7 @@ from cogitus.config import (
     EditBodyCursorMode,
     NewIdeaGroupMode,
     get_settings,
+    normalize_default_group_name,
     normalize_edit_body_cursor_mode,
     normalize_new_idea_group_mode,
 )
@@ -99,6 +100,27 @@ def test_settings_persist_new_idea_group_mode(
     assert loaded.new_idea_group_mode == NewIdeaGroupMode.DEFAULT_GROUP.value
 
 
+def test_settings_persist_default_group_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Settings should persist and reload default group name."""
+    monkeypatch.setattr(
+        "simple_toml_settings.settings.xdg_config_home",
+        lambda: tmp_path,
+    )
+    AppSettings._instances.clear()
+
+    settings = get_settings()
+    settings.default_group_name = "inbox"
+    settings.save()
+
+    AppSettings._instances.clear()
+    loaded = get_settings()
+
+    assert loaded.default_group_name == "inbox"
+
+
 def test_normalize_edit_body_cursor_mode_invalid_defaults_to_remember() -> None:
     """Invalid edit cursor mode should fallback to remember."""
     assert normalize_edit_body_cursor_mode("remmeber") == (
@@ -111,3 +133,13 @@ def test_normalize_new_idea_group_mode_invalid_defaults_to_contextual() -> None:
     assert normalize_new_idea_group_mode("legacy") == (
         NewIdeaGroupMode.CONTEXTUAL
     )
+
+
+def test_normalize_default_group_name_empty_defaults_to_default() -> None:
+    """Empty default group config should fallback safely."""
+    assert normalize_default_group_name("   ") == "default"
+
+
+def test_normalize_default_group_name_normalizes_case_and_whitespace() -> None:
+    """Configured default group name should normalize consistently."""
+    assert normalize_default_group_name("  Inbox  ") == "inbox"

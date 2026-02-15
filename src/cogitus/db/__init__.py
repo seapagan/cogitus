@@ -6,6 +6,7 @@ from pathlib import Path
 
 from sqliter import SqliterDB
 
+from cogitus.config import normalize_default_group_name
 from cogitus.constants import DEFAULT_GROUP_NAME
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
@@ -15,11 +16,11 @@ from cogitus.models.tag import Tag
 DEFAULT_DB_PATH = "~/.config/cogitus/cogitus.db"
 
 
-def _ensure_default_group(db: SqliterDB) -> int:
+def _ensure_default_group(db: SqliterDB, default_group_name: str) -> int:
     """Ensure the default group exists and return its primary key."""
-    group = db.select(Group).filter(name=DEFAULT_GROUP_NAME).fetch_one()
+    group = db.select(Group).filter(name=default_group_name).fetch_one()
     if group is None:
-        group = db.insert(Group(name=DEFAULT_GROUP_NAME))
+        group = db.insert(Group(name=default_group_name))
     return group.pk
 
 
@@ -95,7 +96,10 @@ def _migrate_ideas_group_fk(db: SqliterDB, default_group_pk: int) -> None:
 
 
 def get_db(
-    db_path: str = DEFAULT_DB_PATH, *, memory: bool = False
+    db_path: str = DEFAULT_DB_PATH,
+    *,
+    memory: bool = False,
+    default_group_name: str = DEFAULT_GROUP_NAME,
 ) -> SqliterDB:
     """Create and return a configured database connection.
 
@@ -104,6 +108,7 @@ def get_db(
     Args:
         db_path: Path to the SQLite database file (ignored if memory=True).
         memory: If True, use an in-memory database.
+        default_group_name: Canonical fallback group name.
 
     Returns:
         A connected SqliterDB instance with all tables ready.
@@ -116,9 +121,16 @@ def get_db(
         db = SqliterDB(str(expanded))
         db.connect().execute("PRAGMA journal_mode=WAL;")
 
+    normalized_default_group_name = normalize_default_group_name(
+        default_group_name
+    )
+
     db.create_table(Tag)
     db.create_table(Group)
-    default_group_pk = _ensure_default_group(db)
+    default_group_pk = _ensure_default_group(
+        db,
+        normalized_default_group_name,
+    )
     ideas_existed = _table_exists(db, "ideas")
     if ideas_existed:
         _migrate_ideas_group_fk(db, default_group_pk)

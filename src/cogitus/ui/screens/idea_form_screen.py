@@ -227,11 +227,11 @@ class IdeaFormScreen(ModalScreen[int | None]):
         groups = self._service.list_groups()
         if not groups:
             created = self._service.create_group(
-                self._service.DEFAULT_GROUP_NAME
+                self._service.default_group_name
             )
             return created.pk
         for group in groups:
-            if group.name == self._service.DEFAULT_GROUP_NAME:
+            if group.name == self._service.default_group_name:
                 return group.pk
         return groups[0].pk
 

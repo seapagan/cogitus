@@ -6,6 +6,8 @@ from enum import Enum
 
 from simple_toml_settings import TOMLSettings
 
+from cogitus.constants import DEFAULT_GROUP_NAME
+
 
 class EditBodyCursorMode(str, Enum):
     """Supported edit-body cursor initialization modes."""
@@ -41,6 +43,7 @@ class AppSettings(TOMLSettings):
     last_viewed_idea_pk: int = 0
     edit_body_cursor_mode: str = DEFAULT_EDIT_BODY_CURSOR_MODE.value
     new_idea_group_mode: str = DEFAULT_NEW_IDEA_GROUP_MODE.value
+    default_group_name: str = DEFAULT_GROUP_NAME
 
 
 def normalize_edit_body_cursor_mode(mode: str) -> EditBodyCursorMode:
@@ -57,6 +60,14 @@ def normalize_new_idea_group_mode(
     if mode in VALID_NEW_IDEA_GROUP_MODES:
         return NewIdeaGroupMode(mode)
     return DEFAULT_NEW_IDEA_GROUP_MODE
+
+
+def normalize_default_group_name(name: str) -> str:
+    """Normalize configured default group name with safe fallback."""
+    normalized = name.strip().lower()
+    if normalized:
+        return normalized
+    return DEFAULT_GROUP_NAME
 
 
 def get_settings() -> AppSettings:
