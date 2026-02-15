@@ -1155,10 +1155,12 @@ async def test_cogitus_app_mount_warns_on_invalid_new_idea_group_mode(
     async with app.run_test() as pilot:
         assert isinstance(app.screen, MainScreen)
         assert app.screen._new_idea_group_mode == (NewIdeaGroupMode.CONTEXTUAL)
+        valid_values = ", ".join(f"'{mode.value}'" for mode in NewIdeaGroupMode)
         notify.assert_called_once_with(
             "Invalid config "
             "'new_idea_group_mode=broken-mode'; "
-            "using 'contextual'.",
+            "using 'contextual'. "
+            f"Valid values: {valid_values}.",
             severity="warning",
         )
         app.exit()

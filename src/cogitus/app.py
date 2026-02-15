@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from textual.app import App
 
 from cogitus.config import (
+    VALID_NEW_IDEA_GROUP_MODES,
     get_settings,
     normalize_edit_body_cursor_mode,
     normalize_new_idea_group_mode,
@@ -91,11 +92,15 @@ class CogitusApp(App[None]):
             )
         )
         if self._invalid_new_idea_group_mode:
+            valid_values = ", ".join(
+                f"'{value}'" for value in VALID_NEW_IDEA_GROUP_MODES
+            )
             self.notify(
                 "Invalid config "
                 "'new_idea_group_mode="
                 f"{self._configured_new_idea_group_mode}'; "
-                "using 'contextual'.",
+                "using 'contextual'. "
+                f"Valid values: {valid_values}.",
                 severity="warning",
             )
 
