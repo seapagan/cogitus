@@ -5,10 +5,12 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/seapagan/cogitus/tree/HEAD)
+
+## [0.5.0](https://github.com/seapagan/cogitus/releases/tag/0.5.0) (February 15, 2026)
 
 **New Features**
 
+- Add advanced search query operators ([#24](https://github.com/seapagan/cogitus/pull/24)) by [seapagan](https://github.com/seapagan)
 - Add configurable default group setting ([#23](https://github.com/seapagan/cogitus/pull/23)) by [seapagan](https://github.com/seapagan)
 - Add contextual new-idea group mode and validation warning ([#22](https://github.com/seapagan/cogitus/pull/22)) by [seapagan](https://github.com/seapagan)
 
@@ -16,7 +18,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Refactor bulk_move_group to use sqliter update_where() ([#21](https://github.com/seapagan/cogitus/pull/21)) by [seapagan](https://github.com/seapagan)
 
-[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.4.2...HEAD) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.4.2...HEAD.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.4.2...HEAD.patch)
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.4.2...0.5.0) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.4.2...0.5.0.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.4.2...0.5.0.patch)
 
 ## [0.4.2](https://github.com/seapagan/cogitus/releases/tag/0.4.2) (February 14, 2026)
 
