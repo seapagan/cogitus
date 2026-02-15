@@ -18,6 +18,8 @@ None
 
 - add SQLite FTS5 search backend.
 - improve result ranking/snippet presentation.
+- optimize advanced search query execution to reduce multi-pass PK collection
+  and re-fetch overhead as dataset size grows.
 - add compatibility tests to ensure UI/search call contracts stay unchanged
   when moving from `LIKE` to FTS5.
 

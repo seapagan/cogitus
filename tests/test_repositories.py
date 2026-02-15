@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from sqliter.exceptions import RecordInsertionError
+
+from cogitus.search import SearchFilter
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -410,6 +412,17 @@ class TestIdeaRepository:
     ) -> None:
         """Unknown group filter should return no matching idea PKs."""
         assert idea_repo._matching_pks_for_group("missing") == set()
+
+    def test_matching_pks_for_filter_rejects_unsupported_field(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Unexpected filter fields should fail loudly."""
+        invalid_field: Any = "status"
+        invalid = SearchFilter(field=invalid_field, value="python")
+
+        with pytest.raises(ValueError, match="Unsupported filter field"):
+            idea_repo._matching_pks_for_filter(invalid)
 
 
 class TestIdeaCursorStateRepository:

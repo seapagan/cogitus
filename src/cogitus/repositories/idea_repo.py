@@ -250,7 +250,10 @@ class IdeaRepository:
         """Return idea primary keys matching one structured filter."""
         if search_filter.field == "tag":
             return self._matching_pks_for_tag(search_filter.value)
-        return self._matching_pks_for_group(search_filter.value)
+        if search_filter.field == "group":
+            return self._matching_pks_for_group(search_filter.value)
+        msg = f"Unsupported filter field: {search_filter.field}"
+        raise ValueError(msg)
 
     def _matching_pks_for_tag(self, tag_name: str) -> set[int]:
         """Return idea primary keys for a single exact tag name."""
