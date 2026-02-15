@@ -6,6 +6,14 @@ project since the first release, with the latest changes at the top.
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased](https://github.com/seapagan/cogitus/tree/HEAD)
+
+**Refactoring**
+
+- Refactor bulk_move_group to use sqliter update_where() ([#21](https://github.com/seapagan/cogitus/pull/21)) by [seapagan](https://github.com/seapagan)
+
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.4.2...HEAD) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.4.2...HEAD.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.4.2...HEAD.patch)
+
 ## [0.4.2](https://github.com/seapagan/cogitus/releases/tag/0.4.2) (February 14, 2026)
 
 **Bug Fixes**
