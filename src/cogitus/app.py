@@ -60,10 +60,16 @@ class CogitusApp(App[None]):
         self._edit_body_cursor_mode = normalize_edit_body_cursor_mode(
             self._settings.edit_body_cursor_mode
         )
+        configured_new_idea_mode = self._settings.new_idea_group_preselect_mode
+        self._configured_new_idea_group_preselect_mode = (
+            configured_new_idea_mode
+        )
         self._new_idea_group_preselect_mode = (
-            normalize_new_idea_group_preselect_mode(
-                self._settings.new_idea_group_preselect_mode
-            )
+            normalize_new_idea_group_preselect_mode(configured_new_idea_mode)
+        )
+        self._invalid_new_idea_group_preselect_mode = (
+            configured_new_idea_mode
+            != self._new_idea_group_preselect_mode.value
         )
         last_viewed = self._settings.last_viewed_idea_pk
         self._last_viewed_idea_pk = last_viewed if last_viewed > 0 else None
@@ -89,6 +95,14 @@ class CogitusApp(App[None]):
                 ),
             )
         )
+        if self._invalid_new_idea_group_preselect_mode:
+            self.notify(
+                "Invalid config "
+                "'new_idea_group_preselect_mode="
+                f"{self._configured_new_idea_group_preselect_mode}'; "
+                "using 'contextual'.",
+                severity="warning",
+            )
 
     def _on_selected_idea_changed(self, idea_pk: int | None) -> None:
         """Track currently selected idea for persistence."""

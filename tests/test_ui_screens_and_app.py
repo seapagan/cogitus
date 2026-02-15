@@ -1146,6 +1146,31 @@ async def test_cogitus_app_mount_uses_configured_new_idea_group_mode(
         await pilot.pause()
 
 
+@pytest.mark.asyncio
+async def test_cogitus_app_mount_warns_on_invalid_new_idea_group_mode(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Invalid new-idea mode should notify and fallback to contextual."""
+    settings = _FakeSettings(new_idea_group_preselect_mode="broken-mode")
+    app = CogitusApp(db=db, settings=settings)
+    notify = mocker.patch.object(app, "notify")
+
+    async with app.run_test() as pilot:
+        assert isinstance(app.screen, MainScreen)
+        assert app.screen._new_idea_group_preselect_mode == (
+            NewIdeaGroupPreselectMode.CONTEXTUAL
+        )
+        notify.assert_called_once_with(
+            "Invalid config "
+            "'new_idea_group_preselect_mode=broken-mode'; "
+            "using 'contextual'.",
+            severity="warning",
+        )
+        app.exit()
+        await pilot.pause()
+
+
 def test_cogitus_app_init_uses_db_path(
     mocker: MockerFixture,
     db: SqliterDB,
