@@ -41,6 +41,8 @@ class TagsInput(Input):
     async def _on_key(self, event: Key) -> None:
         """Intercept comma for autocomplete accept+next token."""
         if event.key in {",", "comma"}:
+            # Contract: parent screen may implement
+            # _accept_tag_suggestion_and_next_from_input() -> bool.
             handler = getattr(
                 self.screen,
                 "_accept_tag_suggestion_and_next_from_input",
