@@ -278,6 +278,52 @@ async def test_idea_list_panel_search_autocomplete_extra_branches() -> None:
         panel._apply_highlighted_autocomplete()
 
 
+@pytest.mark.asyncio
+async def test_idea_list_panel_blur_defers_for_option_selection() -> None:
+    """Search blur should defer dismissal while option list takes focus."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_autocomplete_sources(tags=["python"], groups=["backend"])
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        search.focus()
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        autocomplete.focus()
+        await pilot.pause()
+
+        panel.on_input_blurred(Input.Blurred(search, search.value))
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        search.value = ""
+        search.cursor_position = 0
+        search.focus()
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        panel.on_option_list_option_selected(
+            OptionList.OptionSelected(
+                autocomplete,
+                autocomplete.options[0],
+                0,
+            ),
+        )
+        await pilot.pause()
+
+        assert search.value == "tag:"
+        assert autocomplete.has_class("-hidden")
+        assert app.focused is search
+
+
 def test_idea_list_panel_apply_highlighted_out_of_range_branch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -402,6 +402,54 @@ async def test_idea_form_escape_closes_tags_autocomplete_before_cancel(
 
 
 @pytest.mark.asyncio
+async def test_idea_form_blur_defers_for_tag_option_selection(
+    service: IdeaService,
+) -> None:
+    """Blur should defer dismissal long enough for option selection."""
+    service.create_idea("A", tags=["alpha", "api"])
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        autocomplete.focus()
+        await pilot.pause()
+
+        screen.on_input_blurred(Input.Blurred(tags_input, tags_input.value))
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        tags_input.value = ""
+        tags_input.cursor_position = 0
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        screen.on_option_list_option_selected(
+            OptionList.OptionSelected(
+                autocomplete,
+                autocomplete.options[0],
+                0,
+            ),
+        )
+        await pilot.pause()
+
+        assert tags_input.value == "alpha"
+        assert autocomplete.has_class("-hidden")
+        assert app.focused is tags_input
+
+
+@pytest.mark.asyncio
 async def test_main_screen_toggle_focus_noop_when_search_focused(
     service: IdeaService,
     mocker: MockerFixture,

@@ -189,7 +189,29 @@ class IdeaFormScreen(ModalScreen[int | None]):
     def on_input_blurred(self, event: Input.Blurred) -> None:
         """Hide tags autocomplete when tags input loses focus."""
         if event.input.id == "tags-input":
-            self.dismiss_tag_autocomplete()
+            self.call_later(self._dismiss_tag_autocomplete_if_unfocused)
+
+    def _dismiss_tag_autocomplete_if_unfocused(self) -> None:
+        """Dismiss suggestions unless focus moved to input/autocomplete."""
+        tags_input = self.query_one("#tags-input", Input)
+        autocomplete = self.query_one("#tags-autocomplete", OptionList)
+        focused = self.app.focused
+        if focused in {tags_input, autocomplete}:
+            return
+        if focused is not None and autocomplete in focused.ancestors:
+            return
+        self.dismiss_tag_autocomplete()
+
+    def on_option_list_option_selected(
+        self,
+        event: OptionList.OptionSelected,
+    ) -> None:
+        """Apply selected tag suggestion and restore focus to tags input."""
+        if event.option_list.id != "tags-autocomplete":
+            return
+        if self._apply_highlighted_tag_autocomplete():
+            self.query_one("#tags-input", Input).focus()
+        event.stop()
 
     async def on_key(self, event: Key) -> None:
         """Handle autocomplete navigation keys in tags input."""

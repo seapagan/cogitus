@@ -252,7 +252,29 @@ class IdeaListPanel(Vertical):
     def on_input_blurred(self, event: Input.Blurred) -> None:
         """Hide autocomplete when search input loses focus."""
         if event.input.id == "search-input":
-            self.dismiss_autocomplete()
+            self.call_later(self._dismiss_autocomplete_if_unfocused)
+
+    def _dismiss_autocomplete_if_unfocused(self) -> None:
+        """Dismiss autocomplete unless focus moved to search/options list."""
+        search = self.query_one("#search-input", Input)
+        autocomplete = self.query_one("#search-autocomplete", OptionList)
+        focused = self.app.focused
+        if focused in {search, autocomplete}:
+            return
+        if focused is not None and autocomplete in focused.ancestors:
+            return
+        self.dismiss_autocomplete()
+
+    def on_option_list_option_selected(
+        self,
+        event: OptionList.OptionSelected,
+    ) -> None:
+        """Apply selected autocomplete candidate and restore search focus."""
+        if event.option_list.id != "search-autocomplete":
+            return
+        self._apply_highlighted_autocomplete()
+        self.query_one("#search-input", Input).focus()
+        event.stop()
 
     def _fire_search(self, query: str) -> None:
         """Post the debounced search message."""
