@@ -272,6 +272,14 @@ async def test_idea_form_tags_autocomplete_keys_and_accept(
         await pilot.pause()
         assert autocomplete.highlighted == 0
 
+        await pilot.press("down")
+        await pilot.pause()
+        assert autocomplete.highlighted == 1
+
+        await pilot.press("up")
+        await pilot.pause()
+        assert autocomplete.highlighted == 0
+
         await pilot.press("enter")
         await pilot.pause()
         assert tags_input.value == "alpha"
@@ -295,6 +303,71 @@ async def test_idea_form_tags_autocomplete_keys_and_accept(
         await pilot.press("tab")
         await pilot.pause()
         assert app.focused is not tags_input
+
+
+@pytest.mark.asyncio
+async def test_idea_form_tags_autocomplete_defensive_branches(
+    service: IdeaService,
+) -> None:
+    """Defensive autocomplete paths should return without side effects."""
+    service.create_idea("A", tags=["alpha"])
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        tags_input = screen.query_one("#tags-input", Input)
+        title_input = screen.query_one("#title-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        # on_key early return when tags input is not focused.
+        title_input.focus()
+        await pilot.pause()
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.focused is title_input
+
+        # _accept_tag_suggestion... false when not focused/visible.
+        assert screen._accept_tag_suggestion_and_next_from_input() is False
+
+        # _accept_tag_suggestion... false when apply fails.
+        tags_input.focus()
+        await pilot.pause()
+        screen._tag_autocomplete_state = None
+        autocomplete.set_options(["alpha"])
+        autocomplete.highlighted = 0
+        autocomplete.remove_class("-hidden")
+        assert screen._accept_tag_suggestion_and_next_from_input() is False
+
+        # _cycle_tag_autocomplete: count == 0 branch.
+        autocomplete.set_options([])
+        screen._cycle_tag_autocomplete(1)
+
+        # _cycle_tag_autocomplete: highlighted is None branch.
+        autocomplete.set_options(["alpha"])
+        autocomplete.highlighted = None
+        screen._cycle_tag_autocomplete(1)
+        assert autocomplete.highlighted == 0
+
+        # _apply_highlighted_tag_autocomplete: state is None branch.
+        screen._tag_autocomplete_state = None
+        assert screen._apply_highlighted_tag_autocomplete() is False
+
+        # _apply_highlighted_tag_autocomplete: highlighted is None branch.
+        screen._tag_autocomplete_state = screen._resolve_tag_autocomplete_state(
+            "a",
+            cursor_position=1,
+        )
+        autocomplete.highlighted = None
+        assert screen._apply_highlighted_tag_autocomplete() is False
+
+        # _resolve_tag_autocomplete_state: no candidate branch.
+        assert (
+            screen._resolve_tag_autocomplete_state("zzz", cursor_position=3)
+            is None
+        )
+
+        # _tag_token_bounds should consume token until comma.
+        assert screen._tag_token_bounds("alpha,beta", 6) == (6, 10)
 
 
 @pytest.mark.asyncio
@@ -326,6 +399,35 @@ async def test_idea_form_escape_closes_tags_autocomplete_before_cancel(
         await pilot.press("escape")
         await pilot.pause()
         dismiss.assert_called_once_with(None)
+
+
+@pytest.mark.asyncio
+async def test_main_screen_toggle_focus_noop_when_search_focused(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Toggle focus should no-op while the search input is focused."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        view = screen.query_one("#content-panel", IdeaView)
+        tree = panel.query_one("#idea-list", Tree)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        assert app.focused is search
+
+        content_focus = mocker.patch.object(view, "focus")
+        tree_focus = mocker.patch.object(tree, "focus")
+        screen.action_toggle_focus()
+
+        content_focus.assert_not_called()
+        tree_focus.assert_not_called()
+        assert app.focused is search
 
 
 @pytest.mark.asyncio

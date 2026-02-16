@@ -12,7 +12,10 @@ from textual.widgets import Input, Markdown, OptionList, Static, Tree
 from cogitus.ui.widgets.idea_list import (
     IdeaListPanel,
     IdeaTreeNodeData,
+    _AutocompleteState,
     _format_timestamp,
+    _resolve_autocomplete_state,
+    _token_bounds,
 )
 from cogitus.ui.widgets.idea_view import IdeaView, _format_full_timestamp
 
@@ -221,6 +224,120 @@ async def test_idea_list_panel_search_autocomplete_flow(
         await pilot.pause()
         assert search.value == "tag:api"
         assert autocomplete.has_class("-hidden")
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_search_autocomplete_extra_branches() -> None:
+    """Autocomplete helpers should cover defensive branch paths."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_autocomplete_sources(
+            tags=["python"],
+            groups=["backend"],
+        )
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+        search.focus()
+        await pilot.pause()
+
+        # Hidden + Shift+Tab should request operator suggestions.
+        assert autocomplete.has_class("-hidden")
+        await pilot.press("shift+tab")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        # Visible + Escape should dismiss.
+        await pilot.press("escape")
+        await pilot.pause()
+        assert autocomplete.has_class("-hidden")
+
+        # _cycle_autocomplete: count == 0 path.
+        autocomplete.set_options([])
+        autocomplete.remove_class("-hidden")
+        panel._cycle_autocomplete(1)
+
+        # _cycle_autocomplete: highlighted is None path.
+        autocomplete.set_options(["tag:"])
+        autocomplete.highlighted = None
+        panel._cycle_autocomplete(1)
+        assert autocomplete.highlighted == 0
+
+        # _apply_highlighted_autocomplete: state is None.
+        panel._autocomplete_state = None
+        panel._apply_highlighted_autocomplete()
+
+        # _apply_highlighted_autocomplete: highlighted is None.
+        panel._autocomplete_state = _AutocompleteState(
+            candidates=("tag:",),
+            replace_start=0,
+            replace_end=0,
+        )
+        autocomplete.highlighted = None
+        panel._apply_highlighted_autocomplete()
+
+
+def test_idea_list_panel_apply_highlighted_out_of_range_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Out-of-range highlight should safely no-op."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    panel._autocomplete_state = _AutocompleteState(
+        candidates=("tag:",),
+        replace_start=0,
+        replace_end=0,
+    )
+
+    class _FakeAutocomplete:
+        highlighted = 3
+
+    fake_autocomplete = _FakeAutocomplete()
+    monkeypatch.setattr(
+        panel,
+        "query_one",
+        lambda *_args, **_kwargs: fake_autocomplete,
+    )
+    panel._apply_highlighted_autocomplete()
+
+
+def test_idea_list_panel_autocomplete_pure_helpers_branches() -> None:
+    """Pure autocomplete helpers should cover unsupported/no-match paths."""
+    assert (
+        _resolve_autocomplete_state(
+            "foo:bar",
+            cursor_position=7,
+            tags=("python",),
+            groups=("backend",),
+            allow_empty_operator=True,
+        )
+        is None
+    )
+
+    assert (
+        _resolve_autocomplete_state(
+            "tag:zzz",
+            cursor_position=7,
+            tags=("python",),
+            groups=("backend",),
+            allow_empty_operator=True,
+        )
+        is None
+    )
+
+    assert (
+        _resolve_autocomplete_state(
+            "tag:python",
+            cursor_position=2,
+            tags=("python",),
+            groups=("backend",),
+            allow_empty_operator=True,
+        )
+        is None
+    )
+
+    start, end = _token_bounds("tag:python and", 1)
+    assert (start, end) == (0, 10)
 
 
 def test_idea_list_panel_get_selected_idea_with_missing_pk(
