@@ -27,8 +27,11 @@ MainScreen {
 }
 
 #search-autocomplete {
-    dock: top;
+    overlay: screen;
+    width: 1fr;
+    height: auto;
     max-height: 8;
+    constrain: none inside;
     margin: 0;
 }
 
@@ -155,7 +158,11 @@ IdeaFormScreen {
 }
 
 #tags-autocomplete {
+    overlay: screen;
+    width: 1fr;
+    height: auto;
     max-height: 8;
+    constrain: none inside;
     margin-top: 0;
 }
 
