@@ -329,7 +329,7 @@ class IdeaListPanel(Vertical):
         self._group_suggestions = tuple(_normalize_suggestions(groups))
         self._sync_autocomplete()
 
-    async def on_key(self, event: Key) -> None:
+    def on_key(self, event: Key) -> None:
         """Handle autocomplete keys while search input is focused."""
         search = self.query_one("#search-input", Input)
         if self.app.focused is not search:

@@ -213,7 +213,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
             self.query_one("#tags-input", Input).focus()
         event.stop()
 
-    async def on_key(self, event: Key) -> None:
+    def on_key(self, event: Key) -> None:
         """Handle autocomplete navigation keys in tags input."""
         tags_input = self.query_one("#tags-input", Input)
         if self.app.focused is not tags_input:

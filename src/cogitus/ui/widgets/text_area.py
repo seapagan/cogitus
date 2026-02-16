@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class CogitusTextArea(TextArea):
     """TextArea that copies selected text on 'y' key press."""
 
-    async def on_key(self, event: Key) -> None:
+    def on_key(self, event: Key) -> None:
         """Intercept 'y' to copy selected text to clipboard.
 
         When text is selected and 'y' is pressed, copies the
