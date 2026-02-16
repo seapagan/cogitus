@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from sqliter.exceptions import RecordInsertionError
 
@@ -10,6 +10,7 @@ from cogitus.models.tag import Tag
 
 if TYPE_CHECKING:
     from sqliter import SqliterDB
+    from sqliter.query.query import FilterValue
 
 
 class TagRepository:
@@ -77,14 +78,14 @@ class TagRepository:
         rows = self._db.connect().execute(
             "SELECT DISTINCT tags_pk FROM ideas_tags;"
         )
-        tag_pks: list[str | int | float | bool] = [
-            int(row[0]) for row in rows.fetchall()
-        ]
+        tag_pks: list[int] = [int(row[0]) for row in rows.fetchall()]
         if not tag_pks:
             return []
+        # sqliter's FilterValue uses an invariant list union for __in values.
+        pk_filter = cast("FilterValue", tag_pks)
         return (
             self._db.select(Tag)
-            .filter(pk__in=tag_pks)
+            .filter(pk__in=pk_filter)
             .order("name")
             .fetch_all()
         )
