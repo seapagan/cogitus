@@ -221,40 +221,39 @@ class IdeaFormScreen(ModalScreen[int | None]):
         if self.app.focused is not tags_input:
             return
 
-        if event.key == "tab" and self._tag_autocomplete_is_visible():
+        visible = self._tag_autocomplete_is_visible()
+
+        if event.key == "tab" and visible:
             event.prevent_default()
             event.stop()
             self._cycle_tag_autocomplete(1)
             return
 
-        if (
-            event.key in {"shift+tab", "backtab"}
-            and self._tag_autocomplete_is_visible()
-        ):
+        if event.key in {"shift+tab", "backtab"} and visible:
             event.prevent_default()
             event.stop()
             self._cycle_tag_autocomplete(-1)
             return
 
-        if event.key == "down" and self._tag_autocomplete_is_visible():
+        if event.key == "down" and visible:
             event.prevent_default()
             event.stop()
             self._cycle_tag_autocomplete(1)
             return
 
-        if event.key == "up" and self._tag_autocomplete_is_visible():
+        if event.key == "up" and visible:
             event.prevent_default()
             event.stop()
             self._cycle_tag_autocomplete(-1)
             return
 
-        if event.key == "enter" and self._tag_autocomplete_is_visible():
+        if event.key == "enter" and visible:
             event.prevent_default()
             event.stop()
             self._apply_highlighted_tag_autocomplete()
             return
 
-        if event.key == "escape" and self._tag_autocomplete_is_visible():
+        if event.key == "escape" and visible:
             event.prevent_default()
             event.stop()
             self.dismiss_tag_autocomplete()
