@@ -9,6 +9,8 @@ Ideas to add to Cogitus
 - continue navigation and keybinding polish.
 - add in-place right-pane markdown edit mode (view/edit toggle).
 - add contextual dynamic toolbar/actions by mode.
+- add a tag management dialog with usage counts, rename/edit support, and
+  explicit stale-tag pruning (selected/all stale with confirmation).
 
 ## CLI
 

@@ -124,7 +124,7 @@ class MainScreen(Screen[None]):
         """Reload the idea list from the service."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         panel.set_autocomplete_sources(
-            tags=[tag.name for tag in self._service.list_tags()],
+            tags=[tag.name for tag in self._service.list_tags_in_use()],
             groups=[group.name for group in self._service.list_groups()],
         )
         search_query = panel.query_one("#search-input", Input).value.strip()

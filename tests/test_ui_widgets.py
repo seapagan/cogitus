@@ -155,13 +155,19 @@ async def test_idea_list_panel_search_autocomplete_flow(
     backend = service.create_group("backend")
     service.create_idea("With python", tags=["python"], group_pk=backend.pk)
     service.create_idea("With api", tags=["api"], group_pk=backend.pk)
+    stale_idea = service.create_idea(
+        "Temp stale",
+        tags=["stale"],
+        group_pk=backend.pk,
+    )
+    service.update_idea(stale_idea.pk, "Temp stale", "", tags=[])
 
     panel = IdeaListPanel(id="idea-list-panel")
     app = _WidgetApp(panel)
 
     async with app.run_test() as pilot:
         panel.set_autocomplete_sources(
-            tags=[tag.name for tag in service.list_tags()],
+            tags=[tag.name for tag in service.list_tags_in_use()],
             groups=[group.name for group in service.list_groups()],
         )
         search = panel.query_one("#search-input", Input)
@@ -188,6 +194,9 @@ async def test_idea_list_panel_search_autocomplete_flow(
             "api",
             "python",
         ]
+        assert "stale" not in {
+            str(option.prompt) for option in autocomplete.options
+        }
 
         highlighted = autocomplete.highlighted
         assert highlighted == 0

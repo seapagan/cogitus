@@ -67,3 +67,24 @@ class TagRepository:
             List of all tags ordered alphabetically.
         """
         return self._db.select(Tag).order("name").fetch_all()
+
+    def list_in_use(self) -> list[Tag]:
+        """Return tags currently linked to at least one idea.
+
+        Returns:
+            List of linked tags ordered alphabetically.
+        """
+        rows = self._db.connect().execute(
+            "SELECT DISTINCT tags_pk FROM ideas_tags;"
+        )
+        tag_pks: list[str | int | float | bool] = [
+            int(row[0]) for row in rows.fetchall()
+        ]
+        if not tag_pks:
+            return []
+        return (
+            self._db.select(Tag)
+            .filter(pk__in=tag_pks)
+            .order("name")
+            .fetch_all()
+        )
