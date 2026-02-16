@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from textual.binding import Binding, BindingType
@@ -12,23 +13,51 @@ from textual.containers import (
     VerticalScroll,
 )
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Select, Static
+from textual.widgets import Button, Input, Label, OptionList, Select, Static
 
 from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
 from cogitus.ui.widgets.text_area import CogitusTextArea
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
-    from textual.events import Resize
+    from textual.events import Key, Resize
 
     from cogitus.models.idea import Idea
     from cogitus.services.idea_service import IdeaService
+
+
+@dataclass(frozen=True)
+class _TagAutocompleteState:
+    """Resolved tag candidates and replacement range for tags input."""
+
+    candidates: tuple[str, ...]
+    replace_start: int
+    replace_end: int
+
+
+class TagsInput(Input):
+    """Input that delegates comma-accept behavior to IdeaFormScreen."""
+
+    async def _on_key(self, event: Key) -> None:
+        """Intercept comma for autocomplete accept+next token."""
+        if event.key in {",", "comma"}:
+            handler = getattr(
+                self.screen,
+                "_accept_tag_suggestion_and_next_from_input",
+                None,
+            )
+            if callable(handler) and handler():
+                event.prevent_default()
+                event.stop()
+                return
+        await super()._on_key(event)
 
 
 class IdeaFormScreen(ModalScreen[int | None]):
     """Modal form for creating or editing an idea."""
 
     INLINE_TAGS_GROUP_MIN_WIDTH: ClassVar[int] = 90
+    TAGS_AUTOCOMPLETE_LIMIT: ClassVar[int] = 20
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "cancel", "Cancel", show=False),
@@ -64,6 +93,9 @@ class IdeaFormScreen(ModalScreen[int | None]):
         self._idea = idea
         self._initial_group_pk = initial_group_pk
         self._edit_body_cursor_mode = edit_body_cursor_mode
+        self._tag_usage_by_name: tuple[tuple[str, int], ...] = ()
+        self._tag_autocomplete_state: _TagAutocompleteState | None = None
+        self._suspend_tag_autocomplete_sync = False
 
     def compose(self) -> ComposeResult:
         """Compose the idea form."""
@@ -91,7 +123,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
                 with Container(id="tags-group-row"):
                     with Vertical(id="tags-column"):
                         yield Label("Tags (comma-separated)")
-                        yield Input(
+                        yield TagsInput(
                             value=(
                                 self._get_existing_tags() if is_edit else ""
                             ),
@@ -99,6 +131,10 @@ class IdeaFormScreen(ModalScreen[int | None]):
                                 "python, architecture, performance..."
                             ),
                             id="tags-input",
+                        )
+                        yield OptionList(
+                            id="tags-autocomplete",
+                            classes="-hidden",
                         )
                     with Vertical(id="group-column"):
                         yield Label("Group")
@@ -123,6 +159,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
     def on_mount(self) -> None:
         """Initialize responsive layout and initial form focus."""
         self._update_tags_group_row_layout(self.size.width)
+        self._load_tag_autocomplete_source()
         if self._idea is None:
             title = self.query_one("#title-input", Input)
             title.focus()
@@ -140,10 +177,211 @@ class IdeaFormScreen(ModalScreen[int | None]):
         """Stack tags/group controls on narrow viewports."""
         self._update_tags_group_row_layout(event.size.width)
 
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Update tags autocomplete when tags input value changes."""
+        if event.input.id != "tags-input":
+            return
+        if self._suspend_tag_autocomplete_sync:
+            self._suspend_tag_autocomplete_sync = False
+            return
+        self._sync_tag_autocomplete()
+
+    def on_input_blurred(self, event: Input.Blurred) -> None:
+        """Hide tags autocomplete when tags input loses focus."""
+        if event.input.id == "tags-input":
+            self.dismiss_tag_autocomplete()
+
+    async def on_key(self, event: Key) -> None:
+        """Handle autocomplete navigation keys in tags input."""
+        tags_input = self.query_one("#tags-input", Input)
+        if self.app.focused is not tags_input:
+            return
+
+        if event.key == "tab" and self._tag_autocomplete_is_visible():
+            event.prevent_default()
+            event.stop()
+            self._cycle_tag_autocomplete(1)
+            return
+
+        if (
+            event.key in {"shift+tab", "backtab"}
+            and self._tag_autocomplete_is_visible()
+        ):
+            event.prevent_default()
+            event.stop()
+            self._cycle_tag_autocomplete(-1)
+            return
+
+        if event.key == "down" and self._tag_autocomplete_is_visible():
+            event.prevent_default()
+            event.stop()
+            self._cycle_tag_autocomplete(1)
+            return
+
+        if event.key == "up" and self._tag_autocomplete_is_visible():
+            event.prevent_default()
+            event.stop()
+            self._cycle_tag_autocomplete(-1)
+            return
+
+        if event.key == "enter" and self._tag_autocomplete_is_visible():
+            event.prevent_default()
+            event.stop()
+            self._apply_highlighted_tag_autocomplete()
+            return
+
+        if event.key == "escape" and self._tag_autocomplete_is_visible():
+            event.prevent_default()
+            event.stop()
+            self.dismiss_tag_autocomplete()
+
+    def _accept_tag_suggestion_and_next_from_input(self) -> bool:
+        """Accept highlighted suggestion and insert comma+space suffix."""
+        tags_input = self.query_one("#tags-input", Input)
+        if (
+            self.app.focused is not tags_input
+            or not self._tag_autocomplete_is_visible()
+        ):
+            return False
+        if not self._apply_highlighted_tag_autocomplete():
+            return False
+        self._suspend_tag_autocomplete_sync = True
+        tags_input.insert_text_at_cursor(", ")
+        return True
+
     def _update_tags_group_row_layout(self, width: int) -> None:
         """Toggle tags/group row between horizontal and stacked layout."""
         row = self.query_one("#tags-group-row", Container)
         row.set_class(width < self.INLINE_TAGS_GROUP_MIN_WIDTH, "narrow")
+
+    def _load_tag_autocomplete_source(self) -> None:
+        """Load tag suggestion names and usage counts from the service."""
+        self._tag_usage_by_name = tuple(
+            (tag.name, usage)
+            for tag, usage in self._service.list_tags_with_usage()
+        )
+
+    def dismiss_tag_autocomplete(self) -> bool:
+        """Hide tags autocomplete popup if currently visible."""
+        autocomplete = self.query_one("#tags-autocomplete", OptionList)
+        if not self._tag_autocomplete_is_visible():
+            return False
+        autocomplete.add_class("-hidden")
+        autocomplete.clear_options()
+        self._tag_autocomplete_state = None
+        return True
+
+    def _tag_autocomplete_is_visible(self) -> bool:
+        """Return whether tags autocomplete is visible."""
+        autocomplete = self.query_one("#tags-autocomplete", OptionList)
+        return not autocomplete.has_class("-hidden")
+
+    def _sync_tag_autocomplete(self) -> None:
+        """Recompute tags autocomplete state for current token/cursor."""
+        tags_input = self.query_one("#tags-input", Input)
+        state = self._resolve_tag_autocomplete_state(
+            tags_input.value,
+            cursor_position=tags_input.cursor_position,
+        )
+        if state is None:
+            self.dismiss_tag_autocomplete()
+            return
+        self._tag_autocomplete_state = state
+        autocomplete = self.query_one("#tags-autocomplete", OptionList)
+        autocomplete.set_options(state.candidates)
+        autocomplete.highlighted = 0
+        autocomplete.remove_class("-hidden")
+
+    def _resolve_tag_autocomplete_state(
+        self,
+        value: str,
+        *,
+        cursor_position: int,
+    ) -> _TagAutocompleteState | None:
+        """Resolve candidates and replacement range for current tag token."""
+        token_start, token_end = self._tag_token_bounds(value, cursor_position)
+        token = value[token_start:token_end]
+        normalized = token.strip().lower()
+        if not normalized:
+            return None
+        candidates = self._tag_candidates_for(normalized)
+        if not candidates:
+            return None
+
+        left_spaces = len(token) - len(token.lstrip())
+        right_spaces = len(token) - len(token.rstrip())
+        replace_start = token_start + left_spaces
+        replace_end = token_end - right_spaces
+        replace_end = max(replace_end, replace_start)
+        return _TagAutocompleteState(
+            candidates=candidates,
+            replace_start=replace_start,
+            replace_end=replace_end,
+        )
+
+    def _tag_candidates_for(self, normalized: str) -> tuple[str, ...]:
+        """Return ranked tag candidates for the normalized token text."""
+        prefix: list[tuple[str, int]] = []
+        contains: list[tuple[str, int]] = []
+        for name, usage in self._tag_usage_by_name:
+            if name.startswith(normalized):
+                prefix.append((name, usage))
+                continue
+            if normalized in name:
+                contains.append((name, usage))
+
+        def rank_key(item: tuple[str, int]) -> tuple[int, str]:
+            """Sort by usage descending and then name ascending."""
+            return (-item[1], item[0])
+
+        prefix.sort(key=rank_key)
+        contains.sort(key=rank_key)
+        ranked = [name for name, _usage in prefix + contains]
+        return tuple(ranked[: self.TAGS_AUTOCOMPLETE_LIMIT])
+
+    @staticmethod
+    def _tag_token_bounds(value: str, cursor_position: int) -> tuple[int, int]:
+        """Return current comma-delimited token bounds around the cursor."""
+        cursor = max(0, min(cursor_position, len(value)))
+        start = cursor
+        end = cursor
+        while start > 0 and value[start - 1] != ",":
+            start -= 1
+        while end < len(value) and value[end] != ",":
+            end += 1
+        return start, end
+
+    def _cycle_tag_autocomplete(self, direction: int) -> None:
+        """Move highlighted tag candidate with wrap-around."""
+        autocomplete = self.query_one("#tags-autocomplete", OptionList)
+        count = autocomplete.option_count
+        if count == 0:
+            return
+        highlighted = autocomplete.highlighted
+        if highlighted is None:
+            autocomplete.highlighted = 0
+            return
+        autocomplete.highlighted = (highlighted + direction) % count
+
+    def _apply_highlighted_tag_autocomplete(self) -> bool:
+        """Apply highlighted candidate to current tag token."""
+        state = self._tag_autocomplete_state
+        if state is None:
+            return False
+        autocomplete = self.query_one("#tags-autocomplete", OptionList)
+        highlighted = autocomplete.highlighted
+        if highlighted is None or highlighted >= len(state.candidates):
+            return False
+        suggestion = state.candidates[highlighted]
+
+        tags_input = self.query_one("#tags-input", Input)
+        before = tags_input.value[: state.replace_start]
+        after = tags_input.value[state.replace_end :]
+        self._suspend_tag_autocomplete_sync = True
+        tags_input.value = f"{before}{suggestion}{after}"
+        tags_input.cursor_position = state.replace_start + len(suggestion)
+        self.dismiss_tag_autocomplete()
+        return True
 
     def _initial_edit_body_cursor_index(self, body: CogitusTextArea) -> int:
         """Return initial cursor index for edit mode body."""
@@ -497,6 +735,9 @@ class HelpScreen(ModalScreen[None]):
         "\n"
         "[bold]Form[/bold]\n"
         "  Ctrl+s           Save\n"
+        "  Tab/Shift+Tab    Cycle tag suggestions (when open)\n"
+        "  Enter            Accept tag suggestion\n"
+        "  ,                Accept suggestion and add next tag\n"
         "  y (selection)    Copy selected text\n"
         "  Escape           Cancel\n"
         "\n"

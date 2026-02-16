@@ -88,3 +88,16 @@ class TagRepository:
             .order("name")
             .fetch_all()
         )
+
+    def list_with_usage(self) -> list[tuple[Tag, int]]:
+        """Return all tags and their linked-idea counts.
+
+        Returns:
+            List of (tag, usage_count) tuples ordered by tag name.
+        """
+        tags = self.list_all()
+        rows = self._db.connect().execute(
+            "SELECT tags_pk, COUNT(ideas_pk) FROM ideas_tags GROUP BY tags_pk;"
+        )
+        usage_by_pk = {int(row[0]): int(row[1]) for row in rows.fetchall()}
+        return [(tag, usage_by_pk.get(tag.pk, 0)) for tag in tags]

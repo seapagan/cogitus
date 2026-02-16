@@ -154,6 +154,15 @@ IdeaFormScreen {
     margin-bottom: 0;
 }
 
+#tags-autocomplete {
+    max-height: 8;
+    margin-top: 0;
+}
+
+#tags-autocomplete.-hidden {
+    display: none;
+}
+
 #group-select {
     margin-bottom: 0;
 }

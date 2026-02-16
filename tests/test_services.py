@@ -113,6 +113,23 @@ class TestIdeaService:
             "stale",
         ]
 
+    def test_list_tags_with_usage_includes_stale_counts(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Tag usage listing should include zero-count stale tags."""
+        service.create_idea("A", tags=["alpha", "beta"])
+        service.create_idea("B", tags=["alpha"])
+        stale = service.create_idea("C", tags=["legacy"])
+        service.update_idea(stale.pk, "C", "", tags=[])
+
+        usage = {
+            tag.name: count for tag, count in service.list_tags_with_usage()
+        }
+        assert usage["alpha"] == 2
+        assert usage["beta"] == 1
+        assert usage["legacy"] == 0
+
     def test_idea_cursor_position_roundtrip(
         self,
         service: IdeaService,

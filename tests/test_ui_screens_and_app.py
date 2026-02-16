@@ -239,6 +239,96 @@ async def test_idea_form_initial_focus_edit_mode(
 
 
 @pytest.mark.asyncio
+async def test_idea_form_tags_autocomplete_keys_and_accept(
+    service: IdeaService,
+) -> None:
+    """Tags input should support ranked autocomplete and keyboard acceptance."""
+    service.create_idea("A", tags=["alpha", "api", "python"])
+    service.create_idea("B", tags=["alpha", "beta"])
+    stale = service.create_idea("C", tags=["aold"])
+    service.update_idea(stale.pk, "C", "", tags=[])
+
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+        tags_input.focus()
+        await pilot.pause()
+
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+        options = [str(option.prompt) for option in autocomplete.options]
+        assert options[:3] == ["alpha", "api", "aold"]
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert autocomplete.highlighted == 1
+        assert app.focused is tags_input
+
+        await pilot.press("shift+tab")
+        await pilot.pause()
+        assert autocomplete.highlighted == 0
+
+        await pilot.press("enter")
+        await pilot.pause()
+        assert tags_input.value == "alpha"
+        assert autocomplete.has_class("-hidden")
+
+        tags_input.value = ""
+        tags_input.cursor_position = 0
+        await pilot.pause()
+
+        await pilot.press("p")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+        prompts = (str(option.prompt) for option in autocomplete.options)
+        assert next(prompts) == "python"
+
+        await pilot.press(",")
+        await pilot.pause()
+        assert tags_input.value == "python, "
+        assert autocomplete.has_class("-hidden")
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert app.focused is not tags_input
+
+
+@pytest.mark.asyncio
+async def test_idea_form_escape_closes_tags_autocomplete_before_cancel(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Esc should close tags autocomplete before dismissing the form."""
+    service.create_idea("A", tags=["alpha"])
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert autocomplete.has_class("-hidden")
+        dismiss.assert_not_called()
+
+        await pilot.press("escape")
+        await pilot.pause()
+        dismiss.assert_called_once_with(None)
+
+
+@pytest.mark.asyncio
 async def test_idea_form_edit_cursor_mode_start(
     service: IdeaService,
 ) -> None:
