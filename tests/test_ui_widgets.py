@@ -324,6 +324,71 @@ async def test_idea_list_panel_blur_defers_for_option_selection() -> None:
         assert app.focused is search
 
 
+@pytest.mark.asyncio
+async def test_idea_list_panel_autocomplete_blur_descendant_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dismiss helper should keep popup open for focused descendants."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_autocomplete_sources(tags=["python"], groups=["backend"])
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        search.focus()
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        class _FocusedDescendant:
+            ancestors = (autocomplete,)
+
+        monkeypatch.setattr(
+            type(app),
+            "focused",
+            property(lambda _self: _FocusedDescendant()),
+        )
+        panel._dismiss_autocomplete_if_unfocused()
+        assert not autocomplete.has_class("-hidden")
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_option_selected_ignores_other_option_lists() -> (
+    None
+):
+    """OptionSelected from unrelated lists should be ignored."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_autocomplete_sources(tags=["python"], groups=["backend"])
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        search.focus()
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+        before = search.value
+
+        foreign = OptionList("noop", id="other-autocomplete")
+        panel.on_option_list_option_selected(
+            OptionList.OptionSelected(
+                foreign,
+                foreign.options[0],
+                0,
+            ),
+        )
+        await pilot.pause()
+
+        assert search.value == before
+        assert not autocomplete.has_class("-hidden")
+
+
 def test_idea_list_panel_apply_highlighted_out_of_range_branch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

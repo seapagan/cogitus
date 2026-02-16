@@ -450,6 +450,83 @@ async def test_idea_form_blur_defers_for_tag_option_selection(
 
 
 @pytest.mark.asyncio
+async def test_idea_form_autocomplete_blur_descendant_branch(
+    service: IdeaService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dismiss helper should keep popup open for focused descendants."""
+    service.create_idea("A", tags=["alpha"])
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        class _FocusedDescendant:
+            ancestors = (autocomplete,)
+
+        class _FocusedOther:
+            ancestors: tuple[object, ...] = ()
+
+        monkeypatch.setattr(
+            type(app),
+            "focused",
+            property(lambda _self: _FocusedDescendant()),
+        )
+        screen._dismiss_tag_autocomplete_if_unfocused()
+        assert not autocomplete.has_class("-hidden")
+
+        monkeypatch.setattr(
+            type(app),
+            "focused",
+            property(lambda _self: _FocusedOther()),
+        )
+        screen._dismiss_tag_autocomplete_if_unfocused()
+        assert autocomplete.has_class("-hidden")
+
+
+@pytest.mark.asyncio
+async def test_idea_form_option_selected_ignores_other_option_lists(
+    service: IdeaService,
+) -> None:
+    """OptionSelected from unrelated lists should be ignored."""
+    service.create_idea("A", tags=["alpha"])
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+        before = tags_input.value
+
+        foreign = OptionList("noop", id="other-autocomplete")
+        screen.on_option_list_option_selected(
+            OptionList.OptionSelected(
+                foreign,
+                foreign.options[0],
+                0,
+            ),
+        )
+        await pilot.pause()
+
+        assert tags_input.value == before
+        assert not autocomplete.has_class("-hidden")
+
+
+@pytest.mark.asyncio
 async def test_main_screen_toggle_focus_noop_when_search_focused(
     service: IdeaService,
     mocker: MockerFixture,
