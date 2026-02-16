@@ -8,7 +8,7 @@ from unittest.mock import PropertyMock
 import pytest
 from textual.app import App, ComposeResult
 from textual.containers import Container
-from textual.widgets import Button, Input, Select, TextArea, Tree
+from textual.widgets import Button, Input, OptionList, Select, TextArea, Tree
 
 from cogitus.app import CogitusApp
 from cogitus.config import EditBodyCursorMode, NewIdeaGroupMode
@@ -993,6 +993,9 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
         screen.action_show_help()
         push.assert_called()
 
+        panel.query_one("#idea-list", Tree).focus()
+        await pilot.pause()
+
         content_focus = mocker.patch.object(view, "focus")
         list_focus = mocker.patch.object(
             panel.query_one("#idea-list"),
@@ -1023,6 +1026,42 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
 
         screen._set_selected_idea(first.pk)
         assert selected[-1] == first.pk
+
+
+@pytest.mark.asyncio
+async def test_main_screen_cancel_search_closes_autocomplete_first(
+    service: IdeaService,
+) -> None:
+    """First Esc should close autocomplete before clearing search."""
+    service.create_idea("First", tags=["python"])
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        assert app.focused is search
+
+        search.value = "t"
+        search.cursor_position = len(search.value)
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        screen.action_cancel_search()
+        await pilot.pause()
+        assert autocomplete.has_class("-hidden")
+        assert search.value == "t"
+        assert app.focused is search
+
+        screen.action_cancel_search()
+        await pilot.pause()
+        assert search.value == ""
+        assert app.focused is tree
 
 
 @pytest.mark.asyncio

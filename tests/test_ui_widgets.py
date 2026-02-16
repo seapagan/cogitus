@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import Input, Markdown, Static, Tree
+from textual.widgets import Input, Markdown, OptionList, Static, Tree
 
 from cogitus.ui.widgets.idea_list import (
     IdeaListPanel,
@@ -145,6 +145,73 @@ async def test_idea_list_panel_remaining_branches(
         tree.move_cursor(group_node, animate=False)
         await pilot.pause()
         assert panel.get_selected_group_pk() is not None
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_search_autocomplete_flow(
+    service: IdeaService,
+) -> None:
+    """Search autocomplete should suggest operators and values."""
+    backend = service.create_group("backend")
+    service.create_idea("With python", tags=["python"], group_pk=backend.pk)
+    service.create_idea("With api", tags=["api"], group_pk=backend.pk)
+
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_autocomplete_sources(
+            tags=[tag.name for tag in service.list_tags()],
+            groups=[group.name for group in service.list_groups()],
+        )
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        search.focus()
+        await pilot.pause()
+
+        await pilot.press("t")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+        assert [str(option.prompt) for option in autocomplete.options] == [
+            "tag:",
+        ]
+
+        await pilot.press("enter")
+        await pilot.pause()
+        assert search.value == "tag:"
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+        assert [str(option.prompt) for option in autocomplete.options] == [
+            "api",
+            "python",
+        ]
+
+        highlighted = autocomplete.highlighted
+        assert highlighted == 0
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert autocomplete.highlighted == 1
+
+        await pilot.press("shift+tab")
+        await pilot.pause()
+        assert autocomplete.highlighted == 0
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert autocomplete.highlighted == 1
+
+        await pilot.press("up")
+        await pilot.pause()
+        assert autocomplete.highlighted == 0
+
+        await pilot.press("enter")
+        await pilot.pause()
+        assert search.value == "tag:api"
+        assert autocomplete.has_class("-hidden")
 
 
 def test_idea_list_panel_get_selected_idea_with_missing_pk(

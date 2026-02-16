@@ -15,8 +15,12 @@ Search supports free text plus inline structured operators.
 
 1. Press `/` to focus search.
 2. Type your query text and optional operators.
-3. Matching ideas remain in the tree.
-4. Press `Esc` to leave search focus.
+3. Use `Tab` to open/cycle autocomplete suggestions.
+4. Use `Shift+Tab`, `Up`, or `Down` to move between suggestions.
+5. Press `Enter` to accept the highlighted suggestion.
+6. Matching ideas remain in the tree.
+7. Press `Esc` to close autocomplete first, then `Esc` again to leave
+   search focus.
 
 ## Examples
 
@@ -32,3 +36,4 @@ Search supports free text plus inline structured operators.
 - Invalid operator fragments like `tag:` are treated as plain text.
 - `and` / `or` between structured filters are evaluated left-to-right.
 - Search does not support parentheses or `not` yet.
+- While search is focused, `Tab` is reserved for autocomplete.

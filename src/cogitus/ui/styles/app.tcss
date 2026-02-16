@@ -26,6 +26,16 @@ MainScreen {
     padding: 0 1;
 }
 
+#search-autocomplete {
+    dock: top;
+    max-height: 8;
+    margin: 0;
+}
+
+#search-autocomplete.-hidden {
+    display: none;
+}
+
 #idea-list {
     height: 1fr;
 }
