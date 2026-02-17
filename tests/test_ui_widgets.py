@@ -404,10 +404,21 @@ def test_idea_list_panel_apply_highlighted_out_of_range_branch(
         highlighted = 3
 
     fake_autocomplete = _FakeAutocomplete()
+
+    def fake_query_one(
+        selector: str,
+        *_args: object,
+        **_kwargs: object,
+    ) -> object:
+        if selector == "#search-autocomplete":
+            return fake_autocomplete
+        msg = f"Unexpected query selector: {selector}"
+        raise AssertionError(msg)
+
     monkeypatch.setattr(
         panel,
         "query_one",
-        lambda *_args, **_kwargs: fake_autocomplete,
+        fake_query_one,
     )
     panel._apply_highlighted_autocomplete()
 
