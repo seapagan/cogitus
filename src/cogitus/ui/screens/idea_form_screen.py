@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from textual.binding import Binding, BindingType
 from textual.containers import (
@@ -373,7 +373,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
             end += 1
         return start, end
 
-    def _cycle_tag_autocomplete(self, direction: int) -> None:
+    def _cycle_tag_autocomplete(self, direction: Literal[-1, 1]) -> None:
         """Move highlighted tag candidate with wrap-around."""
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
         count = autocomplete.option_count
