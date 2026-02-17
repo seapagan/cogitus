@@ -11,6 +11,9 @@ Ideas to add to Cogitus
 - add contextual dynamic toolbar/actions by mode.
 - add a tag management dialog with usage counts, rename/edit support, and
   explicit stale-tag pruning (selected/all stale with confirmation).
+- extract shared autocomplete lifecycle logic currently duplicated across
+  `IdeaListPanel` and `IdeaFormScreen` into a common helper/mixin to reduce
+  divergence risk.
 
 ## CLI
 
