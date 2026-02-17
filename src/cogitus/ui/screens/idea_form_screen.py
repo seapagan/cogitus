@@ -38,7 +38,7 @@ class _TagAutocompleteState:
 class TagsInput(Input):
     """Input that delegates comma-accept behavior to IdeaFormScreen."""
 
-    async def _on_key(self, event: Key) -> None:
+    def on_key(self, event: Key) -> None:
         """Intercept comma for autocomplete accept+next token."""
         if event.key in {",", "comma"}:
             # Contract: parent screen may implement
@@ -52,7 +52,6 @@ class TagsInput(Input):
                 event.prevent_default()
                 event.stop()
                 return
-        await super()._on_key(event)
 
 
 class IdeaFormScreen(ModalScreen[int | None]):
