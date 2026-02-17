@@ -61,6 +61,12 @@ None
 
 - evaluate optional SQLite write tuning (`PRAGMA synchronous=NORMAL`) with
   benchmark and risk assessment.
+- once `sqliter-py` issue `#132` (aggregate/group-by support) is resolved,
+  replace raw SQL in `TagRepository.list_with_usage()` with ORM/query-builder
+  aggregation.
+- once `sqliter-py` issue `#133` (public M2M metadata for junction/column
+  names) is resolved, replace hardcoded M2M SQL identifier constants in
+  `TagRepository` with metadata read from the relationship descriptors.
 
 ## AI Assistance
 
