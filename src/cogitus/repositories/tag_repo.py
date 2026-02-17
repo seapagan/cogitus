@@ -96,9 +96,23 @@ class TagRepository:
         Returns:
             List of (tag, usage_count) tuples ordered by tag name.
         """
-        tags = self.list_all()
         rows = self._db.connect().execute(
-            "SELECT tags_pk, COUNT(ideas_pk) FROM ideas_tags GROUP BY tags_pk;"
+            "SELECT tags.pk, tags.name, tags.created_at, tags.updated_at, "
+            "COUNT(ideas_tags.ideas_pk) AS usage "
+            "FROM tags "
+            "LEFT JOIN ideas_tags ON ideas_tags.tags_pk = tags.pk "
+            "GROUP BY tags.pk, tags.name, tags.created_at, tags.updated_at "
+            "ORDER BY tags.name;"
         )
-        usage_by_pk = {int(row[0]): int(row[1]) for row in rows.fetchall()}
-        return [(tag, usage_by_pk.get(tag.pk, 0)) for tag in tags]
+        return [
+            (
+                Tag(
+                    pk=int(row[0]),
+                    name=str(row[1]),
+                    created_at=int(row[2]),
+                    updated_at=int(row[3]),
+                ),
+                int(row[4]),
+            )
+            for row in rows.fetchall()
+        ]
