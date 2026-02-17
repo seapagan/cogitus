@@ -12,6 +12,26 @@ if TYPE_CHECKING:
     from sqliter import SqliterDB
     from sqliter.query.query import FilterValue
 
+_IDEAS_TAGS_TABLE = "ideas_tags"
+_IDEAS_TAGS_TAG_PK_COL = "tags_pk"
+_IDEAS_TAGS_IDEA_PK_COL = "ideas_pk"
+_LIST_IN_USE_SQL = "SELECT DISTINCT __TAG_PK__ FROM __TABLE__;".replace(
+    "__TAG_PK__", _IDEAS_TAGS_TAG_PK_COL
+).replace("__TABLE__", _IDEAS_TAGS_TABLE)
+_LIST_WITH_USAGE_SQL = (
+    (
+        "SELECT tags.pk, tags.name, tags.created_at, tags.updated_at, "
+        "COUNT(__TABLE__.__IDEA_PK__) AS usage "
+        "FROM tags "
+        "LEFT JOIN __TABLE__ ON __TABLE__.__TAG_PK__ = tags.pk "
+        "GROUP BY tags.pk, tags.name, tags.created_at, tags.updated_at "
+        "ORDER BY tags.name;"
+    )
+    .replace("__TABLE__", _IDEAS_TAGS_TABLE)
+    .replace("__IDEA_PK__", _IDEAS_TAGS_IDEA_PK_COL)
+    .replace("__TAG_PK__", _IDEAS_TAGS_TAG_PK_COL)
+)
+
 
 class TagRepository:
     """Handles Tag persistence through sqliter-py."""
@@ -75,9 +95,7 @@ class TagRepository:
         Returns:
             List of linked tags ordered alphabetically.
         """
-        rows = self._db.connect().execute(
-            "SELECT DISTINCT tags_pk FROM ideas_tags;"
-        )
+        rows = self._db.connect().execute(_LIST_IN_USE_SQL)
         tag_pks: list[int] = [int(row[0]) for row in rows.fetchall()]
         if not tag_pks:
             return []
@@ -96,14 +114,7 @@ class TagRepository:
         Returns:
             List of (tag, usage_count) tuples ordered by tag name.
         """
-        rows = self._db.connect().execute(
-            "SELECT tags.pk, tags.name, tags.created_at, tags.updated_at, "
-            "COUNT(ideas_tags.ideas_pk) AS usage "
-            "FROM tags "
-            "LEFT JOIN ideas_tags ON ideas_tags.tags_pk = tags.pk "
-            "GROUP BY tags.pk, tags.name, tags.created_at, tags.updated_at "
-            "ORDER BY tags.name;"
-        )
+        rows = self._db.connect().execute(_LIST_WITH_USAGE_SQL)
         return [
             (
                 Tag(
