@@ -239,6 +239,8 @@ class IdeaListPanel(Vertical):
         """Handle search input changes with debounce."""
         if event.input.id == "search-input":
             if self._suspend_autocomplete_sync:
+                # Consumed by the immediate Input.Changed fired from a
+                # programmatic search.value assignment.
                 self._suspend_autocomplete_sync = False
             else:
                 self._sync_autocomplete()
@@ -438,6 +440,7 @@ class IdeaListPanel(Vertical):
         search = self.query_one("#search-input", Input)
         before = search.value[: state.replace_start]
         after = search.value[state.replace_end :]
+        # Suppress one sync pass for the programmatic value update below.
         self._suspend_autocomplete_sync = True
         search.value = f"{before}{suggestion}{after}"
         search.cursor_position = state.replace_start + len(suggestion)
