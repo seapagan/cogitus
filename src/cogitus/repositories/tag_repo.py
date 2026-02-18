@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from sqliter.exceptions import RecordInsertionError
 
@@ -10,6 +10,27 @@ from cogitus.models.tag import Tag
 
 if TYPE_CHECKING:
     from sqliter import SqliterDB
+    from sqliter.query.query import FilterValue
+
+_IDEAS_TAGS_TABLE = "ideas_tags"
+_IDEAS_TAGS_TAG_PK_COL = "tags_pk"
+_IDEAS_TAGS_IDEA_PK_COL = "ideas_pk"
+# Static SQL built from trusted module constants (no user input).
+_LIST_IN_USE_SQL = (
+    f"SELECT DISTINCT {_IDEAS_TAGS_TAG_PK_COL} FROM {_IDEAS_TAGS_TABLE};"  # noqa: S608
+)
+_LIST_WITH_USAGE_SQL = (
+    "SELECT tags.pk AS pk, "  # noqa: S608
+    "tags.name AS name, "
+    "tags.created_at AS created_at, "
+    "tags.updated_at AS updated_at, "
+    f"COUNT({_IDEAS_TAGS_TABLE}.{_IDEAS_TAGS_IDEA_PK_COL}) AS usage "
+    "FROM tags "
+    f"LEFT JOIN {_IDEAS_TAGS_TABLE} ON "
+    f"{_IDEAS_TAGS_TABLE}.{_IDEAS_TAGS_TAG_PK_COL} = tags.pk "
+    "GROUP BY tags.pk, tags.name, tags.created_at, tags.updated_at "
+    "ORDER BY tags.name;"
+)
 
 
 class TagRepository:
@@ -67,3 +88,58 @@ class TagRepository:
             List of all tags ordered alphabetically.
         """
         return self._db.select(Tag).order("name").fetch_all()
+
+    def list_in_use(self) -> list[Tag]:
+        """Return tags currently linked to at least one idea.
+
+        Returns:
+            List of linked tags ordered alphabetically.
+        """
+        rows = self._db.connect().execute(_LIST_IN_USE_SQL)
+        tag_pks: list[int] = [int(row[0]) for row in rows.fetchall()]
+        if not tag_pks:
+            return []
+        # sqliter's FilterValue uses an invariant list union for __in values.
+        pk_filter = cast("FilterValue", tag_pks)
+        return (
+            self._db.select(Tag)
+            .filter(pk__in=pk_filter)
+            .order("name")
+            .fetch_all()
+        )
+
+    def list_with_usage(self) -> list[tuple[Tag, int]]:
+        """Return all tags and their linked-idea counts.
+
+        Returns:
+            List of (tag, usage_count) tuples ordered by tag name.
+        """
+        cursor = self._db.connect().execute(_LIST_WITH_USAGE_SQL)
+        column_names = tuple(
+            description[0] for description in cursor.description or ()
+        )
+
+        def row_to_mapping(row: tuple[object, ...]) -> dict[str, object]:
+            """Map sqlite row values by selected column name."""
+            return dict(zip(column_names, row, strict=False))
+
+        def mapped_int(mapping: dict[str, object], key: str) -> int:
+            """Extract an integer-compatible mapped value."""
+            return int(cast("int | str", mapping[key]))
+
+        def mapped_str(mapping: dict[str, object], key: str) -> str:
+            """Extract a string-compatible mapped value."""
+            return str(cast("str | int", mapping[key]))
+
+        return [
+            (
+                Tag(
+                    pk=mapped_int(mapped, "pk"),
+                    name=mapped_str(mapped, "name"),
+                    created_at=mapped_int(mapped, "created_at"),
+                    updated_at=mapped_int(mapped, "updated_at"),
+                ),
+                mapped_int(mapped, "usage"),
+            )
+            for mapped in (row_to_mapping(row) for row in cursor.fetchall())
+        ]

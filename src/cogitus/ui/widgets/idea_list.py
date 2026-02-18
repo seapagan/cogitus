@@ -10,10 +10,11 @@ from rich.text import Text
 from textual.containers import Vertical
 from textual.message import Message
 from textual.reactive import reactive
-from textual.widgets import Input, Tree
+from textual.widgets import Input, OptionList, Tree
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
+    from textual.events import Key
     from textual.timer import Timer
     from textual.widgets.tree import TreeNode
 
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from cogitus.models.idea import Idea
 
 _DAYS_IN_WEEK = 7
+_SEARCH_OPERATORS: tuple[str, ...] = ("tag:", "group:")
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,26 @@ class IdeaTreeNodeData:
     kind: Literal["root", "group", "idea"]
     group_pk: int | None = None
     idea_pk: int | None = None
+
+
+@dataclass(frozen=True)
+class _AutocompleteState:
+    """Resolved autocomplete candidates and replacement target."""
+
+    candidates: tuple[str, ...]
+    replace_start: int
+    replace_end: int
+
+
+@dataclass(frozen=True)
+class _TokenContext:
+    """Token metadata around the current search cursor position."""
+
+    token: str
+    token_start: int
+    token_end: int
+    relative_cursor: int
+    colon_at: int
 
 
 def _format_timestamp(unix_ts: int) -> str:
@@ -86,6 +108,10 @@ class IdeaListPanel(Vertical):
         self._ideas_by_pk: dict[int, Idea] = {}
         self._group_nodes_by_pk: dict[int, TreeNode[IdeaTreeNodeData]] = {}
         self._idea_nodes_by_pk: dict[int, TreeNode[IdeaTreeNodeData]] = {}
+        self._tag_suggestions: tuple[str, ...] = ()
+        self._group_suggestions: tuple[str, ...] = ()
+        self._autocomplete_state: _AutocompleteState | None = None
+        self._suspend_autocomplete_sync = False
 
     def compose(self) -> ComposeResult:
         """Compose the idea list panel."""
@@ -93,6 +119,7 @@ class IdeaListPanel(Vertical):
             placeholder="Search (text, tag:foo, group:bar)",
             id="search-input",
         )
+        yield OptionList(id="search-autocomplete", classes="-hidden")
         yield Tree[IdeaTreeNodeData](
             "Ideas",
             data=IdeaTreeNodeData(kind="root"),
@@ -211,12 +238,45 @@ class IdeaListPanel(Vertical):
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes with debounce."""
         if event.input.id == "search-input":
+            if self._suspend_autocomplete_sync:
+                # Assumes Textual Input emits exactly one synchronous
+                # Input.Changed per programmatic search.value assignment.
+                self._suspend_autocomplete_sync = False
+            else:
+                self._sync_autocomplete()
             if self._debounce_timer is not None:
                 self._debounce_timer.stop()
             self._debounce_timer = self.set_timer(
                 0.2,
                 lambda: self._fire_search(event.value),
             )
+
+    def on_input_blurred(self, event: Input.Blurred) -> None:
+        """Hide autocomplete when search input loses focus."""
+        if event.input.id == "search-input":
+            self.call_later(self._dismiss_autocomplete_if_unfocused)
+
+    def _dismiss_autocomplete_if_unfocused(self) -> None:
+        """Dismiss autocomplete unless focus moved to search/options list."""
+        search = self.query_one("#search-input", Input)
+        autocomplete = self.query_one("#search-autocomplete", OptionList)
+        focused = self.app.focused
+        if focused in {search, autocomplete}:
+            return
+        if focused is not None and autocomplete in focused.ancestors:
+            return
+        self.dismiss_autocomplete()
+
+    def on_option_list_option_selected(
+        self,
+        event: OptionList.OptionSelected,
+    ) -> None:
+        """Apply selected autocomplete candidate and restore search focus."""
+        if event.option_list.id != "search-autocomplete":
+            return
+        self._apply_highlighted_autocomplete()
+        self.query_one("#search-input", Input).focus()
+        event.stop()
 
     def _fire_search(self, query: str) -> None:
         """Post the debounced search message."""
@@ -257,4 +317,242 @@ class IdeaListPanel(Vertical):
         """Clear the search input."""
         search = self.query_one("#search-input", Input)
         search.value = ""
+        self.dismiss_autocomplete()
         search.focus()
+
+    def set_autocomplete_sources(
+        self,
+        *,
+        tags: list[str],
+        groups: list[str],
+    ) -> None:
+        """Set the candidate values used for search autocomplete."""
+        self._tag_suggestions = tuple(_normalize_suggestions(tags))
+        self._group_suggestions = tuple(_normalize_suggestions(groups))
+        self._sync_autocomplete()
+
+    def on_key(self, event: Key) -> None:
+        """Handle autocomplete keys while search input is focused."""
+        search = self.query_one("#search-input", Input)
+        if self.app.focused is not search:
+            return
+
+        if event.key == "tab":
+            event.prevent_default()
+            event.stop()
+            if self._autocomplete_is_visible():
+                self._cycle_autocomplete(1)
+            else:
+                self._sync_autocomplete(allow_empty_operator=True)
+            return
+
+        if event.key in {"shift+tab", "backtab"}:
+            event.prevent_default()
+            event.stop()
+            if self._autocomplete_is_visible():
+                self._cycle_autocomplete(-1)
+            else:
+                self._sync_autocomplete(allow_empty_operator=True)
+            return
+
+        if event.key == "down" and self._autocomplete_is_visible():
+            event.prevent_default()
+            event.stop()
+            self._cycle_autocomplete(1)
+            return
+
+        if event.key == "up" and self._autocomplete_is_visible():
+            event.prevent_default()
+            event.stop()
+            self._cycle_autocomplete(-1)
+            return
+
+        if event.key == "enter" and self._autocomplete_is_visible():
+            event.prevent_default()
+            event.stop()
+            self._apply_highlighted_autocomplete()
+            return
+
+        if event.key == "escape" and self._autocomplete_is_visible():
+            event.prevent_default()
+            event.stop()
+            self.dismiss_autocomplete()
+
+    def dismiss_autocomplete(self) -> bool:
+        """Close autocomplete popup if it is currently visible."""
+        autocomplete = self.query_one("#search-autocomplete", OptionList)
+        if not self._autocomplete_is_visible():
+            return False
+        autocomplete.add_class("-hidden")
+        autocomplete.clear_options()
+        self._autocomplete_state = None
+        return True
+
+    def _autocomplete_is_visible(self) -> bool:
+        """Return whether autocomplete popup is currently visible."""
+        autocomplete = self.query_one("#search-autocomplete", OptionList)
+        return not autocomplete.has_class("-hidden")
+
+    def _sync_autocomplete(self, *, allow_empty_operator: bool = False) -> None:
+        """Recompute autocomplete state from current search/cursor context."""
+        search = self.query_one("#search-input", Input)
+        state = _resolve_autocomplete_state(
+            search.value,
+            cursor_position=search.cursor_position,
+            tags=self._tag_suggestions,
+            groups=self._group_suggestions,
+            allow_empty_operator=allow_empty_operator,
+        )
+        if state is None:
+            self.dismiss_autocomplete()
+            return
+        self._autocomplete_state = state
+        autocomplete = self.query_one("#search-autocomplete", OptionList)
+        autocomplete.set_options(state.candidates)
+        autocomplete.highlighted = 0
+        autocomplete.remove_class("-hidden")
+
+    def _cycle_autocomplete(self, direction: Literal[-1, 1]) -> None:
+        """Move autocomplete highlight forward or backward with wrapping."""
+        autocomplete = self.query_one("#search-autocomplete", OptionList)
+        count = autocomplete.option_count
+        if count == 0:
+            return
+        highlighted = autocomplete.highlighted
+        if highlighted is None:
+            autocomplete.highlighted = 0
+            return
+        autocomplete.highlighted = (highlighted + direction) % count
+
+    def _apply_highlighted_autocomplete(self) -> None:
+        """Apply the currently highlighted autocomplete candidate."""
+        state = self._autocomplete_state
+        if state is None:
+            return
+        autocomplete = self.query_one("#search-autocomplete", OptionList)
+        highlighted = autocomplete.highlighted
+        if highlighted is None:
+            return
+        if highlighted >= len(state.candidates):
+            return
+        suggestion = state.candidates[highlighted]
+
+        search = self.query_one("#search-input", Input)
+        before = search.value[: state.replace_start]
+        after = search.value[state.replace_end :]
+        # Matches on_input_changed assumption: one sync Input.Changed event.
+        self._suspend_autocomplete_sync = True
+        search.value = f"{before}{suggestion}{after}"
+        search.cursor_position = state.replace_start + len(suggestion)
+        self.dismiss_autocomplete()
+
+
+def _normalize_suggestions(raw_values: list[str]) -> list[str]:
+    """Normalize suggestion list by trimming and deduplicating in order."""
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_value in raw_values:
+        value = raw_value.strip().lower()
+        if value and value not in seen:
+            seen.add(value)
+            normalized.append(value)
+    return normalized
+
+
+def _resolve_autocomplete_state(
+    value: str,
+    *,
+    cursor_position: int,
+    tags: tuple[str, ...],
+    groups: tuple[str, ...],
+    allow_empty_operator: bool,
+) -> _AutocompleteState | None:
+    """Resolve autocomplete state for the token around current cursor."""
+    token_start, token_end = _token_bounds(value, cursor_position)
+    token = value[token_start:token_end]
+    context = _TokenContext(
+        token=token,
+        token_start=token_start,
+        token_end=token_end,
+        relative_cursor=max(0, min(cursor_position - token_start, len(token))),
+        colon_at=token.find(":"),
+    )
+
+    value_state = _resolve_value_autocomplete_state(
+        context=context,
+        tags=tags,
+        groups=groups,
+    )
+    if value_state is not None:
+        return value_state
+
+    return _resolve_operator_autocomplete_state(
+        context=context,
+        allow_empty_operator=allow_empty_operator,
+    )
+
+
+def _resolve_value_autocomplete_state(
+    *,
+    context: _TokenContext,
+    tags: tuple[str, ...],
+    groups: tuple[str, ...],
+) -> _AutocompleteState | None:
+    """Resolve value suggestions for `tag:` or `group:` token contexts."""
+    if context.colon_at < 0 or context.relative_cursor <= context.colon_at:
+        return None
+    filter_field = context.token[: context.colon_at].lower()
+    if filter_field not in {"tag", "group"}:
+        return None
+    typed_prefix = context.token[
+        context.colon_at + 1 : context.relative_cursor
+    ].lower()
+    source = tags if filter_field == "tag" else groups
+    candidates = tuple(
+        candidate for candidate in source if candidate.startswith(typed_prefix)
+    )
+    if not candidates:
+        return None
+    return _AutocompleteState(
+        candidates=candidates,
+        replace_start=context.token_start + context.colon_at + 1,
+        replace_end=context.token_end,
+    )
+
+
+def _resolve_operator_autocomplete_state(
+    *,
+    context: _TokenContext,
+    allow_empty_operator: bool,
+) -> _AutocompleteState | None:
+    """Resolve operator suggestions (`tag:`/`group:`) for token context."""
+    operator_prefix = context.token[: context.relative_cursor].lower()
+    if not operator_prefix and not allow_empty_operator:
+        return None
+    if context.colon_at >= 0 and context.relative_cursor > 0:
+        return None
+    candidates = tuple(
+        operator
+        for operator in _SEARCH_OPERATORS
+        if operator.startswith(operator_prefix)
+    )
+    if not candidates:
+        return None
+    return _AutocompleteState(
+        candidates=candidates,
+        replace_start=context.token_start,
+        replace_end=context.token_end,
+    )
+
+
+def _token_bounds(value: str, cursor_position: int) -> tuple[int, int]:
+    """Return start/end bounds of token around cursor, split by whitespace."""
+    cursor = max(0, min(cursor_position, len(value)))
+    start = cursor
+    end = cursor
+
+    while start > 0 and not value[start - 1].isspace():
+        start -= 1
+    while end < len(value) and not value[end].isspace():
+        end += 1
+    return start, end

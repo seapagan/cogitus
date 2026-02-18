@@ -8,7 +8,7 @@ from unittest.mock import PropertyMock
 import pytest
 from textual.app import App, ComposeResult
 from textual.containers import Container
-from textual.widgets import Button, Input, Select, TextArea, Tree
+from textual.widgets import Button, Input, OptionList, Select, TextArea, Tree
 
 from cogitus.app import CogitusApp
 from cogitus.config import EditBodyCursorMode, NewIdeaGroupMode
@@ -236,6 +236,327 @@ async def test_idea_form_initial_focus_edit_mode(
         body = screen.query_one("#body-input", CogitusTextArea)
         assert app.focused is body
         await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_tags_autocomplete_keys_and_accept(
+    service: IdeaService,
+) -> None:
+    """Tags input should support ranked autocomplete and keyboard acceptance."""
+    service.create_idea("A", tags=["alpha", "api", "python"])
+    service.create_idea("B", tags=["alpha", "beta"])
+    stale = service.create_idea("C", tags=["aold"])
+    service.update_idea(stale.pk, "C", "", tags=[])
+
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+        tags_input.focus()
+        await pilot.pause()
+
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+        options = [str(option.prompt) for option in autocomplete.options]
+        assert options[:3] == ["alpha", "api", "aold"]
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert autocomplete.highlighted == 1
+        assert app.focused is tags_input
+
+        await pilot.press("shift+tab")
+        await pilot.pause()
+        assert autocomplete.highlighted == 0
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert autocomplete.highlighted == 1
+
+        await pilot.press("up")
+        await pilot.pause()
+        assert autocomplete.highlighted == 0
+
+        await pilot.press("enter")
+        await pilot.pause()
+        assert tags_input.value == "alpha"
+        assert autocomplete.has_class("-hidden")
+
+        tags_input.value = ""
+        tags_input.cursor_position = 0
+        await pilot.pause()
+
+        await pilot.press("p")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+        prompts = (str(option.prompt) for option in autocomplete.options)
+        assert next(prompts) == "python"
+
+        await pilot.press(",")
+        await pilot.pause()
+        assert tags_input.value == "python, "
+        assert autocomplete.has_class("-hidden")
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert app.focused is not tags_input
+
+
+@pytest.mark.asyncio
+async def test_idea_form_tags_autocomplete_defensive_branches(
+    service: IdeaService,
+) -> None:
+    """Defensive autocomplete paths should return without side effects."""
+    service.create_idea("A", tags=["alpha"])
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        tags_input = screen.query_one("#tags-input", Input)
+        title_input = screen.query_one("#title-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        # on_key early return when tags input is not focused.
+        title_input.focus()
+        await pilot.pause()
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.focused is title_input
+
+        # _accept_tag_suggestion... false when not focused/visible.
+        assert screen._accept_tag_suggestion_and_next_from_input() is False
+
+        # _accept_tag_suggestion... false when apply fails.
+        tags_input.focus()
+        await pilot.pause()
+        screen._tag_autocomplete_state = None
+        autocomplete.set_options(["alpha"])
+        autocomplete.highlighted = 0
+        autocomplete.remove_class("-hidden")
+        assert screen._accept_tag_suggestion_and_next_from_input() is False
+
+        # _cycle_tag_autocomplete: count == 0 branch.
+        autocomplete.set_options([])
+        screen._cycle_tag_autocomplete(1)
+
+        # _cycle_tag_autocomplete: highlighted is None branch.
+        autocomplete.set_options(["alpha"])
+        autocomplete.highlighted = None
+        screen._cycle_tag_autocomplete(1)
+        assert autocomplete.highlighted == 0
+
+        # _apply_highlighted_tag_autocomplete: state is None branch.
+        screen._tag_autocomplete_state = None
+        assert screen._apply_highlighted_tag_autocomplete() is False
+
+        # _apply_highlighted_tag_autocomplete: highlighted is None branch.
+        screen._tag_autocomplete_state = screen._resolve_tag_autocomplete_state(
+            "a",
+            cursor_position=1,
+        )
+        autocomplete.highlighted = None
+        assert screen._apply_highlighted_tag_autocomplete() is False
+
+        # _resolve_tag_autocomplete_state: no candidate branch.
+        assert (
+            screen._resolve_tag_autocomplete_state("zzz", cursor_position=3)
+            is None
+        )
+
+        # _tag_token_bounds should consume token until comma.
+        assert screen._tag_token_bounds("alpha,beta", 6) == (6, 10)
+
+
+@pytest.mark.asyncio
+async def test_idea_form_escape_closes_tags_autocomplete_before_cancel(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Esc should close tags autocomplete before dismissing the form."""
+    service.create_idea("A", tags=["alpha"])
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert autocomplete.has_class("-hidden")
+        dismiss.assert_not_called()
+
+        await pilot.press("escape")
+        await pilot.pause()
+        dismiss.assert_called_once_with(None)
+
+
+@pytest.mark.asyncio
+async def test_idea_form_blur_defers_for_tag_option_selection(
+    service: IdeaService,
+) -> None:
+    """Blur should defer dismissal long enough for option selection."""
+    service.create_idea("A", tags=["alpha", "api"])
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        autocomplete.focus()
+        await pilot.pause()
+
+        screen.on_input_blurred(Input.Blurred(tags_input, tags_input.value))
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        tags_input.value = ""
+        tags_input.cursor_position = 0
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        screen.on_option_list_option_selected(
+            OptionList.OptionSelected(
+                autocomplete,
+                autocomplete.options[0],
+                0,
+            ),
+        )
+        await pilot.pause()
+
+        assert tags_input.value == "alpha"
+        assert autocomplete.has_class("-hidden")
+        assert app.focused is tags_input
+
+
+@pytest.mark.asyncio
+async def test_idea_form_autocomplete_blur_descendant_branch(
+    service: IdeaService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dismiss helper should keep popup open for focused descendants."""
+    service.create_idea("A", tags=["alpha"])
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        class _FocusedDescendant:
+            @property
+            def ancestors(self) -> list[OptionList]:
+                return [autocomplete]
+
+        class _FocusedOther:
+            @property
+            def ancestors(self) -> list[object]:
+                return []
+
+        monkeypatch.setattr(
+            type(app),
+            "focused",
+            property(lambda _self: _FocusedDescendant()),
+        )
+        screen._dismiss_tag_autocomplete_if_unfocused()
+        assert not autocomplete.has_class("-hidden")
+
+        monkeypatch.setattr(
+            type(app),
+            "focused",
+            property(lambda _self: _FocusedOther()),
+        )
+        screen._dismiss_tag_autocomplete_if_unfocused()
+        assert autocomplete.has_class("-hidden")
+
+
+@pytest.mark.asyncio
+async def test_idea_form_option_selected_ignores_other_option_lists(
+    service: IdeaService,
+) -> None:
+    """OptionSelected from unrelated lists should be ignored."""
+    service.create_idea("A", tags=["alpha"])
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+        before = tags_input.value
+
+        foreign = OptionList("noop", id="other-autocomplete")
+        screen.on_option_list_option_selected(
+            OptionList.OptionSelected(
+                foreign,
+                foreign.options[0],
+                0,
+            ),
+        )
+        await pilot.pause()
+
+        assert tags_input.value == before
+        assert not autocomplete.has_class("-hidden")
+
+
+@pytest.mark.asyncio
+async def test_main_screen_toggle_focus_noop_when_search_focused(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Toggle focus should no-op while the search input is focused."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        view = screen.query_one("#content-panel", IdeaView)
+        tree = panel.query_one("#idea-list", Tree)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        assert app.focused is search
+
+        content_focus = mocker.patch.object(view, "focus")
+        tree_focus = mocker.patch.object(tree, "focus")
+        screen.action_toggle_focus()
+
+        content_focus.assert_not_called()
+        tree_focus.assert_not_called()
+        assert app.focused is search
 
 
 @pytest.mark.asyncio
@@ -993,6 +1314,9 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
         screen.action_show_help()
         push.assert_called()
 
+        panel.query_one("#idea-list", Tree).focus()
+        await pilot.pause()
+
         content_focus = mocker.patch.object(view, "focus")
         list_focus = mocker.patch.object(
             panel.query_one("#idea-list"),
@@ -1023,6 +1347,42 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
 
         screen._set_selected_idea(first.pk)
         assert selected[-1] == first.pk
+
+
+@pytest.mark.asyncio
+async def test_main_screen_cancel_search_closes_autocomplete_first(
+    service: IdeaService,
+) -> None:
+    """First Esc should close autocomplete before clearing search."""
+    service.create_idea("First", tags=["python"])
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        assert app.focused is search
+
+        search.value = "t"
+        search.cursor_position = len(search.value)
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        screen.action_cancel_search()
+        await pilot.pause()
+        assert autocomplete.has_class("-hidden")
+        assert search.value == "t"
+        assert app.focused is search
+
+        screen.action_cancel_search()
+        await pilot.pause()
+        assert search.value == ""
+        assert app.focused is tree
 
 
 @pytest.mark.asyncio

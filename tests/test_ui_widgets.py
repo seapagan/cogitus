@@ -7,12 +7,15 @@ from typing import TYPE_CHECKING
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import Input, Markdown, Static, Tree
+from textual.widgets import Input, Markdown, OptionList, Static, Tree
 
 from cogitus.ui.widgets.idea_list import (
     IdeaListPanel,
     IdeaTreeNodeData,
+    _AutocompleteState,
     _format_timestamp,
+    _resolve_autocomplete_state,
+    _token_bounds,
 )
 from cogitus.ui.widgets.idea_view import IdeaView, _format_full_timestamp
 
@@ -145,6 +148,320 @@ async def test_idea_list_panel_remaining_branches(
         tree.move_cursor(group_node, animate=False)
         await pilot.pause()
         assert panel.get_selected_group_pk() is not None
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_search_autocomplete_flow(
+    service: IdeaService,
+) -> None:
+    """Search autocomplete should suggest operators and values."""
+    backend = service.create_group("backend")
+    service.create_idea("With python", tags=["python"], group_pk=backend.pk)
+    service.create_idea("With api", tags=["api"], group_pk=backend.pk)
+    stale_idea = service.create_idea(
+        "Temp stale",
+        tags=["stale"],
+        group_pk=backend.pk,
+    )
+    service.update_idea(stale_idea.pk, "Temp stale", "", tags=[])
+
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_autocomplete_sources(
+            tags=[tag.name for tag in service.list_tags_in_use()],
+            groups=[group.name for group in service.list_groups()],
+        )
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        search.focus()
+        await pilot.pause()
+
+        await pilot.press("t")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+        assert [str(option.prompt) for option in autocomplete.options] == [
+            "tag:",
+        ]
+
+        await pilot.press("enter")
+        await pilot.pause()
+        assert search.value == "tag:"
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+        assert [str(option.prompt) for option in autocomplete.options] == [
+            "api",
+            "python",
+        ]
+        assert "stale" not in {
+            str(option.prompt) for option in autocomplete.options
+        }
+
+        highlighted = autocomplete.highlighted
+        assert highlighted == 0
+
+        await pilot.press("tab")
+        await pilot.pause()
+        assert autocomplete.highlighted == 1
+
+        await pilot.press("shift+tab")
+        await pilot.pause()
+        assert autocomplete.highlighted == 0
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert autocomplete.highlighted == 1
+
+        await pilot.press("up")
+        await pilot.pause()
+        assert autocomplete.highlighted == 0
+
+        await pilot.press("enter")
+        await pilot.pause()
+        assert search.value == "tag:api"
+        assert autocomplete.has_class("-hidden")
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_search_autocomplete_extra_branches() -> None:
+    """Autocomplete helpers should cover defensive branch paths."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_autocomplete_sources(
+            tags=["python"],
+            groups=["backend"],
+        )
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+        search.focus()
+        await pilot.pause()
+
+        # Hidden + Shift+Tab should request operator suggestions.
+        assert autocomplete.has_class("-hidden")
+        await pilot.press("shift+tab")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        # Visible + Escape should dismiss.
+        await pilot.press("escape")
+        await pilot.pause()
+        assert autocomplete.has_class("-hidden")
+
+        # _cycle_autocomplete: count == 0 path.
+        autocomplete.set_options([])
+        autocomplete.remove_class("-hidden")
+        panel._cycle_autocomplete(1)
+
+        # _cycle_autocomplete: highlighted is None path.
+        autocomplete.set_options(["tag:"])
+        autocomplete.highlighted = None
+        panel._cycle_autocomplete(1)
+        assert autocomplete.highlighted == 0
+
+        # _apply_highlighted_autocomplete: state is None.
+        panel._autocomplete_state = None
+        panel._apply_highlighted_autocomplete()
+
+        # _apply_highlighted_autocomplete: highlighted is None.
+        panel._autocomplete_state = _AutocompleteState(
+            candidates=("tag:",),
+            replace_start=0,
+            replace_end=0,
+        )
+        autocomplete.highlighted = None
+        panel._apply_highlighted_autocomplete()
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_blur_defers_for_option_selection() -> None:
+    """Search blur should defer dismissal while option list takes focus."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_autocomplete_sources(tags=["python"], groups=["backend"])
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        search.focus()
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        autocomplete.focus()
+        await pilot.pause()
+
+        panel.on_input_blurred(Input.Blurred(search, search.value))
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        search.value = ""
+        search.cursor_position = 0
+        search.focus()
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        panel.on_option_list_option_selected(
+            OptionList.OptionSelected(
+                autocomplete,
+                autocomplete.options[0],
+                0,
+            ),
+        )
+        await pilot.pause()
+
+        assert search.value == "tag:"
+        assert autocomplete.has_class("-hidden")
+        assert app.focused is search
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_autocomplete_blur_descendant_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dismiss helper should keep popup open for focused descendants."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_autocomplete_sources(tags=["python"], groups=["backend"])
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        search.focus()
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        class _FocusedDescendant:
+            @property
+            def ancestors(self) -> list[OptionList]:
+                return [autocomplete]
+
+        monkeypatch.setattr(
+            type(app),
+            "focused",
+            property(lambda _self: _FocusedDescendant()),
+        )
+        panel._dismiss_autocomplete_if_unfocused()
+        assert not autocomplete.has_class("-hidden")
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_option_selected_ignores_other_option_lists() -> (
+    None
+):
+    """OptionSelected from unrelated lists should be ignored."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_autocomplete_sources(tags=["python"], groups=["backend"])
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        search.focus()
+        await pilot.pause()
+        await pilot.press("t")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+        before = search.value
+
+        foreign = OptionList("noop", id="other-autocomplete")
+        panel.on_option_list_option_selected(
+            OptionList.OptionSelected(
+                foreign,
+                foreign.options[0],
+                0,
+            ),
+        )
+        await pilot.pause()
+
+        assert search.value == before
+        assert not autocomplete.has_class("-hidden")
+
+
+def test_idea_list_panel_apply_highlighted_out_of_range_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Out-of-range highlight should safely no-op."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    panel._autocomplete_state = _AutocompleteState(
+        candidates=("tag:",),
+        replace_start=0,
+        replace_end=0,
+    )
+
+    class _FakeAutocomplete:
+        highlighted = 3
+
+    fake_autocomplete = _FakeAutocomplete()
+
+    def fake_query_one(
+        selector: str,
+        *_args: object,
+        **_kwargs: object,
+    ) -> object:
+        if selector == "#search-autocomplete":
+            return fake_autocomplete
+        msg = f"Unexpected query selector: {selector}"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(
+        panel,
+        "query_one",
+        fake_query_one,
+    )
+    panel._apply_highlighted_autocomplete()
+
+
+def test_idea_list_panel_autocomplete_pure_helpers_branches() -> None:
+    """Pure autocomplete helpers should cover unsupported/no-match paths."""
+    assert (
+        _resolve_autocomplete_state(
+            "foo:bar",
+            cursor_position=7,
+            tags=("python",),
+            groups=("backend",),
+            allow_empty_operator=True,
+        )
+        is None
+    )
+
+    assert (
+        _resolve_autocomplete_state(
+            "tag:zzz",
+            cursor_position=7,
+            tags=("python",),
+            groups=("backend",),
+            allow_empty_operator=True,
+        )
+        is None
+    )
+
+    assert (
+        _resolve_autocomplete_state(
+            "tag:python",
+            cursor_position=2,
+            tags=("python",),
+            groups=("backend",),
+            allow_empty_operator=True,
+        )
+        is None
+    )
+
+    start, end = _token_bounds("tag:python and", 1)
+    assert (start, end) == (0, 10)
 
 
 def test_idea_list_panel_get_selected_idea_with_missing_pk(

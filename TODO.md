@@ -9,6 +9,11 @@ Ideas to add to Cogitus
 - continue navigation and keybinding polish.
 - add in-place right-pane markdown edit mode (view/edit toggle).
 - add contextual dynamic toolbar/actions by mode.
+- add a tag management dialog with usage counts, rename/edit support, and
+  explicit stale-tag pruning (selected/all stale with confirmation).
+- extract shared autocomplete lifecycle logic currently duplicated across
+  `IdeaListPanel` and `IdeaFormScreen` into a common helper/mixin to reduce
+  divergence risk.
 
 ## CLI
 
@@ -59,6 +64,12 @@ None
 
 - evaluate optional SQLite write tuning (`PRAGMA synchronous=NORMAL`) with
   benchmark and risk assessment.
+- once `sqliter-py` issue `#132` (aggregate/group-by support) is resolved,
+  replace raw SQL in `TagRepository.list_with_usage()` with ORM/query-builder
+  aggregation.
+- once `sqliter-py` issue `#133` (public M2M metadata for junction/column
+  names) is resolved, replace hardcoded M2M SQL identifier constants in
+  `TagRepository` with metadata read from the relationship descriptors.
 
 ## AI Assistance
 

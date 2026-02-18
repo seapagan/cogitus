@@ -169,6 +169,14 @@ class IdeaService:
         """
         return self._tag_repo.list_all()
 
+    def list_tags_in_use(self) -> list[Tag]:
+        """List tags currently linked to at least one idea."""
+        return self._tag_repo.list_in_use()
+
+    def list_tags_with_usage(self) -> list[tuple[Tag, int]]:
+        """List all tags with their current linked-idea usage counts."""
+        return self._tag_repo.list_with_usage()
+
     def get_idea_cursor_position(self, idea_pk: int) -> int | None:
         """Return persisted body cursor position for an idea, if present."""
         return self._cursor_state_repo.get_position(idea_pk)

@@ -123,6 +123,10 @@ class MainScreen(Screen[None]):
     def refresh_ideas(self, select_pk: int | None = None) -> None:
         """Reload the idea list from the service."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        panel.set_autocomplete_sources(
+            tags=[tag.name for tag in self._service.list_tags_in_use()],
+            groups=[group.name for group in self._service.list_groups()],
+        )
         search_query = panel.query_one("#search-input", Input).value.strip()
         grouped = self._service.list_ideas_grouped(search_query or None)
         panel.load_grouped_ideas(grouped)
@@ -396,6 +400,8 @@ class MainScreen(Screen[None]):
     def action_cancel_search(self) -> None:
         """Clear search and return focus to the previous panel."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        if panel.dismiss_autocomplete():
+            return
         search = panel.query_one("#search-input", Input)
         if self.app.focused is not search:
             return
@@ -415,6 +421,8 @@ class MainScreen(Screen[None]):
     def action_toggle_focus(self) -> None:
         """Toggle focus between list and content panes."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        if self.app.focused is panel.query_one("#search-input", Input):
+            return
         if panel.has_focus_within:
             content = self.query_one("#content-panel", IdeaView)
             content.focus()
