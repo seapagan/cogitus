@@ -15,24 +15,21 @@ if TYPE_CHECKING:
 _IDEAS_TAGS_TABLE = "ideas_tags"
 _IDEAS_TAGS_TAG_PK_COL = "tags_pk"
 _IDEAS_TAGS_IDEA_PK_COL = "ideas_pk"
-_LIST_IN_USE_SQL = "SELECT DISTINCT __TAG_PK__ FROM __TABLE__;".replace(
-    "__TAG_PK__", _IDEAS_TAGS_TAG_PK_COL
-).replace("__TABLE__", _IDEAS_TAGS_TABLE)
+# Static SQL built from trusted module constants (no user input).
+_LIST_IN_USE_SQL = (
+    f"SELECT DISTINCT {_IDEAS_TAGS_TAG_PK_COL} FROM {_IDEAS_TAGS_TABLE};"  # noqa: S608
+)
 _LIST_WITH_USAGE_SQL = (
-    (
-        "SELECT tags.pk AS pk, "
-        "tags.name AS name, "
-        "tags.created_at AS created_at, "
-        "tags.updated_at AS updated_at, "
-        "COUNT(__TABLE__.__IDEA_PK__) AS usage "
-        "FROM tags "
-        "LEFT JOIN __TABLE__ ON __TABLE__.__TAG_PK__ = tags.pk "
-        "GROUP BY tags.pk, tags.name, tags.created_at, tags.updated_at "
-        "ORDER BY tags.name;"
-    )
-    .replace("__TABLE__", _IDEAS_TAGS_TABLE)
-    .replace("__IDEA_PK__", _IDEAS_TAGS_IDEA_PK_COL)
-    .replace("__TAG_PK__", _IDEAS_TAGS_TAG_PK_COL)
+    "SELECT tags.pk AS pk, "  # noqa: S608
+    "tags.name AS name, "
+    "tags.created_at AS created_at, "
+    "tags.updated_at AS updated_at, "
+    f"COUNT({_IDEAS_TAGS_TABLE}.{_IDEAS_TAGS_IDEA_PK_COL}) AS usage "
+    "FROM tags "
+    f"LEFT JOIN {_IDEAS_TAGS_TABLE} ON "
+    f"{_IDEAS_TAGS_TABLE}.{_IDEAS_TAGS_TAG_PK_COL} = tags.pk "
+    "GROUP BY tags.pk, tags.name, tags.created_at, tags.updated_at "
+    "ORDER BY tags.name;"
 )
 
 
