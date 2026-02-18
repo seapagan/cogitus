@@ -267,6 +267,9 @@ class IdeaFormScreen(ModalScreen[int | None]):
             return False
         if not self._apply_highlighted_tag_autocomplete():
             return False
+        # Textual 7.5 emits Input.Changed synchronously for
+        # insert_text_at_cursor.
+        # If this becomes async, this single-shot suppression may need redesign.
         self._suspend_tag_autocomplete_sync = True
         tags_input.insert_text_at_cursor(", ")
         return True
@@ -399,6 +402,8 @@ class IdeaFormScreen(ModalScreen[int | None]):
         tags_input = self.query_one("#tags-input", Input)
         before = tags_input.value[: state.replace_start]
         after = tags_input.value[state.replace_end :]
+        # Textual 7.5 emits Input.Changed synchronously for value assignment.
+        # If this becomes async, this single-shot suppression may need redesign.
         self._suspend_tag_autocomplete_sync = True
         tags_input.value = f"{before}{suggestion}{after}"
         tags_input.cursor_position = state.replace_start + len(suggestion)

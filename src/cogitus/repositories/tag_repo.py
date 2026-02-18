@@ -20,7 +20,10 @@ _LIST_IN_USE_SQL = "SELECT DISTINCT __TAG_PK__ FROM __TABLE__;".replace(
 ).replace("__TABLE__", _IDEAS_TAGS_TABLE)
 _LIST_WITH_USAGE_SQL = (
     (
-        "SELECT tags.pk, tags.name, tags.created_at, tags.updated_at, "
+        "SELECT tags.pk AS pk, "
+        "tags.name AS name, "
+        "tags.created_at AS created_at, "
+        "tags.updated_at AS updated_at, "
         "COUNT(__TABLE__.__IDEA_PK__) AS usage "
         "FROM tags "
         "LEFT JOIN __TABLE__ ON __TABLE__.__TAG_PK__ = tags.pk "
@@ -114,16 +117,32 @@ class TagRepository:
         Returns:
             List of (tag, usage_count) tuples ordered by tag name.
         """
-        rows = self._db.connect().execute(_LIST_WITH_USAGE_SQL)
+        cursor = self._db.connect().execute(_LIST_WITH_USAGE_SQL)
+        column_names = tuple(
+            description[0] for description in cursor.description or ()
+        )
+
+        def row_to_mapping(row: tuple[object, ...]) -> dict[str, object]:
+            """Map sqlite row values by selected column name."""
+            return dict(zip(column_names, row, strict=False))
+
+        def mapped_int(mapping: dict[str, object], key: str) -> int:
+            """Extract an integer-compatible mapped value."""
+            return int(cast("int | str", mapping[key]))
+
+        def mapped_str(mapping: dict[str, object], key: str) -> str:
+            """Extract a string-compatible mapped value."""
+            return str(cast("str | int", mapping[key]))
+
         return [
             (
                 Tag(
-                    pk=int(row[0]),
-                    name=str(row[1]),
-                    created_at=int(row[2]),
-                    updated_at=int(row[3]),
+                    pk=mapped_int(mapped, "pk"),
+                    name=mapped_str(mapped, "name"),
+                    created_at=mapped_int(mapped, "created_at"),
+                    updated_at=mapped_int(mapped, "updated_at"),
                 ),
-                int(row[4]),
+                mapped_int(mapped, "usage"),
             )
-            for row in rows.fetchall()
+            for mapped in (row_to_mapping(row) for row in cursor.fetchall())
         ]

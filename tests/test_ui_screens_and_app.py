@@ -470,10 +470,14 @@ async def test_idea_form_autocomplete_blur_descendant_branch(
         assert not autocomplete.has_class("-hidden")
 
         class _FocusedDescendant:
-            ancestors = (autocomplete,)
+            @property
+            def ancestors(self) -> list[OptionList]:
+                return [autocomplete]
 
         class _FocusedOther:
-            ancestors: tuple[object, ...] = ()
+            @property
+            def ancestors(self) -> list[object]:
+                return []
 
         monkeypatch.setattr(
             type(app),
