@@ -14,6 +14,8 @@ way to capture, explore, and refine programming ideas without leaving the
 terminal. This is not a generic note-taking app and not a task manager. Cogitus
 is focused on structured idea capture, iteration, and discovery.
 
+![cogitus1](./images/cogitus_main.svg)
+
 ---
 
 ## Goals
