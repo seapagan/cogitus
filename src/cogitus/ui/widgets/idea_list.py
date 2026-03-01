@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from rich.text import Text
+from textual.binding import Binding, BindingType
 from textual.containers import Vertical
 from textual.message import Message
 from textual.reactive import reactive
@@ -20,8 +21,10 @@ if TYPE_CHECKING:
 
     from cogitus.models.group import Group
     from cogitus.models.idea import Idea
+    from cogitus.search import SearchResult
 
 _DAYS_IN_WEEK = 7
+_MAX_SNIPPET_LENGTH = 88
 _SEARCH_OPERATORS: tuple[str, ...] = ("tag:", "group:")
 
 
@@ -78,6 +81,32 @@ class IdeaListPanel(Vertical):
     """Left panel with search input and grouped idea tree."""
 
     search_query: reactive[str] = reactive("", layout=True)
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding(
+            "down",
+            "footer_next_result",
+            "Next Result",
+            show=True,
+            key_display="Down",
+            priority=True,
+        ),
+        Binding(
+            "up",
+            "footer_previous_result",
+            "Prev Result",
+            show=True,
+            key_display="Up",
+            priority=True,
+        ),
+        Binding(
+            "escape",
+            "footer_back_to_search",
+            "Back to Search",
+            show=True,
+            key_display="Esc",
+            priority=True,
+        ),
+    ]
 
     class IdeaSelected(Message):
         """Fired when an idea is selected."""
@@ -108,6 +137,8 @@ class IdeaListPanel(Vertical):
         self._ideas_by_pk: dict[int, Idea] = {}
         self._group_nodes_by_pk: dict[int, TreeNode[IdeaTreeNodeData]] = {}
         self._idea_nodes_by_pk: dict[int, TreeNode[IdeaTreeNodeData]] = {}
+        self._result_order_pks: tuple[int, ...] = ()
+        self._snippets_by_pk: dict[int, str] = {}
         self._tag_suggestions: tuple[str, ...] = ()
         self._group_suggestions: tuple[str, ...] = ()
         self._autocomplete_state: _AutocompleteState | None = None
@@ -133,6 +164,8 @@ class IdeaListPanel(Vertical):
         self._ideas_by_pk.clear()
         self._group_nodes_by_pk.clear()
         self._idea_nodes_by_pk.clear()
+        self._result_order_pks = ()
+        self._snippets_by_pk.clear()
         tree.root.label = "Ideas"
         tree.root.data = IdeaTreeNodeData(kind="root")
         return tree
@@ -140,11 +173,14 @@ class IdeaListPanel(Vertical):
     def load_grouped_ideas(
         self,
         grouped_ideas: list[tuple[Group, list[Idea]]],
+        *,
+        snippets_by_pk: dict[int, str] | None = None,
     ) -> None:
         """Replace the displayed grouped ideas."""
         tree = self._reset_tree()
+        self._snippets_by_pk = dict(snippets_by_pk or {})
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
-
+        ordered_pks: list[int] = []
         for group, ideas in grouped_ideas:
             group_node = tree.root.add(
                 group.name,
@@ -157,18 +193,41 @@ class IdeaListPanel(Vertical):
                     group_node,
                     idea,
                     group_pk=group.pk,
+                    snippet=self._snippets_by_pk.get(idea.pk),
                 )
                 if first_idea_node is None:
                     first_idea_node = idea_node
+                ordered_pks.append(idea.pk)
+        self._result_order_pks = tuple(ordered_pks)
         tree.root.expand()
         if first_idea_node is not None:
             tree.select_node(first_idea_node)
             tree.move_cursor(first_idea_node, animate=False)
 
+    def load_grouped_search_results(
+        self,
+        grouped_results: list[tuple[Group, list[SearchResult]]],
+    ) -> None:
+        """Replace displayed ideas with ranked search results."""
+        snippets_by_pk: dict[int, str] = {}
+        grouped_ideas: list[tuple[Group, list[Idea]]] = []
+        for group, results in grouped_results:
+            ideas: list[Idea] = []
+            for result in results:
+                ideas.append(result.idea)
+                if result.snippet:
+                    snippets_by_pk[result.idea.pk] = result.snippet
+            grouped_ideas.append((group, ideas))
+        self.load_grouped_ideas(
+            grouped_ideas,
+            snippets_by_pk=snippets_by_pk,
+        )
+
     def load_ideas(self, ideas: list[Idea]) -> None:
         """Compatibility helper to load ideas under a synthetic group."""
         tree = self._reset_tree()
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
+        ordered_pks: list[int] = []
         for idea in ideas:
             idea_node = self._add_idea_node(
                 tree.root,
@@ -176,6 +235,8 @@ class IdeaListPanel(Vertical):
             )
             if first_idea_node is None:
                 first_idea_node = idea_node
+            ordered_pks.append(idea.pk)
+        self._result_order_pks = tuple(ordered_pks)
         tree.root.expand()
         if first_idea_node is not None:
             tree.select_node(first_idea_node)
@@ -187,12 +248,15 @@ class IdeaListPanel(Vertical):
         idea: Idea,
         *,
         group_pk: int | None = None,
+        snippet: str | None = None,
     ) -> TreeNode[IdeaTreeNodeData]:
         """Add an idea leaf node under parent and track it by primary key."""
         ts = _format_timestamp(idea.updated_at)
         label = Text(idea.title, style="bold")
         if ts:
             label.append(f" [{ts}]", style="dim")
+        if snippet:
+            label.append(f" | {_truncate_snippet(snippet)}", style="dim")
         node = parent.add_leaf(
             label,
             data=IdeaTreeNodeData(
@@ -213,6 +277,7 @@ class IdeaListPanel(Vertical):
             return False
         tree.select_node(node)
         tree.move_cursor(node, animate=False)
+        self.refresh_bindings()
         return True
 
     def get_selected_idea(self) -> Idea | None:
@@ -238,6 +303,7 @@ class IdeaListPanel(Vertical):
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes with debounce."""
         if event.input.id == "search-input":
+            self._sync_search_state_classes()
             if self._suspend_autocomplete_sync:
                 # Assumes Textual Input emits exactly one synchronous
                 # Input.Changed per programmatic search.value assignment.
@@ -250,6 +316,7 @@ class IdeaListPanel(Vertical):
                 0.2,
                 lambda: self._fire_search(event.value),
             )
+            self.refresh_bindings()
 
     def on_input_blurred(self, event: Input.Blurred) -> None:
         """Hide autocomplete when search input loses focus."""
@@ -287,6 +354,7 @@ class IdeaListPanel(Vertical):
         event: Tree.NodeSelected[IdeaTreeNodeData],
     ) -> None:
         """Handle idea selection from tree."""
+        self.refresh_bindings()
         self._post_if_idea_node(event.node.data)
 
     def on_tree_node_highlighted(
@@ -294,6 +362,7 @@ class IdeaListPanel(Vertical):
         event: Tree.NodeHighlighted[IdeaTreeNodeData],
     ) -> None:
         """Handle highlight change in tree."""
+        self.refresh_bindings()
         data = event.node.data if event.node is not None else None
         self._post_if_idea_node(data)
 
@@ -313,12 +382,36 @@ class IdeaListPanel(Vertical):
         """Focus the search input."""
         self.query_one("#search-input", Input).focus()
 
+    def focus_results(self) -> bool:
+        """Focus the result tree when active search has selectable ideas."""
+        if not self.search_is_active():
+            return False
+        if self.autocomplete_is_visible():
+            return False
+        if not self._idea_nodes_by_pk:
+            return False
+        self.query_one("#idea-list", Tree).focus()
+        return True
+
     def clear_search(self) -> None:
         """Clear the search input."""
         search = self.query_one("#search-input", Input)
         search.value = ""
         self.dismiss_autocomplete()
         search.focus()
+
+    def search_is_active(self) -> bool:
+        """Return whether the search input currently contains a query."""
+        search = self.query_one("#search-input", Input)
+        return bool(search.value.strip())
+
+    def autocomplete_is_visible(self) -> bool:
+        """Return whether search autocomplete is currently visible."""
+        return self._autocomplete_is_visible()
+
+    def is_first_result_selected(self) -> bool:
+        """Return whether the first active search result is selected."""
+        return self._tree_cursor_is_first_result()
 
     def set_autocomplete_sources(
         self,
@@ -332,40 +425,66 @@ class IdeaListPanel(Vertical):
         self._sync_autocomplete()
 
     def on_key(self, event: Key) -> None:
-        """Handle autocomplete keys while search input is focused."""
+        """Handle search-input and active-search result navigation keys."""
         search = self.query_one("#search-input", Input)
+        tree = self.query_one("#idea-list", Tree)
+        if self.app.focused is tree and self._handle_result_tree_key(
+            event,
+            search,
+        ):
+            return
+
         if self.app.focused is not search:
             return
 
-        if event.key == "tab":
+        self._handle_search_input_key(event)
+
+    def _handle_result_tree_key(
+        self,
+        event: Key,
+        search: Input,
+    ) -> bool:
+        """Handle keys while the result tree is focused."""
+        if not self.search_is_active():
+            return False
+
+        if event.key == "up":
             event.prevent_default()
             event.stop()
-            if self._autocomplete_is_visible():
-                self._cycle_autocomplete(1)
-            else:
-                self._sync_autocomplete(allow_empty_operator=True)
+            if self._tree_cursor_is_first_result():
+                search.focus()
+                return True
+            return self._move_result_cursor(-1)
+
+        if event.key == "down":
+            event.prevent_default()
+            event.stop()
+            return self._move_result_cursor(1)
+
+        return False
+
+    def _handle_search_input_key(self, event: Key) -> None:
+        """Handle keys while the search input is focused."""
+        if event.key == "tab":
+            self._handle_autocomplete_cycle(event, 1)
             return
 
         if event.key in {"shift+tab", "backtab"}:
-            event.prevent_default()
-            event.stop()
-            if self._autocomplete_is_visible():
-                self._cycle_autocomplete(-1)
-            else:
-                self._sync_autocomplete(allow_empty_operator=True)
-            return
-
-        if event.key == "down" and self._autocomplete_is_visible():
-            event.prevent_default()
-            event.stop()
-            self._cycle_autocomplete(1)
+            self._handle_autocomplete_cycle(event, -1)
             return
 
         if event.key == "up" and self._autocomplete_is_visible():
-            event.prevent_default()
-            event.stop()
-            self._cycle_autocomplete(-1)
+            self._cycle_visible_autocomplete(event, -1)
             return
+
+        if event.key == "down":
+            if self._autocomplete_is_visible():
+                self._cycle_visible_autocomplete(event, 1)
+                return
+            if self.focus_results():
+                event.prevent_default()
+                event.stop()
+                return
 
         if event.key == "enter" and self._autocomplete_is_visible():
             event.prevent_default()
@@ -377,6 +496,29 @@ class IdeaListPanel(Vertical):
             event.prevent_default()
             event.stop()
             self.dismiss_autocomplete()
+
+    def _handle_autocomplete_cycle(
+        self,
+        event: Key,
+        direction: Literal[-1, 1],
+    ) -> None:
+        """Handle cycling autocomplete or opening operator suggestions."""
+        if self._autocomplete_is_visible():
+            self._cycle_visible_autocomplete(event, direction)
+            return
+        event.prevent_default()
+        event.stop()
+        self._sync_autocomplete(allow_empty_operator=True)
+
+    def _cycle_visible_autocomplete(
+        self,
+        event: Key,
+        direction: Literal[-1, 1],
+    ) -> None:
+        """Cycle autocomplete and consume the triggering key event."""
+        event.prevent_default()
+        event.stop()
+        self._cycle_autocomplete(direction)
 
     def dismiss_autocomplete(self) -> bool:
         """Close autocomplete popup if it is currently visible."""
@@ -446,6 +588,87 @@ class IdeaListPanel(Vertical):
         search.cursor_position = state.replace_start + len(suggestion)
         self.dismiss_autocomplete()
 
+    def _sync_search_state_classes(self) -> None:
+        """Apply active-search styling classes to input and tree."""
+        search = self.query_one("#search-input", Input)
+        tree = self.query_one("#idea-list", Tree)
+        if self.search_is_active():
+            search.add_class("search-active")
+            tree.add_class("search-active")
+            return
+        search.remove_class("search-active")
+        tree.remove_class("search-active")
+
+    def _tree_cursor_is_first_result(self) -> bool:
+        """Return whether the tree cursor is on the first selectable idea."""
+        selected = self.get_selected_idea()
+        first_pk = self._result_order_pks[0] if self._result_order_pks else None
+        return selected is not None and selected.pk == first_pk
+
+    def _move_result_cursor(self, direction: Literal[-1, 1]) -> bool:
+        """Move the tree cursor to the previous or next idea result."""
+        tree = self.query_one("#idea-list", Tree)
+        next_node = self._adjacent_result_node(direction)
+        if next_node is None:
+            return True
+        tree.move_cursor(next_node, animate=False)
+        return True
+
+    def _adjacent_result_node(
+        self,
+        direction: Literal[-1, 1],
+    ) -> TreeNode[IdeaTreeNodeData] | None:
+        """Return the adjacent idea node relative to the current cursor."""
+        if not self._result_order_pks:
+            return None
+        selected = self.get_selected_idea()
+        if selected is None:
+            target_pk = (
+                self._result_order_pks[0]
+                if direction > 0
+                else self._result_order_pks[-1]
+            )
+            return self._idea_nodes_by_pk[target_pk]
+        current_index = self._result_order_pks.index(selected.pk)
+        next_index = current_index + direction
+        if next_index < 0 or next_index >= len(self._result_order_pks):
+            return None
+        return self._idea_nodes_by_pk[self._result_order_pks[next_index]]
+
+    def _ordered_result_nodes(self) -> tuple[TreeNode[IdeaTreeNodeData], ...]:
+        """Return result idea nodes ordered by their current tree position."""
+        return tuple(
+            self._idea_nodes_by_pk[pk]
+            for pk in self._result_order_pks
+            if pk in self._idea_nodes_by_pk
+        )
+
+    def check_action(
+        self,
+        action: str,
+        parameters: tuple[object, ...],
+    ) -> bool | None:
+        """Show footer hints only while navigating active search results."""
+        footer_actions = {
+            "footer_next_result",
+            "footer_previous_result",
+            "footer_back_to_search",
+        }
+        if action not in footer_actions:
+            return super().check_action(action, parameters)
+
+        if self.app.focused is not self.query_one("#idea-list", Tree):
+            return False
+        if not self.search_is_active():
+            return False
+
+        result: bool | None = None
+        if action == "footer_next_result":
+            result = self._adjacent_result_node(1) is not None
+        elif action in {"footer_previous_result", "footer_back_to_search"}:
+            result = True
+        return result
+
 
 def _normalize_suggestions(raw_values: list[str]) -> list[str]:
     """Normalize suggestion list by trimming and deduplicating in order."""
@@ -457,6 +680,14 @@ def _normalize_suggestions(raw_values: list[str]) -> list[str]:
             seen.add(value)
             normalized.append(value)
     return normalized
+
+
+def _truncate_snippet(snippet: str) -> str:
+    """Trim snippets to a compact single line for the tree."""
+    compact = " ".join(snippet.split())
+    if len(compact) <= _MAX_SNIPPET_LENGTH:
+        return compact
+    return f"{compact[: _MAX_SNIPPET_LENGTH - 3].rstrip()}..."
 
 
 def _resolve_autocomplete_state(

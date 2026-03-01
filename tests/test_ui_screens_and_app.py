@@ -12,6 +12,7 @@ from textual.widgets import Button, Input, OptionList, Select, TextArea, Tree
 
 from cogitus.app import CogitusApp
 from cogitus.config import EditBodyCursorMode, NewIdeaGroupMode
+from cogitus.search import SearchResult
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
     GroupDeleteReassignScreen,
@@ -951,8 +952,13 @@ async def test_main_screen_selection_and_search(
 
         search = mocker.patch.object(
             screen._service,
-            "list_ideas_grouped",
-            return_value=[(first.group, [first])],
+            "list_search_results_grouped",
+            return_value=[
+                (
+                    first.group,
+                    [SearchResult(idea=first, score=-1.0, snippet="First")],
+                )
+            ],
         )
         selected_view = mocker.patch.object(
             screen.query_one("#content-panel", IdeaView),
@@ -1213,8 +1219,8 @@ async def test_main_screen_refresh_empty_selection_branch(
         show_empty = mocker.patch.object(view, "show_empty")
         list_grouped = mocker.patch.object(
             screen._service,
-            "list_ideas_grouped",
-            wraps=screen._service.list_ideas_grouped,
+            "list_search_results_grouped",
+            wraps=screen._service.list_search_results_grouped,
         )
 
         search.value = "First"
@@ -1425,7 +1431,7 @@ async def test_main_screen_search_cancel_restores_previous_focus(
 async def test_main_screen_cancel_search_noop_when_search_not_focused(
     service: IdeaService,
 ) -> None:
-    """Cancel search should no-op when focus is not on search input."""
+    """Esc on tree should return to search first when search is active."""
     service.create_idea("First")
     screen = MainScreen(service)
     app = _SingleScreenApp(screen)
@@ -1442,7 +1448,234 @@ async def test_main_screen_cancel_search_noop_when_search_not_focused(
         await pilot.pause()
 
         assert search.value == "keep"
+        assert app.focused is search
+
+
+@pytest.mark.asyncio
+async def test_main_screen_cancel_search_ignores_non_search_focus(
+    service: IdeaService,
+) -> None:
+    """Esc should no-op when neither search nor results currently have focus."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        content = screen.query_one("#content-panel", IdeaView)
+
+        search.value = "keep"
+        content.focus()
+        await pilot.pause()
+
+        screen.action_cancel_search()
+        await pilot.pause()
+
+        assert search.value == "keep"
+        assert app.focused is content
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_results_support_keyboard_navigation(
+    service: IdeaService,
+) -> None:
+    """Active search should move between input and results via keyboard."""
+    service.create_idea("Alpha python")
+    service.create_idea("Beta python")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "python"
+        await pilot.pause()
+        bindings = screen.active_bindings
+        assert bindings["down"].binding.description == "Results"
+        assert bindings["escape"].binding.description == "Exit Search"
+        assert {
+            binding.binding.description for binding in bindings.values()
+        } == {"Results", "Exit Search"}
+
+        await pilot.press("down")
+        await pilot.pause()
         assert app.focused is tree
+        assert search.value == "python"
+        bindings = screen.active_bindings
+        assert bindings["down"].binding.description == "Next Result"
+        assert bindings["escape"].binding.description == "Back to Search"
+        assert bindings["up"].binding.description == "Search"
+        assert {
+            binding.binding.description for binding in bindings.values()
+        } == {"Next Result", "Search", "Back to Search"}
+
+        screen.action_cancel_search()
+        await pilot.pause()
+        assert app.focused is search
+        assert search.value == "python"
+
+        screen.action_cancel_search()
+        await pilot.pause()
+        assert app.focused is tree
+        assert search.value == ""
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_results_footer_uses_prev_result_for_non_first(
+    service: IdeaService,
+) -> None:
+    """`Up` should read as `Prev Result` when a non-first result is selected."""
+    service.create_idea("Alpha footerprev")
+    service.create_idea("Beta footerprev")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "footerprev"
+        await pilot.pause()
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.focused is tree
+
+        steps = 0
+        while panel.is_first_result_selected():
+            assert panel._adjacent_result_node(1) is not None
+            await pilot.press("down")
+            await pilot.pause()
+            steps += 1
+            assert steps < 50, (
+                "Navigation did not move away from first result "
+                "while panel.is_first_result_selected() stayed true"
+            )
+
+        bindings = screen.active_bindings
+        assert bindings["up"].binding.description == "Prev Result"
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_results_footer_hides_down_on_last_result(
+    service: IdeaService,
+) -> None:
+    """Last search result should hide the `Down` footer hint."""
+    service.create_idea("Alpha footerlast")
+    service.create_idea("Beta footerlast")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "footerlast"
+        await pilot.pause()
+
+        await pilot.press("down")
+        await pilot.pause()
+        steps = 0
+        while panel._adjacent_result_node(1) is not None:
+            await pilot.press("down")
+            await pilot.pause()
+            steps += 1
+            assert steps < 50, (
+                "Navigation did not reach last result "
+                "while panel._adjacent_result_node(1) kept returning a node"
+            )
+
+        bindings = screen.active_bindings
+        assert "down" not in bindings
+        assert {
+            binding.binding.description for binding in bindings.values()
+        } == {"Prev Result", "Back to Search"}
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_input_disables_non_search_actions(
+    service: IdeaService,
+) -> None:
+    """Search input should disable edit/copy and structural bindings."""
+    service.create_idea("Alpha searchinput")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "searchinput"
+        await pilot.pause()
+
+        for action in (
+            "new_idea",
+            "new_group",
+            "delete_group",
+            "delete_idea",
+            "edit_idea",
+            "copy_idea_body",
+        ):
+            assert screen.check_action(action, ()) is False
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_results_disable_structural_actions_only(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Search results should block structural keys but keep edit/copy."""
+    service.create_idea("Alpha actiongate")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "actiongate"
+        await pilot.pause()
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.focused is tree
+
+        for action in (
+            "new_idea",
+            "new_group",
+            "delete_group",
+            "delete_idea",
+        ):
+            assert screen.check_action(action, ()) is False
+        assert screen.check_action("edit_idea", ()) is True
+        assert screen.check_action("copy_idea_body", ()) is True
+
+        new_idea = mocker.patch.object(screen, "action_new_idea")
+        delete_idea = mocker.patch.object(screen, "action_delete_idea")
+        edit_idea = mocker.patch.object(screen, "action_edit_idea")
+        copy_idea_body = mocker.patch.object(screen, "action_copy_idea_body")
+
+        await pilot.press("n", "d", "e", "y")
+        await pilot.pause()
+
+        new_idea.assert_not_called()
+        delete_idea.assert_not_called()
+        edit_idea.assert_called_once_with()
+        copy_idea_body.assert_called_once_with()
 
 
 @pytest.mark.asyncio

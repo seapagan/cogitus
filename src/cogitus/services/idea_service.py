@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from cogitus.models.group import Group
     from cogitus.models.idea import Idea
     from cogitus.models.tag import Tag
+    from cogitus.search import SearchResult
 
 
 class IdeaService:
@@ -161,6 +162,11 @@ class IdeaService:
         parsed = parse_search_query(query)
         return self._idea_repo.search_advanced(parsed)
 
+    def search_results(self, query: str) -> list[SearchResult]:
+        """Search ideas and return ranked result metadata."""
+        parsed = parse_search_query(query)
+        return self._idea_repo.search_results(parsed)
+
     def list_tags(self) -> list[Tag]:
         """List all tags alphabetically.
 
@@ -211,6 +217,36 @@ class IdeaService:
             by_group,
             query_active=query_active,
         )
+
+    def list_search_results_grouped(
+        self,
+        query: str,
+    ) -> list[tuple[Group, list[SearchResult]]]:
+        """Return ranked search results grouped by idea group."""
+        groups = self._group_repo.list_all()
+        results = self.search_results(query)
+        by_group: dict[int, list[SearchResult]] = {
+            group.pk: [] for group in groups
+        }
+        for result in results:
+            by_group.setdefault(result.idea.group.pk, []).append(result)
+
+        sorted_groups = sorted(
+            groups,
+            key=lambda group: self._group_sort_key(
+                group.updated_at,
+                [result.idea for result in by_group.get(group.pk, [])],
+            ),
+            reverse=True,
+        )
+
+        grouped: list[tuple[Group, list[SearchResult]]] = []
+        for group in sorted_groups:
+            group_results = by_group.get(group.pk, [])
+            if not group_results:
+                continue
+            grouped.append((group, group_results))
+        return grouped
 
     def delete_group(
         self,
@@ -264,7 +300,7 @@ class IdeaService:
         """Return ideas for grouped display based on query state."""
         if query_active:
             # query is guaranteed non-empty by query_active.
-            return self.search_ideas_advanced(query or "")
+            return [result.idea for result in self.search_results(query or "")]
         return self._idea_repo.list_all()
 
     @staticmethod

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, ClassVar
 
-from textual.binding import Binding, BindingType
+from textual.binding import ActiveBinding, Binding, BindingType
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, Markdown, Tree
 
@@ -37,6 +38,34 @@ if TYPE_CHECKING:
 class MainScreen(Screen[None]):
     """Two-pane main screen: idea list + detail view."""
 
+    _SEARCH_MODE_DISABLED_ACTIONS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "new_idea",
+            "new_group",
+            "delete_group",
+            "delete_idea",
+        }
+    )
+    _SEARCH_INPUT_DISABLED_ACTIONS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "edit_idea",
+            "copy_idea_body",
+        }
+    )
+    _SEARCH_INPUT_FOOTER_ACTIONS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "footer_search_results",
+            "footer_exit_search",
+        }
+    )
+    _SEARCH_RESULTS_FOOTER_ACTIONS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "footer_next_result",
+            "footer_previous_result",
+            "footer_back_to_search",
+        }
+    )
+
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("n", "new_idea", "New", key_display="n"),
         Binding("g", "new_group", "New Group", key_display="g"),
@@ -50,6 +79,22 @@ class MainScreen(Screen[None]):
         Binding("d", "delete_idea", "Delete", key_display="d"),
         Binding("slash", "focus_search", "Search", key_display="/"),
         Binding("escape", "cancel_search", "Back", show=False),
+        Binding(
+            "down",
+            "footer_search_results",
+            "Results",
+            show=True,
+            key_display="Down",
+            priority=True,
+        ),
+        Binding(
+            "escape",
+            "footer_exit_search",
+            "Exit Search",
+            show=True,
+            key_display="Esc",
+            priority=True,
+        ),
         Binding(
             "question_mark",
             "show_help",
@@ -128,11 +173,20 @@ class MainScreen(Screen[None]):
             groups=[group.name for group in self._service.list_groups()],
         )
         search_query = panel.query_one("#search-input", Input).value.strip()
-        grouped = self._service.list_ideas_grouped(search_query or None)
-        panel.load_grouped_ideas(grouped)
+        if search_query:
+            grouped_results = self._service.list_search_results_grouped(
+                search_query
+            )
+            panel.load_grouped_search_results(grouped_results)
+            has_ideas = any(
+                group_results for _, group_results in grouped_results
+            )
+        else:
+            grouped_ideas = self._service.list_ideas_grouped(None)
+            panel.load_grouped_ideas(grouped_ideas)
+            has_ideas = any(group_ideas for _, group_ideas in grouped_ideas)
 
         view = self.query_one("#content-panel", IdeaView)
-        has_ideas = any(group_ideas for _, group_ideas in grouped)
         if has_ideas:
             if select_pk is not None:
                 panel.select_idea(select_pk)
@@ -165,8 +219,13 @@ class MainScreen(Screen[None]):
     ) -> None:
         """Filter ideas based on search query."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        grouped = self._service.list_ideas_grouped(event.query)
-        panel.load_grouped_ideas(grouped)
+        query = event.query.strip()
+        if query:
+            grouped_results = self._service.list_search_results_grouped(query)
+            panel.load_grouped_search_results(grouped_results)
+        else:
+            grouped_ideas = self._service.list_ideas_grouped(None)
+            panel.load_grouped_ideas(grouped_ideas)
         view = self.query_one("#content-panel", IdeaView)
         selected = panel.get_selected_idea()
         if selected is not None:
@@ -403,6 +462,11 @@ class MainScreen(Screen[None]):
         if panel.dismiss_autocomplete():
             return
         search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+        if self.app.focused is tree and panel.search_is_active():
+            search.focus()
+            return
+
         if self.app.focused is not search:
             return
 
@@ -448,6 +512,78 @@ class MainScreen(Screen[None]):
     def action_quit_app(self) -> None:
         """Quit the application."""
         self.app.exit()
+
+    def check_action(
+        self,
+        action: str,
+        parameters: tuple[object, ...],
+    ) -> bool | None:
+        """Show search-mode footer hints only when they are relevant."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+
+        if panel.search_is_active():
+            if (
+                self.app.focused in {search, tree}
+                and action in self._SEARCH_MODE_DISABLED_ACTIONS
+            ):
+                return False
+            if (
+                self.app.focused is search
+                and action in self._SEARCH_INPUT_DISABLED_ACTIONS
+            ):
+                return False
+
+        if action == "footer_search_results":
+            return (
+                self.app.focused is search
+                and panel.search_is_active()
+                and not panel.autocomplete_is_visible()
+                and bool(panel.get_selected_idea())
+            )
+        if action == "footer_exit_search":
+            return self.app.focused is search and panel.search_is_active()
+        return super().check_action(action, parameters)
+
+    @property
+    def active_bindings(self) -> dict[str, ActiveBinding]:
+        """Return bindings with search-mode footer filtering."""
+        bindings = super().active_bindings
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+
+        if self.app.focused is search and panel.search_is_active():
+            bindings = {
+                key: binding
+                for key, binding in bindings.items()
+                if binding.binding.action in self._SEARCH_INPUT_FOOTER_ACTIONS
+            }
+        elif self.app.focused is tree and panel.search_is_active():
+            bindings = {
+                key: binding
+                for key, binding in bindings.items()
+                if binding.binding.action in self._SEARCH_RESULTS_FOOTER_ACTIONS
+            }
+
+        up_binding = bindings.get("up")
+        if (
+            self.app.focused is tree
+            and panel.search_is_active()
+            and up_binding is not None
+            and up_binding.binding.action == "footer_previous_result"
+        ):
+            description = (
+                "Search" if panel.is_first_result_selected() else "Prev Result"
+            )
+            bindings["up"] = ActiveBinding(
+                up_binding.node,
+                replace(up_binding.binding, description=description),
+                up_binding.enabled,
+                up_binding.tooltip,
+            )
+        return bindings
 
     def _set_selected_idea(self, idea_pk: int | None) -> None:
         """Track and publish the selected idea primary key."""

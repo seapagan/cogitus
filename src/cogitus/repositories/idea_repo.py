@@ -7,15 +7,27 @@ from typing import TYPE_CHECKING
 from cogitus.constants import DEFAULT_GROUP_NAME
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
-from cogitus.search import SearchFilter, SearchQuery, parse_search_query
+from cogitus.search import (
+    SearchFilter,
+    SearchQuery,
+    SearchResult,
+    parse_search_query,
+)
+from cogitus.search.backend import FtsSearchBackend
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from sqliter import SqliterDB
 
     from cogitus.models.group import Group
     from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.tag_repo import TagRepository
     from cogitus.search.query import FilterConnector
+
+
+_LEGACY_TEXT_MATCH_SCORE = 0.0
+_DEFAULT_TEXT_MATCH = (_LEGACY_TEXT_MATCH_SCORE, None)
 
 
 class IdeaRepository:
@@ -41,6 +53,7 @@ class IdeaRepository:
         self._tag_repo = tag_repo
         self._group_repo = group_repo
         self._default_group_name = default_group_name
+        self._search_backend = FtsSearchBackend(db)
 
     def create(
         self,
@@ -65,6 +78,7 @@ class IdeaRepository:
         if tag_names:
             tags = [self._tag_repo.get_or_create(n) for n in tag_names]
             idea.tags.add(*tags)
+        self._search_backend.upsert_idea(idea.pk)
         return idea
 
     def get(self, pk: int) -> Idea | None:
@@ -147,6 +161,7 @@ class IdeaRepository:
             tags = [self._tag_repo.get_or_create(n) for n in tag_names]
             idea.tags.set(*tags)
 
+        self._search_backend.upsert_idea(idea.pk)
         return idea
 
     def delete(self, pk: int) -> None:
@@ -158,6 +173,7 @@ class IdeaRepository:
             pk: The primary key of the idea to delete.
         """
         self._db.delete(Idea, pk)
+        self._search_backend.delete_idea(pk)
 
     def search(self, query: str) -> list[Idea]:
         """Search ideas using raw query text compatibility API."""
@@ -165,11 +181,18 @@ class IdeaRepository:
 
     def search_advanced(self, query: SearchQuery) -> list[Idea]:
         """Search ideas using parsed free text and structured filters."""
+        return [result.idea for result in self.search_results(query)]
+
+    def search_results(self, query: SearchQuery) -> list[SearchResult]:
+        """Search ideas using parsed free text and structured filters."""
         if query.text is None and not query.filters:
-            return self.list_all()
+            return [
+                SearchResult(idea=idea, score=_LEGACY_TEXT_MATCH_SCORE)
+                for idea in self.list_all()
+            ]
 
         text_matches = (
-            self._matching_pks_for_text(query.text)
+            self._search_text_matches(query.text)
             if query.text is not None
             else None
         )
@@ -181,10 +204,13 @@ class IdeaRepository:
             if query.filters
             else None
         )
-        matched_pks = self._combine_match_sets(text_matches, filter_matches)
+        matched_pks = self._combine_match_sets(
+            set(text_matches) if text_matches is not None else None,
+            filter_matches,
+        )
         if not matched_pks:
             return []
-        return self._fetch_ideas_by_pk(matched_pks)
+        return self._fetch_search_results(matched_pks, text_matches)
 
     @staticmethod
     def _combine_match_sets(
@@ -200,30 +226,65 @@ class IdeaRepository:
             return set(text_matches)
         return text_matches & filter_matches
 
+    def _search_text_matches(
+        self,
+        text_query: str,
+    ) -> dict[int, tuple[float, str | None]]:
+        """Return ranked text matches keyed by idea primary key."""
+        backend_matches = self._search_backend.search_text(text_query)
+        if backend_matches is not None:
+            return {
+                pk: (score, snippet) for pk, score, snippet in backend_matches
+            }
+
+        return self._legacy_text_matches(text_query)
+
     def _matching_pks_for_text(self, text_query: str) -> set[int]:
+        """Return compatibility text matches as a plain primary-key set."""
+        return set(self._search_text_matches(text_query))
+
+    def _legacy_text_matches(
+        self,
+        text_query: str,
+    ) -> dict[int, tuple[float, str | None]]:
         """Return idea primary keys matching text across title/body/tag."""
         query = text_query.strip()
         if not query:
-            return set()
+            return {}
 
-        matched_pks: set[int] = set()
+        matched: dict[int, tuple[float, str | None]] = {}
         for idea in (
             self._db.select(Idea).filter(title__icontains=query).fetch_all()
         ):
-            matched_pks.add(idea.pk)
+            matched[idea.pk] = (
+                _LEGACY_TEXT_MATCH_SCORE,
+                self._legacy_snippet(idea, query),
+            )
         for idea in (
             self._db.select(Idea).filter(body__icontains=query).fetch_all()
         ):
-            matched_pks.add(idea.pk)
+            matched.setdefault(
+                idea.pk,
+                (
+                    _LEGACY_TEXT_MATCH_SCORE,
+                    self._legacy_snippet(idea, query),
+                ),
+            )
 
         matching_tags = (
             self._db.select(Tag).filter(name__icontains=query).fetch_all()
         )
         for tag in matching_tags:
             for idea in tag.ideas.fetch_all():  # type: ignore[attr-defined]
-                matched_pks.add(idea.pk)
+                matched.setdefault(
+                    idea.pk,
+                    (
+                        _LEGACY_TEXT_MATCH_SCORE,
+                        self._legacy_snippet(idea, query),
+                    ),
+                )
 
-        return matched_pks
+        return matched
 
     def _matching_pks_for_filters(
         self,
@@ -270,17 +331,44 @@ class IdeaRepository:
         matched = self._db.select(Idea).filter(group_id=group.pk).fetch_all()
         return {idea.pk for idea in matched}
 
-    def _fetch_ideas_by_pk(self, idea_pks: set[int]) -> list[Idea]:
+    def _fetch_ideas_by_pk(self, idea_pks: Sequence[int]) -> list[Idea]:
         """Fetch idea models with relations for the given primary keys."""
-        ideas = (
+        return (
             self._db.select(Idea)
             .select_related("group")
             .prefetch_related("tags")
             .filter(pk__in=list(idea_pks))
             .fetch_all()
         )
-        ideas.sort(key=lambda idea: idea.updated_at, reverse=True)
-        return ideas
+
+    def _fetch_search_results(
+        self,
+        idea_pks: set[int],
+        text_matches: dict[int, tuple[float, str | None]] | None,
+    ) -> list[SearchResult]:
+        """Fetch fully-hydrated search results for the given primary keys."""
+        ideas = self._fetch_ideas_by_pk(list(idea_pks))
+        if text_matches is None:
+            ideas.sort(key=lambda idea: idea.updated_at, reverse=True)
+            return [
+                SearchResult(idea=idea, score=_LEGACY_TEXT_MATCH_SCORE)
+                for idea in ideas
+            ]
+
+        ideas.sort(
+            key=lambda idea: (
+                text_matches.get(
+                    idea.pk,
+                    _DEFAULT_TEXT_MATCH,
+                )[0],
+                -idea.updated_at,
+            )
+        )
+        return [
+            SearchResult(idea=idea, score=match[0], snippet=match[1])
+            for idea in ideas
+            for match in [text_matches.get(idea.pk, _DEFAULT_TEXT_MATCH)]
+        ]
 
     def list_for_group(self, group_pk: int) -> list[Idea]:
         """Return ideas for a specific group ordered by recency."""
@@ -316,11 +404,18 @@ class IdeaRepository:
         # Validate target group exists
         self._resolve_group(target_group_pk)
 
-        return self._db.update_where(
+        moved = self._db.update_where(
             Idea,
             where={"group_id": source_group_pk},
             values={"group_id": target_group_pk},
         )
+        if moved:
+            self._search_backend.rebuild()
+        return moved
+
+    def rebuild_search_index(self) -> None:
+        """Rebuild the search index from persisted relational data."""
+        self._search_backend.rebuild()
 
     def _resolve_group(self, group_pk: int | None) -> Group:
         """Resolve a group by primary key, falling back to default."""
@@ -331,3 +426,35 @@ class IdeaRepository:
             msg = f"Group with pk={group_pk} not found"
             raise ValueError(msg)
         return self._group_repo.get_or_create(self._default_group_name)
+
+    @staticmethod
+    def _legacy_snippet(idea: Idea, query: str) -> str | None:
+        """Build a compact fallback snippet from title/body text."""
+        if query.lower() in idea.body.lower():
+            return IdeaRepository._snippet_window(idea.body, query)
+        if query.lower() in idea.title.lower():
+            return idea.title
+        if idea.body.strip():
+            return IdeaRepository._snippet_window(idea.body, query)
+        return idea.title or None
+
+    @staticmethod
+    def _snippet_window(text: str, query: str, width: int = 90) -> str:
+        """Extract a small contextual snippet around the first match."""
+        normalized = " ".join(text.split())
+        if not normalized:
+            return ""
+
+        lowered = normalized.lower()
+        index = lowered.find(query.lower())
+        if index < 0:
+            return normalized[:width].rstrip()
+
+        start = max(0, index - (width // 3))
+        end = min(len(normalized), index + len(query) + (width // 2))
+        snippet = normalized[start:end].strip()
+        if start > 0:
+            snippet = f"...{snippet}"
+        if end < len(normalized):
+            snippet = f"{snippet}..."
+        return snippet

@@ -26,6 +26,10 @@ MainScreen {
     padding: 0 1;
 }
 
+#search-input.search-active {
+    border: tall $warning;
+}
+
 #search-autocomplete {
     overlay: screen;
     width: 1fr;
@@ -41,6 +45,16 @@ MainScreen {
 
 #idea-list {
     height: 1fr;
+}
+
+#idea-list.search-active:focus > .tree--cursor {
+    color: $text;
+    background: $warning;
+    text-style: bold;
+}
+
+#idea-list.search-active > .tree--guides-selected {
+    color: $warning;
 }
 
 .idea-tags {

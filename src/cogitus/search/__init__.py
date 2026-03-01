@@ -5,9 +5,11 @@ from cogitus.search.query import (
     SearchQuery,
     parse_search_query,
 )
+from cogitus.search.result import SearchResult
 
 __all__ = [
     "SearchFilter",
     "SearchQuery",
+    "SearchResult",
     "parse_search_query",
 ]

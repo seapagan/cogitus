@@ -19,14 +19,24 @@ Ideas to add to Cogitus
 
 None
 
+## Tests
+
+- refactor suitable UI/integration tests to be pilot-first: use Textual's
+  `pilot` for tests that validate keyboard behavior, focus changes,
+  footer/binding state, screen transitions, or other user-visible interaction
+  flows; keep direct method/event calls only for unit-style helper and branch
+  coverage where pilot would add noise without improving confidence.
+
 ## Search and Filtering
 
-- add SQLite FTS5 search backend.
-- improve result ranking/snippet presentation.
+- before the next release, fix search-result snippet rendering in the left pane:
+  snippets are currently appended inline after the title/timestamp and are
+  clipped by the tree width, so they are not actually usable. Render them with
+  dedicated visible space in search mode (likely a second line) and verify they
+  remain readable in narrow panes.
+- improve search-result snippet visibility and match highlighting.
 - optimize advanced search query execution to reduce multi-pass PK collection
   and re-fetch overhead as dataset size grows.
-- add compatibility tests to ensure UI/search call contracts stay unchanged
-  when moving from `LIKE` to FTS5.
 
 ## Export, Import, and Backup
 
@@ -64,12 +74,20 @@ None
 
 - evaluate optional SQLite write tuning (`PRAGMA synchronous=NORMAL`) with
   benchmark and risk assessment.
-- once `sqliter-py` issue `#132` (aggregate/group-by support) is resolved,
-  replace raw SQL in `TagRepository.list_with_usage()` with ORM/query-builder
-  aggregation.
-- once `sqliter-py` issue `#133` (public M2M metadata for junction/column
-  names) is resolved, replace hardcoded M2M SQL identifier constants in
-  `TagRepository` with metadata read from the relationship descriptors.
+- make idea table writes and FTS index sync failure-tolerant. `create()`,
+  `update()`, and `delete()` currently commit the canonical row change and then
+  update `idea_search` separately, so an index write failure can leave search
+  stale until rebuild. Investigate a proper fix: shared transaction support if
+  `sqliter-py` can expose it cleanly, or a transactional outbox/on-commit
+  reindex queue with retry/logging plus an explicit rebuild path.
+- avoid unconditional FTS index rebuild on every `get_db()` startup; add an
+  index validity/version check or other lightweight verification so rebuilds
+  only happen when needed, while keeping an explicit/manual rebuild path.
+- now that `sqliter-py` has aggregate/group-by support, replace raw SQL in
+  `TagRepository.list_with_usage()` with ORM/query-builder aggregation.
+- now that `sqliter-py` exposes public M2M metadata for junction/column names,
+  replace hardcoded M2M SQL identifier constants in `TagRepository` with
+  metadata read from the relationship descriptors.
 
 ## AI Assistance
 
