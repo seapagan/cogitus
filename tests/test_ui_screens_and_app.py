@@ -1470,11 +1470,18 @@ async def test_main_screen_search_results_support_keyboard_navigation(
         await pilot.pause()
         search.value = "python"
         await pilot.pause()
+        bindings = screen.active_bindings
+        assert bindings["down"].binding.description == "Results"
+        assert bindings["escape"].binding.description == "Exit Search"
 
         await pilot.press("down")
         await pilot.pause()
         assert app.focused is tree
         assert search.value == "python"
+        bindings = screen.active_bindings
+        assert bindings["down"].binding.description == "Next Result"
+        assert bindings["escape"].binding.description == "Back to Search"
+        assert bindings["up"].binding.description == "Search"
 
         screen.action_cancel_search()
         await pilot.pause()

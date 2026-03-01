@@ -21,8 +21,8 @@
 
 | Key         | Action                                              |
 | ----------- | --------------------------------------------------- |
-| `Down`      | Move from active search input into filtered results |
-| `Up`        | Return from first result to the search input        |
+| `Down`      | Move into results, then to the next matching idea   |
+| `Up`        | Move to the previous idea, or back to search input  |
 | `Esc`       | Close autocomplete, then return/clear search        |
 | `Tab`       | Search autocomplete next suggestion                 |
 | `Shift+Tab` | Search autocomplete previous suggestion             |

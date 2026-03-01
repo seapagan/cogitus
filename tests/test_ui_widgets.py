@@ -343,6 +343,18 @@ async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
         await pilot.pause()
         assert app.focused is tree
 
+        await pilot.press("down")
+        await pilot.pause()
+        selected = panel.get_selected_idea()
+        assert selected is not None
+        assert selected.title == "Alpha python result"
+
+        await pilot.press("up")
+        await pilot.pause()
+        selected = panel.get_selected_idea()
+        assert selected is not None
+        assert selected.title == "Beta python result"
+
         await pilot.press("up")
         await pilot.pause()
         assert app.focused is search

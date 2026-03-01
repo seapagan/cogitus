@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from rich.text import Text
+from textual.binding import Binding, BindingType
 from textual.containers import Vertical
 from textual.message import Message
 from textual.reactive import reactive
@@ -80,6 +81,32 @@ class IdeaListPanel(Vertical):
     """Left panel with search input and grouped idea tree."""
 
     search_query: reactive[str] = reactive("", layout=True)
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding(
+            "down",
+            "footer_next_result",
+            "Next Result",
+            show=True,
+            key_display="Down",
+            priority=True,
+        ),
+        Binding(
+            "up",
+            "footer_previous_result",
+            "Prev Result",
+            show=True,
+            key_display="Up",
+            priority=True,
+        ),
+        Binding(
+            "escape",
+            "footer_back_to_search",
+            "Back to Search",
+            show=True,
+            key_display="Esc",
+            priority=True,
+        ),
+    ]
 
     class IdeaSelected(Message):
         """Fired when an idea is selected."""
@@ -348,7 +375,7 @@ class IdeaListPanel(Vertical):
         """Focus the result tree when active search has selectable ideas."""
         if not self.search_is_active():
             return False
-        if self._autocomplete_is_visible():
+        if self.autocomplete_is_visible():
             return False
         if not self._idea_nodes_by_pk:
             return False
@@ -366,6 +393,14 @@ class IdeaListPanel(Vertical):
         """Return whether the search input currently contains a query."""
         search = self.query_one("#search-input", Input)
         return bool(search.value.strip())
+
+    def autocomplete_is_visible(self) -> bool:
+        """Return whether search autocomplete is currently visible."""
+        return self._autocomplete_is_visible()
+
+    def is_first_result_selected(self) -> bool:
+        """Return whether the first active search result is selected."""
+        return self._tree_cursor_is_first_result()
 
     def set_autocomplete_sources(
         self,
@@ -401,13 +436,21 @@ class IdeaListPanel(Vertical):
         """Handle keys while the result tree is focused."""
         if not self.search_is_active():
             return False
-        if event.key != "up" or not self._tree_cursor_is_first_result():
-            return False
 
-        event.prevent_default()
-        event.stop()
-        search.focus()
-        return True
+        if event.key == "up":
+            event.prevent_default()
+            event.stop()
+            if self._tree_cursor_is_first_result():
+                search.focus()
+                return True
+            return self._move_result_cursor(-1)
+
+        if event.key == "down":
+            event.prevent_default()
+            event.stop()
+            return self._move_result_cursor(1)
+
+        return False
 
     def _handle_search_input_key(self, event: Key) -> None:
         """Handle keys while the search input is focused."""
@@ -548,8 +591,78 @@ class IdeaListPanel(Vertical):
     def _tree_cursor_is_first_result(self) -> bool:
         """Return whether the tree cursor is on the first selectable idea."""
         tree = self.query_one("#idea-list", Tree)
-        first_node = next(iter(self._idea_nodes_by_pk.values()), None)
+        first_node = next(iter(self._ordered_result_nodes()), None)
         return first_node is not None and tree.cursor_node is first_node
+
+    def _move_result_cursor(self, direction: Literal[-1, 1]) -> bool:
+        """Move the tree cursor to the previous or next idea result."""
+        tree = self.query_one("#idea-list", Tree)
+        next_node = self._adjacent_result_node(direction)
+        if next_node is None:
+            return True
+        tree.move_cursor(next_node, animate=False)
+        return True
+
+    def _adjacent_result_node(
+        self,
+        direction: Literal[-1, 1],
+    ) -> TreeNode[IdeaTreeNodeData] | None:
+        """Return the adjacent idea node relative to the current cursor."""
+        tree = self.query_one("#idea-list", Tree)
+        current_line = tree.cursor_line
+        ordered_nodes = self._ordered_result_nodes()
+        if not ordered_nodes:
+            return None
+        if current_line < 0:
+            return ordered_nodes[0] if direction > 0 else ordered_nodes[-1]
+
+        if direction > 0:
+            return next(
+                (node for node in ordered_nodes if node.line > current_line),
+                None,
+            )
+
+        previous_nodes = [
+            node for node in ordered_nodes if node.line < current_line
+        ]
+        return previous_nodes[-1] if previous_nodes else None
+
+    def _ordered_result_nodes(self) -> tuple[TreeNode[IdeaTreeNodeData], ...]:
+        """Return result idea nodes ordered by their current tree position."""
+        return tuple(
+            sorted(
+                self._idea_nodes_by_pk.values(),
+                key=lambda node: node.line,
+            )
+        )
+
+    def check_action(
+        self,
+        action: str,
+        parameters: tuple[object, ...],
+    ) -> bool | None:
+        """Show footer hints only while navigating active search results."""
+        footer_actions = {
+            "footer_next_result",
+            "footer_previous_result",
+            "footer_back_to_search",
+        }
+        if action not in footer_actions:
+            return super().check_action(action, parameters)
+
+        if self.app.focused is not self.query_one("#idea-list", Tree):
+            return False
+        if not self.search_is_active():
+            return False
+
+        result: bool | None = None
+        if action == "footer_next_result":
+            result = self._adjacent_result_node(1) is not None
+        elif action == "footer_previous_result":
+            result = not self._tree_cursor_is_first_result()
+        elif action == "footer_back_to_search":
+            result = True
+        return result
 
 
 def _normalize_suggestions(raw_values: list[str]) -> list[str]:

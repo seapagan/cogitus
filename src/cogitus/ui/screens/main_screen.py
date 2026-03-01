@@ -51,6 +51,30 @@ class MainScreen(Screen[None]):
         Binding("slash", "focus_search", "Search", key_display="/"),
         Binding("escape", "cancel_search", "Back", show=False),
         Binding(
+            "down",
+            "footer_search_results",
+            "Results",
+            show=True,
+            key_display="Down",
+            priority=True,
+        ),
+        Binding(
+            "up",
+            "footer_search_input",
+            "Search",
+            show=True,
+            key_display="Up",
+            priority=True,
+        ),
+        Binding(
+            "escape",
+            "footer_exit_search",
+            "Exit Search",
+            show=True,
+            key_display="Esc",
+            priority=True,
+        ),
+        Binding(
             "question_mark",
             "show_help",
             "Help",
@@ -467,6 +491,33 @@ class MainScreen(Screen[None]):
     def action_quit_app(self) -> None:
         """Quit the application."""
         self.app.exit()
+
+    def check_action(
+        self,
+        action: str,
+        parameters: tuple[object, ...],
+    ) -> bool | None:
+        """Show search-mode footer hints only when they are relevant."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+
+        if action == "footer_search_results":
+            return (
+                self.app.focused is search
+                and panel.search_is_active()
+                and not panel.autocomplete_is_visible()
+                and bool(panel.get_selected_idea())
+            )
+        if action == "footer_search_input":
+            return (
+                self.app.focused is tree
+                and panel.search_is_active()
+                and panel.is_first_result_selected()
+            )
+        if action == "footer_exit_search":
+            return self.app.focused is search and panel.search_is_active()
+        return super().check_action(action, parameters)
 
     def _set_selected_idea(self, idea_pk: int | None) -> None:
         """Track and publish the selected idea primary key."""

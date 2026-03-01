@@ -23,6 +23,7 @@ Search supports ranked free-text matching plus inline structured operators.
 5. Press `Enter` to accept the highlighted suggestion.
 6. Press `Down` to move from the search input into the filtered result list.
 7. Use `Up` and `Down` in the result list to move between matching ideas.
+   Group headers stay visible for context but are skipped during navigation.
 8. Press `Up` on the first result to return focus to the search input.
 9. Matching ideas remain in the tree, ordered by search relevance.
 10. While search is active, each matching row may include a short snippet.
@@ -49,3 +50,5 @@ Search supports ranked free-text matching plus inline structured operators.
 - While the result tree is focused with active search, `Esc` first returns
   focus to the search input; a second `Esc` clears the search.
 - While search is focused, `Tab` is reserved for autocomplete.
+- The status bar shows search-specific hints while search is active, including
+  when focus is in the results list.
