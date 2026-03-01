@@ -172,8 +172,8 @@ class IdeaRepository:
         Args:
             pk: The primary key of the idea to delete.
         """
-        self._search_backend.delete_idea(pk)
         self._db.delete(Idea, pk)
+        self._search_backend.delete_idea(pk)
 
     def search(self, query: str) -> list[Idea]:
         """Search ideas using raw query text compatibility API."""

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from sqliter.exceptions import RecordInsertionError
 
+from cogitus.models import Idea
 from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.search import SearchFilter
 
@@ -237,6 +238,39 @@ class TestIdeaRepository:
         ideas = idea_repo.list_all()
         assert len(ideas) == 1
         assert ideas[0].title == "Keep"
+
+    def test_delete_removes_db_row_before_search_index(
+        self,
+        idea_repo: IdeaRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Delete should remove the canonical row before the FTS entry."""
+        created = idea_repo.create("Delete ordering")
+        calls: list[str] = []
+
+        delete_mock = mocker.patch.object(
+            idea_repo._db,
+            "delete",
+            autospec=True,
+            side_effect=lambda model, pk: calls.append(
+                f"db:{model.__name__}:{pk}"
+            ),
+        )
+        search_delete_mock = mocker.patch.object(
+            idea_repo._search_backend,
+            "delete_idea",
+            autospec=True,
+            side_effect=lambda pk: calls.append(f"fts:{pk}"),
+        )
+
+        idea_repo.delete(created.pk)
+
+        delete_mock.assert_called_once_with(Idea, created.pk)
+        search_delete_mock.assert_called_once_with(created.pk)
+        assert calls == [
+            f"db:Idea:{created.pk}",
+            f"fts:{created.pk}",
+        ]
 
     def test_bulk_move_group(
         self,
