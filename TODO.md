@@ -74,6 +74,12 @@ None
 
 - evaluate optional SQLite write tuning (`PRAGMA synchronous=NORMAL`) with
   benchmark and risk assessment.
+- make idea table writes and FTS index sync failure-tolerant. `create()`,
+  `update()`, and `delete()` currently commit the canonical row change and then
+  update `idea_search` separately, so an index write failure can leave search
+  stale until rebuild. Investigate a proper fix: shared transaction support if
+  `sqliter-py` can expose it cleanly, or a transactional outbox/on-commit
+  reindex queue with retry/logging plus an explicit rebuild path.
 - avoid unconditional FTS index rebuild on every `get_db()` startup; add an
   index validity/version check or other lightweight verification so rebuilds
   only happen when needed, while keeping an explicit/manual rebuild path.
