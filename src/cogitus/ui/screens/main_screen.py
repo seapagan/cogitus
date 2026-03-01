@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, ClassVar
 
-from textual.binding import Binding, BindingType
+from textual.binding import ActiveBinding, Binding, BindingType
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, Markdown, Tree
 
@@ -56,14 +57,6 @@ class MainScreen(Screen[None]):
             "Results",
             show=True,
             key_display="Down",
-            priority=True,
-        ),
-        Binding(
-            "up",
-            "footer_search_input",
-            "Search",
-            show=True,
-            key_display="Up",
             priority=True,
         ),
         Binding(
@@ -500,7 +493,6 @@ class MainScreen(Screen[None]):
         """Show search-mode footer hints only when they are relevant."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
 
         if action == "footer_search_results":
             return (
@@ -509,15 +501,33 @@ class MainScreen(Screen[None]):
                 and not panel.autocomplete_is_visible()
                 and bool(panel.get_selected_idea())
             )
-        if action == "footer_search_input":
-            return (
-                self.app.focused is tree
-                and panel.search_is_active()
-                and panel.is_first_result_selected()
-            )
         if action == "footer_exit_search":
             return self.app.focused is search and panel.search_is_active()
         return super().check_action(action, parameters)
+
+    @property
+    def active_bindings(self) -> dict[str, ActiveBinding]:
+        """Return bindings with a dynamic `Up` hint in search results."""
+        bindings = super().active_bindings
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        tree = panel.query_one("#idea-list", Tree)
+        up_binding = bindings.get("up")
+        if (
+            self.app.focused is tree
+            and panel.search_is_active()
+            and up_binding is not None
+            and up_binding.binding.action == "footer_previous_result"
+        ):
+            description = (
+                "Search" if panel.is_first_result_selected() else "Prev Result"
+            )
+            bindings["up"] = ActiveBinding(
+                up_binding.node,
+                replace(up_binding.binding, description=description),
+                up_binding.enabled,
+                up_binding.tooltip,
+            )
+        return bindings
 
     def _set_selected_idea(self, idea_pk: int | None) -> None:
         """Track and publish the selected idea primary key."""

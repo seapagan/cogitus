@@ -1520,6 +1520,37 @@ async def test_main_screen_search_results_support_keyboard_navigation(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_search_results_footer_uses_prev_result_for_non_first(
+    service: IdeaService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`Up` should read as `Prev Result` when a non-first result is selected."""
+    service.create_idea("Alpha python")
+    service.create_idea("Beta python")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "python"
+        await pilot.pause()
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.focused is tree
+
+        monkeypatch.setattr(panel, "is_first_result_selected", lambda: False)
+
+        bindings = screen.active_bindings
+        assert bindings["up"].binding.description == "Prev Result"
+
+
+@pytest.mark.asyncio
 async def test_main_screen_toggle_list_panel(
     service: IdeaService,
     mocker: MockerFixture,

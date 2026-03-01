@@ -23,6 +23,7 @@ from cogitus.ui.widgets.idea_list import (
 from cogitus.ui.widgets.idea_view import IdeaView, _format_full_timestamp
 
 if TYPE_CHECKING:
+    from pytest_mock import MockerFixture
     from textual.widget import Widget
 
     from cogitus.services.idea_service import IdeaService
@@ -116,6 +117,39 @@ async def test_idea_list_panel_methods_and_events(
         panel._fire_search("needle")
         assert tree.cursor_node is not None
         panel.on_tree_node_selected(Tree.NodeSelected(tree.cursor_node))
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_refreshes_bindings_on_search_and_selection(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Search/selection changes should trigger footer binding refreshes."""
+    second = service.create_idea("Beta python")
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test():
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        tree = panel.query_one("#idea-list", Tree)
+        search = panel.query_one("#search-input", Input)
+        refresh = mocker.patch.object(panel.screen, "refresh_bindings")
+
+        panel.select_idea(second.pk)
+        assert refresh.call_count >= 1
+
+        refresh.reset_mock()
+        search.value = "python"
+        panel.on_input_changed(Input.Changed(search, "python"))
+        assert refresh.call_count >= 1
+
+        refresh.reset_mock()
+        panel.on_tree_node_highlighted(Tree.NodeHighlighted(tree.cursor_node))
+        assert refresh.call_count >= 1
+
+        refresh.reset_mock()
+        panel.on_tree_node_selected(Tree.NodeSelected(tree.cursor_node))
+        assert refresh.call_count >= 1
 
 
 @pytest.mark.asyncio
@@ -422,10 +456,13 @@ def test_idea_list_panel_result_navigation_helpers_branches(
     class _Tree:
         def __init__(self, cursor_line: int) -> None:
             self.cursor_line = cursor_line
+            self.cursor_node: object | None = None
             self.moved_to: object | None = None
+            self.root = SimpleNamespace(children=[])
 
         def move_cursor(self, node: object, *, animate: bool) -> None:
             assert animate is False
+            self.cursor_node = node
             self.moved_to = node
 
     tree = _Tree(cursor_line=-1)
@@ -438,16 +475,46 @@ def test_idea_list_panel_result_navigation_helpers_branches(
     assert panel._adjacent_result_node(1) is None
     assert panel._move_result_cursor(1) is True
 
-    first = SimpleNamespace(line=2)
-    last = SimpleNamespace(line=8)
+    first = SimpleNamespace(
+        line=2, data=IdeaTreeNodeData(kind="idea", idea_pk=1)
+    )
+    last = SimpleNamespace(
+        line=8, data=IdeaTreeNodeData(kind="idea", idea_pk=2)
+    )
     panel._idea_nodes_by_pk = {1: first, 2: last}
+    panel._result_order_pks = (1, 2)
 
     assert panel._adjacent_result_node(-1) is last
     assert panel._adjacent_result_node(1) is first
 
     tree.cursor_line = last.line
+    tree.cursor_node = last
+    tree.moved_to = None
+    monkeypatch.setattr(
+        panel,
+        "get_selected_idea",
+        lambda: SimpleNamespace(pk=2),
+    )
     assert panel._move_result_cursor(1) is True
     assert tree.moved_to is None
+
+
+def test_idea_list_panel_ordered_result_nodes_filters_missing_entries() -> None:
+    """Ordered result nodes should keep result order and skip missing nodes."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    first = SimpleNamespace(
+        line=2,
+        data=IdeaTreeNodeData(kind="idea", idea_pk=1),
+    )
+    second = SimpleNamespace(
+        line=8,
+        data=IdeaTreeNodeData(kind="idea", idea_pk=2),
+    )
+
+    panel._idea_nodes_by_pk = {1: first, 2: second}
+    panel._result_order_pks = (2, 99, 1)
+
+    assert panel._ordered_result_nodes() == (second, first)
 
 
 def test_idea_list_panel_focus_results_returns_false_for_visible_autocomplete(

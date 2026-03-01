@@ -137,6 +137,7 @@ class IdeaListPanel(Vertical):
         self._ideas_by_pk: dict[int, Idea] = {}
         self._group_nodes_by_pk: dict[int, TreeNode[IdeaTreeNodeData]] = {}
         self._idea_nodes_by_pk: dict[int, TreeNode[IdeaTreeNodeData]] = {}
+        self._result_order_pks: tuple[int, ...] = ()
         self._snippets_by_pk: dict[int, str] = {}
         self._tag_suggestions: tuple[str, ...] = ()
         self._group_suggestions: tuple[str, ...] = ()
@@ -163,6 +164,7 @@ class IdeaListPanel(Vertical):
         self._ideas_by_pk.clear()
         self._group_nodes_by_pk.clear()
         self._idea_nodes_by_pk.clear()
+        self._result_order_pks = ()
         self._snippets_by_pk.clear()
         tree.root.label = "Ideas"
         tree.root.data = IdeaTreeNodeData(kind="root")
@@ -178,7 +180,7 @@ class IdeaListPanel(Vertical):
         tree = self._reset_tree()
         self._snippets_by_pk = dict(snippets_by_pk or {})
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
-
+        ordered_pks: list[int] = []
         for group, ideas in grouped_ideas:
             group_node = tree.root.add(
                 group.name,
@@ -195,6 +197,8 @@ class IdeaListPanel(Vertical):
                 )
                 if first_idea_node is None:
                     first_idea_node = idea_node
+                ordered_pks.append(idea.pk)
+        self._result_order_pks = tuple(ordered_pks)
         tree.root.expand()
         if first_idea_node is not None:
             tree.select_node(first_idea_node)
@@ -223,6 +227,7 @@ class IdeaListPanel(Vertical):
         """Compatibility helper to load ideas under a synthetic group."""
         tree = self._reset_tree()
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
+        ordered_pks: list[int] = []
         for idea in ideas:
             idea_node = self._add_idea_node(
                 tree.root,
@@ -230,6 +235,8 @@ class IdeaListPanel(Vertical):
             )
             if first_idea_node is None:
                 first_idea_node = idea_node
+            ordered_pks.append(idea.pk)
+        self._result_order_pks = tuple(ordered_pks)
         tree.root.expand()
         if first_idea_node is not None:
             tree.select_node(first_idea_node)
@@ -270,6 +277,7 @@ class IdeaListPanel(Vertical):
             return False
         tree.select_node(node)
         tree.move_cursor(node, animate=False)
+        self.refresh_bindings()
         return True
 
     def get_selected_idea(self) -> Idea | None:
@@ -308,6 +316,7 @@ class IdeaListPanel(Vertical):
                 0.2,
                 lambda: self._fire_search(event.value),
             )
+            self.refresh_bindings()
 
     def on_input_blurred(self, event: Input.Blurred) -> None:
         """Hide autocomplete when search input loses focus."""
@@ -345,6 +354,7 @@ class IdeaListPanel(Vertical):
         event: Tree.NodeSelected[IdeaTreeNodeData],
     ) -> None:
         """Handle idea selection from tree."""
+        self.refresh_bindings()
         self._post_if_idea_node(event.node.data)
 
     def on_tree_node_highlighted(
@@ -352,6 +362,7 @@ class IdeaListPanel(Vertical):
         event: Tree.NodeHighlighted[IdeaTreeNodeData],
     ) -> None:
         """Handle highlight change in tree."""
+        self.refresh_bindings()
         data = event.node.data if event.node is not None else None
         self._post_if_idea_node(data)
 
@@ -590,9 +601,9 @@ class IdeaListPanel(Vertical):
 
     def _tree_cursor_is_first_result(self) -> bool:
         """Return whether the tree cursor is on the first selectable idea."""
-        tree = self.query_one("#idea-list", Tree)
-        first_node = next(iter(self._ordered_result_nodes()), None)
-        return first_node is not None and tree.cursor_node is first_node
+        selected = self.get_selected_idea()
+        first_pk = self._result_order_pks[0] if self._result_order_pks else None
+        return selected is not None and selected.pk == first_pk
 
     def _move_result_cursor(self, direction: Literal[-1, 1]) -> bool:
         """Move the tree cursor to the previous or next idea result."""
@@ -608,32 +619,28 @@ class IdeaListPanel(Vertical):
         direction: Literal[-1, 1],
     ) -> TreeNode[IdeaTreeNodeData] | None:
         """Return the adjacent idea node relative to the current cursor."""
-        tree = self.query_one("#idea-list", Tree)
-        current_line = tree.cursor_line
-        ordered_nodes = self._ordered_result_nodes()
-        if not ordered_nodes:
+        if not self._result_order_pks:
             return None
-        if current_line < 0:
-            return ordered_nodes[0] if direction > 0 else ordered_nodes[-1]
-
-        if direction > 0:
-            return next(
-                (node for node in ordered_nodes if node.line > current_line),
-                None,
+        selected = self.get_selected_idea()
+        if selected is None:
+            target_pk = (
+                self._result_order_pks[0]
+                if direction > 0
+                else self._result_order_pks[-1]
             )
-
-        previous_nodes = [
-            node for node in ordered_nodes if node.line < current_line
-        ]
-        return previous_nodes[-1] if previous_nodes else None
+            return self._idea_nodes_by_pk[target_pk]
+        current_index = self._result_order_pks.index(selected.pk)
+        next_index = current_index + direction
+        if next_index < 0 or next_index >= len(self._result_order_pks):
+            return None
+        return self._idea_nodes_by_pk[self._result_order_pks[next_index]]
 
     def _ordered_result_nodes(self) -> tuple[TreeNode[IdeaTreeNodeData], ...]:
         """Return result idea nodes ordered by their current tree position."""
         return tuple(
-            sorted(
-                self._idea_nodes_by_pk.values(),
-                key=lambda node: node.line,
-            )
+            self._idea_nodes_by_pk[pk]
+            for pk in self._result_order_pks
+            if pk in self._idea_nodes_by_pk
         )
 
     def check_action(
@@ -658,9 +665,7 @@ class IdeaListPanel(Vertical):
         result: bool | None = None
         if action == "footer_next_result":
             result = self._adjacent_result_node(1) is not None
-        elif action == "footer_previous_result":
-            result = not self._tree_cursor_is_first_result()
-        elif action == "footer_back_to_search":
+        elif action in {"footer_previous_result", "footer_back_to_search"}:
             result = True
         return result
 
