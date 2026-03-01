@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from cogitus.search import parse_search_query
 from cogitus.search.backend import _build_fts_query, _choose_snippet
 
 if TYPE_CHECKING:
+    import pytest
     from sqliter import SqliterDB
 
     from cogitus.repositories.idea_repo import IdeaRepository
@@ -110,6 +112,42 @@ def test_search_large_dataset_stays_deduplicated(
 def test_build_fts_query_rejects_safe_but_tokenless_input() -> None:
     """Hyphen-only text should not produce an FTS query."""
     assert _build_fts_query("---") is None
+
+
+def test_build_fts_query_tokenizes_punctuation_queries() -> None:
+    """Common punctuation should not block token extraction for FTS."""
+    expected = '"node"* AND "js"* AND "c"*'
+    assert _build_fts_query("node.js? c++") == expected
+
+
+def test_punctuation_queries_stay_on_fts_path(
+    service: IdeaService,
+    idea_repo: IdeaRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Punctuation-bearing text queries should not use legacy fallback."""
+    service.create_idea(
+        "Node.js runtime notes",
+        body="Working notes about node.js internals",
+    )
+
+    def fail_legacy_fallback(
+        _text_query: str,
+    ) -> dict[int, tuple[float, str | None]]:
+        msg = "punctuation query should stay on the FTS path"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(
+        idea_repo,
+        "_legacy_text_matches",
+        fail_legacy_fallback,
+    )
+
+    results = idea_repo.search_results(parse_search_query("node.js"))
+
+    assert [result.idea.title for result in results] == [
+        "Node.js runtime notes"
+    ]
 
 
 def test_choose_snippet_returns_none_when_no_candidate_has_text() -> None:

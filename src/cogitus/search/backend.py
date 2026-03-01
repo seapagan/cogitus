@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 
 _SNIPPET_START = "[["
 _SNIPPET_END = "]]"
-_SAFE_FTS_QUERY_RE = re.compile(r"^[\w\s-]+$")
 _FTS_TOKEN_RE = re.compile(r"\w+")
 _REBUILD_SQL = """
     INSERT INTO idea_search (
@@ -172,7 +171,7 @@ class FtsSearchBackend:
 def _build_fts_query(query_text: str) -> str | None:
     """Compile plain text into a safe FTS5 prefix query."""
     stripped = query_text.strip()
-    if not stripped or _SAFE_FTS_QUERY_RE.fullmatch(stripped) is None:
+    if not stripped:
         return None
 
     tokens = _FTS_TOKEN_RE.findall(stripped.lower())
