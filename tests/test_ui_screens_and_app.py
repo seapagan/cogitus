@@ -1569,17 +1569,17 @@ async def test_main_screen_search_results_footer_hides_down_on_last_result(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
 
         screen.action_focus_search()
         await pilot.pause()
         search.value = "footerlast"
         await pilot.pause()
 
-        last_result_pk = panel._result_order_pks[-1]
-        panel.select_idea(last_result_pk)
-        tree.focus()
+        await pilot.press("down")
         await pilot.pause()
+        while panel._adjacent_result_node(1) is not None:
+            await pilot.press("down")
+            await pilot.pause()
 
         bindings = screen.active_bindings
         assert "down" not in bindings
