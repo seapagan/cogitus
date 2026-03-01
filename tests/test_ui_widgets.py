@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from textual.app import App, ComposeResult
@@ -24,7 +24,9 @@ from cogitus.ui.widgets.idea_view import IdeaView, _format_full_timestamp
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
+    from textual.events import Key
     from textual.widget import Widget
+    from textual.widgets.tree import TreeNode
 
     from cogitus.services.idea_service import IdeaService
 
@@ -44,6 +46,17 @@ class _WidgetApp(App[None]):
 def _to_unix(dt: datetime) -> int:
     """Convert datetime to unix seconds."""
     return int(dt.timestamp())
+
+
+def _fake_idea_tree_node(line: int, pk: int) -> TreeNode[IdeaTreeNodeData]:
+    """Build a minimal typed stand-in for a tree idea node."""
+    return cast(
+        "TreeNode[IdeaTreeNodeData]",
+        SimpleNamespace(
+            line=line,
+            data=IdeaTreeNodeData(kind="idea", idea_pk=pk),
+        ),
+    )
 
 
 def test_format_timestamp_branches() -> None:
@@ -144,11 +157,13 @@ async def test_idea_list_panel_refreshes_bindings_on_search_and_selection(
         assert refresh.call_count >= 1
 
         refresh.reset_mock()
-        panel.on_tree_node_highlighted(Tree.NodeHighlighted(tree.cursor_node))
+        cursor_node = tree.cursor_node
+        assert cursor_node is not None
+        panel.on_tree_node_highlighted(Tree.NodeHighlighted(cursor_node))
         assert refresh.call_count >= 1
 
         refresh.reset_mock()
-        panel.on_tree_node_selected(Tree.NodeSelected(tree.cursor_node))
+        panel.on_tree_node_selected(Tree.NodeSelected(cursor_node))
         assert refresh.call_count >= 1
 
 
@@ -439,7 +454,7 @@ async def test_idea_list_panel_search_guard_paths(
 
         assert (
             panel._handle_result_tree_key(
-                _Event(),
+                cast("Key", _Event()),
                 panel.query_one("#search-input", Input),
             )
             is False
@@ -456,11 +471,16 @@ def test_idea_list_panel_result_navigation_helpers_branches(
     class _Tree:
         def __init__(self, cursor_line: int) -> None:
             self.cursor_line = cursor_line
-            self.cursor_node: object | None = None
-            self.moved_to: object | None = None
+            self.cursor_node: TreeNode[IdeaTreeNodeData] | None = None
+            self.moved_to: TreeNode[IdeaTreeNodeData] | None = None
             self.root = SimpleNamespace(children=[])
 
-        def move_cursor(self, node: object, *, animate: bool) -> None:
+        def move_cursor(
+            self,
+            node: TreeNode[IdeaTreeNodeData],
+            *,
+            animate: bool,
+        ) -> None:
             assert animate is False
             self.cursor_node = node
             self.moved_to = node
@@ -475,12 +495,8 @@ def test_idea_list_panel_result_navigation_helpers_branches(
     assert panel._adjacent_result_node(1) is None
     assert panel._move_result_cursor(1) is True
 
-    first = SimpleNamespace(
-        line=2, data=IdeaTreeNodeData(kind="idea", idea_pk=1)
-    )
-    last = SimpleNamespace(
-        line=8, data=IdeaTreeNodeData(kind="idea", idea_pk=2)
-    )
+    first = _fake_idea_tree_node(line=2, pk=1)
+    last = _fake_idea_tree_node(line=8, pk=2)
     panel._idea_nodes_by_pk = {1: first, 2: last}
     panel._result_order_pks = (1, 2)
 
@@ -502,14 +518,8 @@ def test_idea_list_panel_result_navigation_helpers_branches(
 def test_idea_list_panel_ordered_result_nodes_filters_missing_entries() -> None:
     """Ordered result nodes should keep result order and skip missing nodes."""
     panel = IdeaListPanel(id="idea-list-panel")
-    first = SimpleNamespace(
-        line=2,
-        data=IdeaTreeNodeData(kind="idea", idea_pk=1),
-    )
-    second = SimpleNamespace(
-        line=8,
-        data=IdeaTreeNodeData(kind="idea", idea_pk=2),
-    )
+    first = _fake_idea_tree_node(line=2, pk=1)
+    second = _fake_idea_tree_node(line=8, pk=2)
 
     panel._idea_nodes_by_pk = {1: first, 2: second}
     panel._result_order_pks = (2, 99, 1)

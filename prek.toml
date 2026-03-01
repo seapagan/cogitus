@@ -25,7 +25,16 @@ rev = "v1.19.1"
 hooks = [
   { id = "mypy", name = "run mypy", additional_dependencies = [
     "pydantic",
-  ] },
+    "pyperclip",
+    "pytest",
+    "pytest-mock",
+    "rich",
+    "simple-toml-settings",
+    "sqliter-py",
+    "textual",
+    "typer",
+    "types-pyperclip",
+  ], args = ["--strict"] },
 ]
 
 
