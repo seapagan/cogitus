@@ -9,6 +9,7 @@ import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import Input, Markdown, OptionList, Static, Tree
 
+from cogitus.search import SearchResult
 from cogitus.ui.widgets.idea_list import (
     IdeaListPanel,
     IdeaTreeNodeData,
@@ -113,6 +114,43 @@ async def test_idea_list_panel_methods_and_events(
         panel._fire_search("needle")
         assert tree.cursor_node is not None
         panel.on_tree_node_selected(Tree.NodeSelected(tree.cursor_node))
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_renders_search_snippets(
+    service: IdeaService,
+) -> None:
+    """Search-result loading should include per-row snippets."""
+    idea = service.create_idea(
+        "Snippet target",
+        body="A searchable body snippet for python queries",
+    )
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.load_grouped_search_results(
+            [
+                (
+                    idea.group,
+                    [
+                        SearchResult(
+                            idea=idea,
+                            score=-1.0,
+                            snippet="searchable body snippet for python",
+                        )
+                    ],
+                )
+            ]
+        )
+        await pilot.pause()
+
+        tree = panel.query_one("#idea-list", Tree)
+        node_label = tree.root.children[0].children[0].label
+        plain = getattr(node_label, "plain", str(node_label))
+
+        assert "Snippet target" in plain
+        assert "searchable body snippet for python" in plain
 
 
 @pytest.mark.asyncio

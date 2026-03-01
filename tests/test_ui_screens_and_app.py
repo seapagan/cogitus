@@ -12,6 +12,7 @@ from textual.widgets import Button, Input, OptionList, Select, TextArea, Tree
 
 from cogitus.app import CogitusApp
 from cogitus.config import EditBodyCursorMode, NewIdeaGroupMode
+from cogitus.search import SearchResult
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
     GroupDeleteReassignScreen,
@@ -951,8 +952,13 @@ async def test_main_screen_selection_and_search(
 
         search = mocker.patch.object(
             screen._service,
-            "list_ideas_grouped",
-            return_value=[(first.group, [first])],
+            "list_search_results_grouped",
+            return_value=[
+                (
+                    first.group,
+                    [SearchResult(idea=first, score=-1.0, snippet="First")],
+                )
+            ],
         )
         selected_view = mocker.patch.object(
             screen.query_one("#content-panel", IdeaView),
@@ -1213,8 +1219,8 @@ async def test_main_screen_refresh_empty_selection_branch(
         show_empty = mocker.patch.object(view, "show_empty")
         list_grouped = mocker.patch.object(
             screen._service,
-            "list_ideas_grouped",
-            wraps=screen._service.list_ideas_grouped,
+            "list_search_results_grouped",
+            wraps=screen._service.list_search_results_grouped,
         )
 
         search.value = "First"

@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from sqliter import SqliterDB
+
     from cogitus.models.idea import Idea
     from cogitus.services.idea_service import IdeaService
 
@@ -89,16 +91,48 @@ class TestSearch:
         results = service.search_ideas("nonexistent_xyz")
         assert len(results) == 0
 
-    def test_search_sorted_by_recency(
+    def test_search_ranks_stronger_title_match_before_body_match(
         self,
         service: IdeaService,
-        sample_ideas: list[Idea],
     ) -> None:
-        """Results are sorted by updated_at descending."""
+        """Title/body strength should outrank weaker body-only matches."""
+        service.create_idea(
+            "Python architecture",
+            "Strong title and body match",
+        )
+        service.create_idea(
+            "Secondary note",
+            "Python architecture references in body only",
+        )
+
+        results = service.search_ideas("python architecture")
+
+        assert [idea.title for idea in results] == [
+            "Python architecture",
+            "Secondary note",
+        ]
+
+    def test_search_breaks_equal_scores_by_recency(
+        self,
+        db: SqliterDB,
+        service: IdeaService,
+    ) -> None:
+        """Equal-score text matches should fall back to recency order."""
+        older = service.create_idea("Python title", "Same match strength")
+        newer = service.create_idea("Python title", "Same match strength")
+        db.connect().execute(
+            "UPDATE ideas SET updated_at = ? WHERE pk = ?;",
+            (1, older.pk),
+        )
+        db.connect().execute(
+            "UPDATE ideas SET updated_at = ? WHERE pk = ?;",
+            (10, newer.pk),
+        )
+        db.connect().commit()
+
         results = service.search_ideas("python")
-        if len(results) > 1:
-            for i in range(len(results) - 1):
-                assert results[i].updated_at >= results[i + 1].updated_at
+
+        assert [idea.pk for idea in results[:2]] == [newer.pk, older.pk]
 
     def test_search_by_group_filter(
         self,
