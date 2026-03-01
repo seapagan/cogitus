@@ -1589,6 +1589,82 @@ async def test_main_screen_search_results_footer_hides_down_on_last_result(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_search_input_disables_non_search_actions(
+    service: IdeaService,
+) -> None:
+    """Search input should disable edit/copy and structural bindings."""
+    service.create_idea("Alpha searchinput")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "searchinput"
+        await pilot.pause()
+
+        for action in (
+            "new_idea",
+            "new_group",
+            "delete_group",
+            "delete_idea",
+            "edit_idea",
+            "copy_idea_body",
+        ):
+            assert screen.check_action(action, ()) is False
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_results_disable_structural_actions_only(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Search results should block structural keys but keep edit/copy."""
+    service.create_idea("Alpha actiongate")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "actiongate"
+        await pilot.pause()
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.focused is tree
+
+        for action in (
+            "new_idea",
+            "new_group",
+            "delete_group",
+            "delete_idea",
+        ):
+            assert screen.check_action(action, ()) is False
+        assert screen.check_action("edit_idea", ()) is True
+        assert screen.check_action("copy_idea_body", ()) is True
+
+        new_idea = mocker.patch.object(screen, "action_new_idea")
+        delete_idea = mocker.patch.object(screen, "action_delete_idea")
+        edit_idea = mocker.patch.object(screen, "action_edit_idea")
+        copy_idea_body = mocker.patch.object(screen, "action_copy_idea_body")
+
+        await pilot.press("n", "d", "e", "y")
+        await pilot.pause()
+
+        new_idea.assert_not_called()
+        delete_idea.assert_not_called()
+        edit_idea.assert_called_once_with()
+        copy_idea_body.assert_called_once_with()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_toggle_list_panel(
     service: IdeaService,
     mocker: MockerFixture,

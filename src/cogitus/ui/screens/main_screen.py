@@ -38,6 +38,20 @@ if TYPE_CHECKING:
 class MainScreen(Screen[None]):
     """Two-pane main screen: idea list + detail view."""
 
+    _SEARCH_MODE_DISABLED_ACTIONS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "new_idea",
+            "new_group",
+            "delete_group",
+            "delete_idea",
+        }
+    )
+    _SEARCH_INPUT_DISABLED_ACTIONS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "edit_idea",
+            "copy_idea_body",
+        }
+    )
     _SEARCH_INPUT_FOOTER_ACTIONS: ClassVar[frozenset[str]] = frozenset(
         {
             "footer_search_results",
@@ -507,6 +521,19 @@ class MainScreen(Screen[None]):
         """Show search-mode footer hints only when they are relevant."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+
+        if panel.search_is_active():
+            if (
+                self.app.focused in {search, tree}
+                and action in self._SEARCH_MODE_DISABLED_ACTIONS
+            ):
+                return False
+            if (
+                self.app.focused is search
+                and action in self._SEARCH_INPUT_DISABLED_ACTIONS
+            ):
+                return False
 
         if action == "footer_search_results":
             return (
