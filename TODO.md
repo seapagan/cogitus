@@ -7,6 +7,11 @@ Ideas to add to Cogitus
 - Allow key customization (using the `Textual` built-in functionality and the
   config file). eg Ctrl-S on my system is mapped to tmux
 - continue navigation and keybinding polish.
+- refactor suitable UI/integration tests to be pilot-first: use Textual's
+  `pilot` for tests that validate keyboard behavior, focus changes,
+  footer/binding state, screen transitions, or other user-visible interaction
+  flows; keep direct method/event calls only for unit-style helper and branch
+  coverage where pilot would add noise without improving confidence.
 - add in-place right-pane markdown edit mode (view/edit toggle).
 - add contextual dynamic toolbar/actions by mode.
 - add a tag management dialog with usage counts, rename/edit support, and

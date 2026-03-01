@@ -1528,7 +1528,6 @@ async def test_main_screen_search_results_support_keyboard_navigation(
 @pytest.mark.asyncio
 async def test_main_screen_search_results_footer_uses_prev_result_for_non_first(
     service: IdeaService,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`Up` should read as `Prev Result` when a non-first result is selected."""
     service.create_idea("Alpha footerprev")
@@ -1550,7 +1549,10 @@ async def test_main_screen_search_results_footer_uses_prev_result_for_non_first(
         await pilot.pause()
         assert app.focused is tree
 
-        monkeypatch.setattr(panel, "is_first_result_selected", lambda: False)
+        while panel.is_first_result_selected():
+            assert panel._adjacent_result_node(1) is not None
+            await pilot.press("down")
+            await pilot.pause()
 
         bindings = screen.active_bindings
         assert bindings["up"].binding.description == "Prev Result"
