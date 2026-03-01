@@ -1549,10 +1549,16 @@ async def test_main_screen_search_results_footer_uses_prev_result_for_non_first(
         await pilot.pause()
         assert app.focused is tree
 
+        steps = 0
         while panel.is_first_result_selected():
             assert panel._adjacent_result_node(1) is not None
             await pilot.press("down")
             await pilot.pause()
+            steps += 1
+            assert steps < 50, (
+                "Navigation did not move away from first result "
+                "while panel.is_first_result_selected() stayed true"
+            )
 
         bindings = screen.active_bindings
         assert bindings["up"].binding.description == "Prev Result"
@@ -1579,9 +1585,15 @@ async def test_main_screen_search_results_footer_hides_down_on_last_result(
 
         await pilot.press("down")
         await pilot.pause()
+        steps = 0
         while panel._adjacent_result_node(1) is not None:
             await pilot.press("down")
             await pilot.pause()
+            steps += 1
+            assert steps < 50, (
+                "Navigation did not reach last result "
+                "while panel._adjacent_result_node(1) kept returning a node"
+            )
 
         bindings = screen.active_bindings
         assert "down" not in bindings

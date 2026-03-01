@@ -428,7 +428,11 @@ class TestIdeaRepository:
         self,
         idea_repo: IdeaRepository,
     ) -> None:
-        """Legacy fallback should still match body-only and tag-only results."""
+        """Legacy fallback should still match title, body, and tag-only text."""
+        title_match = idea_repo.create(
+            "Title fallback marker",
+            body="",
+        )
         body_match = idea_repo.create(
             "No punctuation in title",
             body="Body-only fallback for body? queries",
@@ -439,9 +443,11 @@ class TestIdeaRepository:
             tag_names=["c++"],
         )
 
+        title_results = idea_repo._legacy_text_matches("marker")
         body_results = idea_repo._legacy_text_matches("body?")
         tag_results = idea_repo._legacy_text_matches("c++")
 
+        assert title_match.pk in title_results
         assert body_results[body_match.pk][1] is not None
         assert tag_match.pk in tag_results
 

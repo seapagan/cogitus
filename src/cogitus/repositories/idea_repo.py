@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 
 _LEGACY_TEXT_MATCH_SCORE = 0.0
+_DEFAULT_TEXT_MATCH = (_LEGACY_TEXT_MATCH_SCORE, None)
 
 
 class IdeaRepository:
@@ -358,24 +359,15 @@ class IdeaRepository:
             key=lambda idea: (
                 text_matches.get(
                     idea.pk,
-                    (_LEGACY_TEXT_MATCH_SCORE, None),
+                    _DEFAULT_TEXT_MATCH,
                 )[0],
                 -idea.updated_at,
             )
         )
         return [
-            SearchResult(
-                idea=idea,
-                score=text_matches.get(
-                    idea.pk,
-                    (_LEGACY_TEXT_MATCH_SCORE, None),
-                )[0],
-                snippet=text_matches.get(
-                    idea.pk,
-                    (_LEGACY_TEXT_MATCH_SCORE, None),
-                )[1],
-            )
+            SearchResult(idea=idea, score=match[0], snippet=match[1])
             for idea in ideas
+            for match in [text_matches.get(idea.pk, _DEFAULT_TEXT_MATCH)]
         ]
 
     def list_for_group(self, group_pk: int) -> list[Idea]:
