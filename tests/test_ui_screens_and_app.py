@@ -1498,6 +1498,9 @@ async def test_main_screen_search_results_support_keyboard_navigation(
         bindings = screen.active_bindings
         assert bindings["down"].binding.description == "Results"
         assert bindings["escape"].binding.description == "Exit Search"
+        assert {
+            binding.binding.description for binding in bindings.values()
+        } == {"Results", "Exit Search"}
 
         await pilot.press("down")
         await pilot.pause()
@@ -1507,6 +1510,9 @@ async def test_main_screen_search_results_support_keyboard_navigation(
         assert bindings["down"].binding.description == "Next Result"
         assert bindings["escape"].binding.description == "Back to Search"
         assert bindings["up"].binding.description == "Search"
+        assert {
+            binding.binding.description for binding in bindings.values()
+        } == {"Next Result", "Search", "Back to Search"}
 
         screen.action_cancel_search()
         await pilot.pause()
@@ -1525,8 +1531,8 @@ async def test_main_screen_search_results_footer_uses_prev_result_for_non_first(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """`Up` should read as `Prev Result` when a non-first result is selected."""
-    service.create_idea("Alpha python")
-    service.create_idea("Beta python")
+    service.create_idea("Alpha footerprev")
+    service.create_idea("Beta footerprev")
     screen = MainScreen(service)
     app = _SingleScreenApp(screen)
 
@@ -1537,7 +1543,7 @@ async def test_main_screen_search_results_footer_uses_prev_result_for_non_first(
 
         screen.action_focus_search()
         await pilot.pause()
-        search.value = "python"
+        search.value = "footerprev"
         await pilot.pause()
 
         await pilot.press("down")
@@ -1548,6 +1554,38 @@ async def test_main_screen_search_results_footer_uses_prev_result_for_non_first(
 
         bindings = screen.active_bindings
         assert bindings["up"].binding.description == "Prev Result"
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_results_footer_hides_down_on_last_result(
+    service: IdeaService,
+) -> None:
+    """Last search result should hide the `Down` footer hint."""
+    service.create_idea("Alpha footerlast")
+    service.create_idea("Beta footerlast")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "footerlast"
+        await pilot.pause()
+
+        last_result_pk = panel._result_order_pks[-1]
+        panel.select_idea(last_result_pk)
+        tree.focus()
+        await pilot.pause()
+
+        bindings = screen.active_bindings
+        assert "down" not in bindings
+        assert {
+            binding.binding.description for binding in bindings.values()
+        } == {"Prev Result", "Back to Search"}
 
 
 @pytest.mark.asyncio

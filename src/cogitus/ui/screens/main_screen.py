@@ -38,6 +38,20 @@ if TYPE_CHECKING:
 class MainScreen(Screen[None]):
     """Two-pane main screen: idea list + detail view."""
 
+    _SEARCH_INPUT_FOOTER_ACTIONS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "footer_search_results",
+            "footer_exit_search",
+        }
+    )
+    _SEARCH_RESULTS_FOOTER_ACTIONS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "footer_next_result",
+            "footer_previous_result",
+            "footer_back_to_search",
+        }
+    )
+
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("n", "new_idea", "New", key_display="n"),
         Binding("g", "new_group", "New Group", key_display="g"),
@@ -507,10 +521,25 @@ class MainScreen(Screen[None]):
 
     @property
     def active_bindings(self) -> dict[str, ActiveBinding]:
-        """Return bindings with a dynamic `Up` hint in search results."""
+        """Return bindings with search-mode footer filtering."""
         bindings = super().active_bindings
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
         tree = panel.query_one("#idea-list", Tree)
+
+        if self.app.focused is search and panel.search_is_active():
+            bindings = {
+                key: binding
+                for key, binding in bindings.items()
+                if binding.binding.action in self._SEARCH_INPUT_FOOTER_ACTIONS
+            }
+        elif self.app.focused is tree and panel.search_is_active():
+            bindings = {
+                key: binding
+                for key, binding in bindings.items()
+                if binding.binding.action in self._SEARCH_RESULTS_FOOTER_ACTIONS
+            }
+
         up_binding = bindings.get("up")
         if (
             self.app.focused is tree
