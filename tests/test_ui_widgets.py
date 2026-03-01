@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -17,6 +18,7 @@ from cogitus.ui.widgets.idea_list import (
     _format_timestamp,
     _resolve_autocomplete_state,
     _token_bounds,
+    _truncate_snippet,
 )
 from cogitus.ui.widgets.idea_view import IdeaView, _format_full_timestamp
 
@@ -363,6 +365,110 @@ async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
         await pilot.pause()
         assert not search.has_class("search-active")
         assert not tree.has_class("search-active")
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_search_guard_paths(
+    service: IdeaService,
+) -> None:
+    """Guard paths should safely no-op outside active result navigation."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        assert panel.focus_results() is False
+
+        search.value = "python"
+        autocomplete.remove_class("-hidden")
+        await pilot.pause()
+        assert panel.focus_results() is False
+
+        autocomplete.add_class("-hidden")
+        await pilot.pause()
+        assert panel.focus_results() is False
+
+        class _Event:
+            def __init__(self) -> None:
+                self.key = "left"
+
+            def prevent_default(self) -> None:
+                msg = "left should not be consumed"
+                raise AssertionError(msg)
+
+            def stop(self) -> None:
+                msg = "left should not be stopped"
+                raise AssertionError(msg)
+
+        assert (
+            panel._handle_result_tree_key(
+                _Event(),
+                panel.query_one("#search-input", Input),
+            )
+            is False
+        )
+        panel.check_action("other_action", ())
+
+
+def test_idea_list_panel_result_navigation_helpers_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Result-navigation helpers should cover empty and boundary cases."""
+    panel = IdeaListPanel(id="idea-list-panel")
+
+    class _Tree:
+        def __init__(self, cursor_line: int) -> None:
+            self.cursor_line = cursor_line
+            self.moved_to: object | None = None
+
+        def move_cursor(self, node: object, *, animate: bool) -> None:
+            assert animate is False
+            self.moved_to = node
+
+    tree = _Tree(cursor_line=-1)
+    monkeypatch.setattr(
+        panel,
+        "query_one",
+        lambda selector, *_args, **_kwargs: tree,
+    )
+
+    assert panel._adjacent_result_node(1) is None
+    assert panel._move_result_cursor(1) is True
+
+    first = SimpleNamespace(line=2)
+    last = SimpleNamespace(line=8)
+    panel._idea_nodes_by_pk = {1: first, 2: last}
+
+    assert panel._adjacent_result_node(-1) is last
+    assert panel._adjacent_result_node(1) is first
+
+    tree.cursor_line = last.line
+    assert panel._move_result_cursor(1) is True
+    assert tree.moved_to is None
+
+
+def test_idea_list_panel_focus_results_returns_false_for_visible_autocomplete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Visible autocomplete should block focus transfer into results."""
+    panel = IdeaListPanel(id="idea-list-panel")
+
+    monkeypatch.setattr(panel, "search_is_active", lambda: True)
+    monkeypatch.setattr(panel, "autocomplete_is_visible", lambda: True)
+
+    assert panel.focus_results() is False
+
+
+def test_idea_list_panel_truncate_snippet_adds_ellipsis() -> None:
+    """Long inline snippets should be compacted with a trailing ellipsis."""
+    snippet = "word " * 30
+    truncated = _truncate_snippet(snippet)
+
+    assert truncated.endswith("...")
+    assert len(truncated) < len(" ".join(snippet.split()))
 
 
 @pytest.mark.asyncio

@@ -1452,6 +1452,31 @@ async def test_main_screen_cancel_search_noop_when_search_not_focused(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_cancel_search_ignores_non_search_focus(
+    service: IdeaService,
+) -> None:
+    """Esc should no-op when neither search nor results currently have focus."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        content = screen.query_one("#content-panel", IdeaView)
+
+        search.value = "keep"
+        content.focus()
+        await pilot.pause()
+
+        screen.action_cancel_search()
+        await pilot.pause()
+
+        assert search.value == "keep"
+        assert app.focused is content
+
+
+@pytest.mark.asyncio
 async def test_main_screen_search_results_support_keyboard_navigation(
     service: IdeaService,
 ) -> None:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from cogitus.search.backend import _build_fts_query, _choose_snippet
+
 if TYPE_CHECKING:
     from sqliter import SqliterDB
 
@@ -103,3 +105,13 @@ def test_search_large_dataset_stays_deduplicated(
 
     assert len(results) >= 8
     assert len(result_pks) == len(set(result_pks))
+
+
+def test_build_fts_query_rejects_safe_but_tokenless_input() -> None:
+    """Hyphen-only text should not produce an FTS query."""
+    assert _build_fts_query("---") is None
+
+
+def test_choose_snippet_returns_none_when_no_candidate_has_text() -> None:
+    """Blank snippet candidates should collapse to None."""
+    assert _choose_snippet(body_snippet=" ", title_snippet="\n\t") is None

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from sqliter.exceptions import RecordInsertionError
 
+from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.search import SearchFilter
 
 if TYPE_CHECKING:
@@ -16,7 +17,6 @@ if TYPE_CHECKING:
     from cogitus.repositories.idea_cursor_state_repo import (
         IdeaCursorStateRepository,
     )
-    from cogitus.repositories.idea_repo import IdeaRepository
     from cogitus.repositories.tag_repo import TagRepository
 
 
@@ -423,6 +423,67 @@ class TestIdeaRepository:
 
         with pytest.raises(ValueError, match="Unsupported filter field"):
             idea_repo._matching_pks_for_filter(invalid)
+
+    def test_legacy_text_matches_cover_body_only_and_tag_matches(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Legacy fallback should still match body-only and tag-only results."""
+        body_match = idea_repo.create(
+            "No punctuation in title",
+            body="Body-only fallback for body? queries",
+        )
+        tag_match = idea_repo.create(
+            "Tag fallback",
+            body="",
+            tag_names=["c++"],
+        )
+
+        body_results = idea_repo._legacy_text_matches("body?")
+        tag_results = idea_repo._legacy_text_matches("c++")
+
+        assert body_results[body_match.pk][1] is not None
+        assert tag_match.pk in tag_results
+
+    def test_legacy_snippet_and_window_cover_fallback_branches(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Legacy snippet helpers should cover title/body fallback branches."""
+        title_only = idea_repo.create(
+            "Title has python",
+            body="no match here",
+        )
+        body_fallback = idea_repo.create(
+            "Fallback title",
+            body="Body text without the requested token but with content",
+        )
+        empty = idea_repo.create("", body=" \n ")
+
+        assert (
+            IdeaRepository._legacy_snippet(title_only, "python")
+            == "Title has python"
+        )
+        assert (
+            IdeaRepository._legacy_snippet(body_fallback, "missing")
+            == "Body text without the requested token but with content"
+        )
+        assert IdeaRepository._legacy_snippet(empty, "missing") is None
+
+        assert IdeaRepository._snippet_window(" \n ", "python") == ""
+        assert (
+            IdeaRepository._snippet_window(
+                "Body text without the requested token but with content",
+                "missing",
+            )
+            == "Body text without the requested token but with content"
+        )
+
+        long_text = "prefix words " * 8 + "python target " + "suffix words " * 8
+        highlighted = IdeaRepository._snippet_window(long_text, "python")
+        assert highlighted.startswith("...")
+        assert "python target" in highlighted
+        assert highlighted.endswith("...")
 
 
 class TestIdeaCursorStateRepository:

@@ -254,6 +254,20 @@ class TestIdeaService:
         assert "backend" in names
         assert "empty-group" not in names
 
+    def test_list_search_results_grouped_skips_groups_without_matches(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Ranked search grouping should omit groups with zero results."""
+        backend = service.create_group("backend")
+        service.create_group("empty-group")
+        service.create_idea("Matching idea", group_pk=backend.pk)
+
+        grouped = service.list_search_results_grouped("matching")
+        names = [group.name for group, _ in grouped]
+
+        assert names == ["backend"]
+
     def test_search_ideas_advanced_aliases_search_behavior(
         self,
         service: IdeaService,
