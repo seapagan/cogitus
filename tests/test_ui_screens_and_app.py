@@ -1431,7 +1431,7 @@ async def test_main_screen_search_cancel_restores_previous_focus(
 async def test_main_screen_cancel_search_noop_when_search_not_focused(
     service: IdeaService,
 ) -> None:
-    """Cancel search should no-op when focus is not on search input."""
+    """Esc on tree should return to search first when search is active."""
     service.create_idea("First")
     screen = MainScreen(service)
     app = _SingleScreenApp(screen)
@@ -1448,7 +1448,43 @@ async def test_main_screen_cancel_search_noop_when_search_not_focused(
         await pilot.pause()
 
         assert search.value == "keep"
+        assert app.focused is search
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_results_support_keyboard_navigation(
+    service: IdeaService,
+) -> None:
+    """Active search should move between input and results via keyboard."""
+    service.create_idea("Alpha python")
+    service.create_idea("Beta python")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "python"
+        await pilot.pause()
+
+        await pilot.press("down")
+        await pilot.pause()
         assert app.focused is tree
+        assert search.value == "python"
+
+        screen.action_cancel_search()
+        await pilot.pause()
+        assert app.focused is search
+        assert search.value == "python"
+
+        screen.action_cancel_search()
+        await pilot.pause()
+        assert app.focused is tree
+        assert search.value == ""
 
 
 @pytest.mark.asyncio

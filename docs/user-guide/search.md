@@ -21,9 +21,12 @@ Search supports ranked free-text matching plus inline structured operators.
 3. Use `Tab` to open/cycle autocomplete suggestions.
 4. Use `Shift+Tab`, `Up`, or `Down` to move between suggestions.
 5. Press `Enter` to accept the highlighted suggestion.
-6. Matching ideas remain in the tree, ordered by search relevance.
-7. While search is active, each matching row may include a short snippet.
-8. Press `Esc` to close autocomplete first, then `Esc` again to leave
+6. Press `Down` to move from the search input into the filtered result list.
+7. Use `Up` and `Down` in the result list to move between matching ideas.
+8. Press `Up` on the first result to return focus to the search input.
+9. Matching ideas remain in the tree, ordered by search relevance.
+10. While search is active, each matching row may include a short snippet.
+11. Press `Esc` to close autocomplete first, then `Esc` again to leave
    search focus.
 
 ## Examples
@@ -43,4 +46,6 @@ Search supports ranked free-text matching plus inline structured operators.
 - Plain word queries use prefix-style text matching.
 - Punctuation-heavy plain-text queries fall back to the broader legacy
   substring behavior when needed.
+- While the result tree is focused with active search, `Esc` first returns
+  focus to the search input; a second `Esc` clears the search.
 - While search is focused, `Tab` is reserved for autocomplete.

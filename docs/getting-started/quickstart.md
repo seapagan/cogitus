@@ -25,6 +25,8 @@ The app opens with:
 
 - Press `/` to focus search.
 - Type a query to filter ideas with ranked matches.
+- Press `Down` to move into the filtered results.
+- Press `Up` on the first result to return to the search input.
 - Matching rows can include a short inline snippet while search is active.
 - Press `Esc` to leave search.
 

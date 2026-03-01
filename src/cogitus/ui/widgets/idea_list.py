@@ -268,6 +268,7 @@ class IdeaListPanel(Vertical):
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle search input changes with debounce."""
         if event.input.id == "search-input":
+            self._sync_search_state_classes()
             if self._suspend_autocomplete_sync:
                 # Assumes Textual Input emits exactly one synchronous
                 # Input.Changed per programmatic search.value assignment.
@@ -343,12 +344,28 @@ class IdeaListPanel(Vertical):
         """Focus the search input."""
         self.query_one("#search-input", Input).focus()
 
+    def focus_results(self) -> bool:
+        """Focus the result tree when active search has selectable ideas."""
+        if not self.search_is_active():
+            return False
+        if self._autocomplete_is_visible():
+            return False
+        if not self._idea_nodes_by_pk:
+            return False
+        self.query_one("#idea-list", Tree).focus()
+        return True
+
     def clear_search(self) -> None:
         """Clear the search input."""
         search = self.query_one("#search-input", Input)
         search.value = ""
         self.dismiss_autocomplete()
         search.focus()
+
+    def search_is_active(self) -> bool:
+        """Return whether the search input currently contains a query."""
+        search = self.query_one("#search-input", Input)
+        return bool(search.value.strip())
 
     def set_autocomplete_sources(
         self,
@@ -362,40 +379,58 @@ class IdeaListPanel(Vertical):
         self._sync_autocomplete()
 
     def on_key(self, event: Key) -> None:
-        """Handle autocomplete keys while search input is focused."""
+        """Handle search-input and active-search result navigation keys."""
         search = self.query_one("#search-input", Input)
+        tree = self.query_one("#idea-list", Tree)
+        if self.app.focused is tree and self._handle_result_tree_key(
+            event,
+            search,
+        ):
+            return
+
         if self.app.focused is not search:
             return
 
+        self._handle_search_input_key(event)
+
+    def _handle_result_tree_key(
+        self,
+        event: Key,
+        search: Input,
+    ) -> bool:
+        """Handle keys while the result tree is focused."""
+        if not self.search_is_active():
+            return False
+        if event.key != "up" or not self._tree_cursor_is_first_result():
+            return False
+
+        event.prevent_default()
+        event.stop()
+        search.focus()
+        return True
+
+    def _handle_search_input_key(self, event: Key) -> None:
+        """Handle keys while the search input is focused."""
         if event.key == "tab":
-            event.prevent_default()
-            event.stop()
-            if self._autocomplete_is_visible():
-                self._cycle_autocomplete(1)
-            else:
-                self._sync_autocomplete(allow_empty_operator=True)
+            self._handle_autocomplete_cycle(event, 1)
             return
 
         if event.key in {"shift+tab", "backtab"}:
-            event.prevent_default()
-            event.stop()
-            if self._autocomplete_is_visible():
-                self._cycle_autocomplete(-1)
-            else:
-                self._sync_autocomplete(allow_empty_operator=True)
-            return
-
-        if event.key == "down" and self._autocomplete_is_visible():
-            event.prevent_default()
-            event.stop()
-            self._cycle_autocomplete(1)
+            self._handle_autocomplete_cycle(event, -1)
             return
 
         if event.key == "up" and self._autocomplete_is_visible():
-            event.prevent_default()
-            event.stop()
-            self._cycle_autocomplete(-1)
+            self._cycle_visible_autocomplete(event, -1)
             return
+
+        if event.key == "down":
+            if self._autocomplete_is_visible():
+                self._cycle_visible_autocomplete(event, 1)
+                return
+            if self.focus_results():
+                event.prevent_default()
+                event.stop()
+                return
 
         if event.key == "enter" and self._autocomplete_is_visible():
             event.prevent_default()
@@ -407,6 +442,29 @@ class IdeaListPanel(Vertical):
             event.prevent_default()
             event.stop()
             self.dismiss_autocomplete()
+
+    def _handle_autocomplete_cycle(
+        self,
+        event: Key,
+        direction: Literal[-1, 1],
+    ) -> None:
+        """Handle cycling autocomplete or opening operator suggestions."""
+        if self._autocomplete_is_visible():
+            self._cycle_visible_autocomplete(event, direction)
+            return
+        event.prevent_default()
+        event.stop()
+        self._sync_autocomplete(allow_empty_operator=True)
+
+    def _cycle_visible_autocomplete(
+        self,
+        event: Key,
+        direction: Literal[-1, 1],
+    ) -> None:
+        """Cycle autocomplete and consume the triggering key event."""
+        event.prevent_default()
+        event.stop()
+        self._cycle_autocomplete(direction)
 
     def dismiss_autocomplete(self) -> bool:
         """Close autocomplete popup if it is currently visible."""
@@ -475,6 +533,23 @@ class IdeaListPanel(Vertical):
         search.value = f"{before}{suggestion}{after}"
         search.cursor_position = state.replace_start + len(suggestion)
         self.dismiss_autocomplete()
+
+    def _sync_search_state_classes(self) -> None:
+        """Apply active-search styling classes to input and tree."""
+        search = self.query_one("#search-input", Input)
+        tree = self.query_one("#idea-list", Tree)
+        if self.search_is_active():
+            search.add_class("search-active")
+            tree.add_class("search-active")
+            return
+        search.remove_class("search-active")
+        tree.remove_class("search-active")
+
+    def _tree_cursor_is_first_result(self) -> bool:
+        """Return whether the tree cursor is on the first selectable idea."""
+        tree = self.query_one("#idea-list", Tree)
+        first_node = next(iter(self._idea_nodes_by_pk.values()), None)
+        return first_node is not None and tree.cursor_node is first_node
 
 
 def _normalize_suggestions(raw_values: list[str]) -> list[str]:

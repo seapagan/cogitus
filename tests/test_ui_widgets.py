@@ -317,6 +317,43 @@ async def test_idea_list_panel_search_autocomplete_extra_branches() -> None:
 
 
 @pytest.mark.asyncio
+async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
+    service: IdeaService,
+) -> None:
+    """Search should support keyboard-only movement into and out of results."""
+    service.create_idea("Alpha python result")
+    service.create_idea("Beta python result")
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+
+        search.focus()
+        await pilot.pause()
+        search.value = "python"
+        await pilot.pause()
+
+        assert search.has_class("search-active")
+        assert tree.has_class("search-active")
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.focused is tree
+
+        await pilot.press("up")
+        await pilot.pause()
+        assert app.focused is search
+
+        search.value = ""
+        await pilot.pause()
+        assert not search.has_class("search-active")
+        assert not tree.has_class("search-active")
+
+
+@pytest.mark.asyncio
 async def test_idea_list_panel_blur_defers_for_option_selection() -> None:
     """Search blur should defer dismissal while option list takes focus."""
     panel = IdeaListPanel(id="idea-list-panel")

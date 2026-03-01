@@ -417,6 +417,11 @@ class MainScreen(Screen[None]):
         if panel.dismiss_autocomplete():
             return
         search = panel.query_one("#search-input", Input)
+        tree = panel.query_one("#idea-list", Tree)
+        if self.app.focused is tree and panel.search_is_active():
+            search.focus()
+            return
+
         if self.app.focused is not search:
             return
 
