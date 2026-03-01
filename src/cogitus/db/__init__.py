@@ -12,6 +12,7 @@ from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.idea_cursor_state import IdeaCursorState
 from cogitus.models.tag import Tag
+from cogitus.search.backend import FtsSearchBackend, ensure_search_tables
 
 DEFAULT_DB_PATH = "~/.config/cogitus/cogitus.db"
 
@@ -138,4 +139,6 @@ def get_db(
     db.create_table(IdeaCursorState)
     if not ideas_existed:
         _migrate_ideas_group_fk(db, default_group_pk)
+    ensure_search_tables(db)
+    FtsSearchBackend(db).rebuild()
     return db

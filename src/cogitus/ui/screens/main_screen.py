@@ -128,11 +128,20 @@ class MainScreen(Screen[None]):
             groups=[group.name for group in self._service.list_groups()],
         )
         search_query = panel.query_one("#search-input", Input).value.strip()
-        grouped = self._service.list_ideas_grouped(search_query or None)
-        panel.load_grouped_ideas(grouped)
+        if search_query:
+            grouped_results = self._service.list_search_results_grouped(
+                search_query
+            )
+            panel.load_grouped_search_results(grouped_results)
+            has_ideas = any(
+                group_results for _, group_results in grouped_results
+            )
+        else:
+            grouped_ideas = self._service.list_ideas_grouped(None)
+            panel.load_grouped_ideas(grouped_ideas)
+            has_ideas = any(group_ideas for _, group_ideas in grouped_ideas)
 
         view = self.query_one("#content-panel", IdeaView)
-        has_ideas = any(group_ideas for _, group_ideas in grouped)
         if has_ideas:
             if select_pk is not None:
                 panel.select_idea(select_pk)
@@ -165,8 +174,13 @@ class MainScreen(Screen[None]):
     ) -> None:
         """Filter ideas based on search query."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        grouped = self._service.list_ideas_grouped(event.query)
-        panel.load_grouped_ideas(grouped)
+        query = event.query.strip()
+        if query:
+            grouped_results = self._service.list_search_results_grouped(query)
+            panel.load_grouped_search_results(grouped_results)
+        else:
+            grouped_ideas = self._service.list_ideas_grouped(None)
+            panel.load_grouped_ideas(grouped_ideas)
         view = self.query_one("#content-panel", IdeaView)
         selected = panel.get_selected_idea()
         if selected is not None:

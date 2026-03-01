@@ -20,8 +20,10 @@ if TYPE_CHECKING:
 
     from cogitus.models.group import Group
     from cogitus.models.idea import Idea
+    from cogitus.search import SearchResult
 
 _DAYS_IN_WEEK = 7
+_MAX_SNIPPET_LENGTH = 88
 _SEARCH_OPERATORS: tuple[str, ...] = ("tag:", "group:")
 
 
@@ -108,6 +110,7 @@ class IdeaListPanel(Vertical):
         self._ideas_by_pk: dict[int, Idea] = {}
         self._group_nodes_by_pk: dict[int, TreeNode[IdeaTreeNodeData]] = {}
         self._idea_nodes_by_pk: dict[int, TreeNode[IdeaTreeNodeData]] = {}
+        self._snippets_by_pk: dict[int, str] = {}
         self._tag_suggestions: tuple[str, ...] = ()
         self._group_suggestions: tuple[str, ...] = ()
         self._autocomplete_state: _AutocompleteState | None = None
@@ -133,6 +136,7 @@ class IdeaListPanel(Vertical):
         self._ideas_by_pk.clear()
         self._group_nodes_by_pk.clear()
         self._idea_nodes_by_pk.clear()
+        self._snippets_by_pk.clear()
         tree.root.label = "Ideas"
         tree.root.data = IdeaTreeNodeData(kind="root")
         return tree
@@ -140,9 +144,12 @@ class IdeaListPanel(Vertical):
     def load_grouped_ideas(
         self,
         grouped_ideas: list[tuple[Group, list[Idea]]],
+        *,
+        snippets_by_pk: dict[int, str] | None = None,
     ) -> None:
         """Replace the displayed grouped ideas."""
         tree = self._reset_tree()
+        self._snippets_by_pk = dict(snippets_by_pk or {})
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
 
         for group, ideas in grouped_ideas:
@@ -157,6 +164,7 @@ class IdeaListPanel(Vertical):
                     group_node,
                     idea,
                     group_pk=group.pk,
+                    snippet=self._snippets_by_pk.get(idea.pk),
                 )
                 if first_idea_node is None:
                     first_idea_node = idea_node
@@ -164,6 +172,25 @@ class IdeaListPanel(Vertical):
         if first_idea_node is not None:
             tree.select_node(first_idea_node)
             tree.move_cursor(first_idea_node, animate=False)
+
+    def load_grouped_search_results(
+        self,
+        grouped_results: list[tuple[Group, list[SearchResult]]],
+    ) -> None:
+        """Replace displayed ideas with ranked search results."""
+        snippets_by_pk: dict[int, str] = {}
+        grouped_ideas: list[tuple[Group, list[Idea]]] = []
+        for group, results in grouped_results:
+            ideas: list[Idea] = []
+            for result in results:
+                ideas.append(result.idea)
+                if result.snippet:
+                    snippets_by_pk[result.idea.pk] = result.snippet
+            grouped_ideas.append((group, ideas))
+        self.load_grouped_ideas(
+            grouped_ideas,
+            snippets_by_pk=snippets_by_pk,
+        )
 
     def load_ideas(self, ideas: list[Idea]) -> None:
         """Compatibility helper to load ideas under a synthetic group."""
@@ -187,12 +214,15 @@ class IdeaListPanel(Vertical):
         idea: Idea,
         *,
         group_pk: int | None = None,
+        snippet: str | None = None,
     ) -> TreeNode[IdeaTreeNodeData]:
         """Add an idea leaf node under parent and track it by primary key."""
         ts = _format_timestamp(idea.updated_at)
         label = Text(idea.title, style="bold")
         if ts:
             label.append(f" [{ts}]", style="dim")
+        if snippet:
+            label.append(f" | {_truncate_snippet(snippet)}", style="dim")
         node = parent.add_leaf(
             label,
             data=IdeaTreeNodeData(
@@ -457,6 +487,14 @@ def _normalize_suggestions(raw_values: list[str]) -> list[str]:
             seen.add(value)
             normalized.append(value)
     return normalized
+
+
+def _truncate_snippet(snippet: str) -> str:
+    """Trim snippets to a compact single line for the tree."""
+    compact = " ".join(snippet.split())
+    if len(compact) <= _MAX_SNIPPET_LENGTH:
+        return compact
+    return f"{compact[: _MAX_SNIPPET_LENGTH - 3].rstrip()}..."
 
 
 def _resolve_autocomplete_state(
