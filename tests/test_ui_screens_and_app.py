@@ -75,13 +75,19 @@ class _FakeSettings:
         self.saved = True
 
 
+_MAX_WAIT_TICKS = 200
+
+
 async def _wait_for_search_active(
     pilot: Pilot[Any],
     search: Input,
 ) -> None:
     """Wait until the search input enters active-search mode."""
-    while not search.has_class("search-active"):
+    for _ in range(_MAX_WAIT_TICKS):
+        if search.has_class("search-active"):
+            return
         await pilot.pause()
+    pytest.fail("Timed out waiting for active-search mode")
 
 
 async def _wait_for_search_results(
@@ -90,8 +96,11 @@ async def _wait_for_search_results(
     results: SearchResultsList,
 ) -> None:
     """Wait until active search has populated selectable result rows."""
-    while not search.has_class("search-active") or not results.has_matches():
+    for _ in range(_MAX_WAIT_TICKS):
+        if search.has_class("search-active") and results.has_matches():
+            return
         await pilot.pause()
+    pytest.fail("Timed out waiting for selectable search results")
 
 
 async def _wait_for_search_cleared(
@@ -99,8 +108,11 @@ async def _wait_for_search_cleared(
     search: Input,
 ) -> None:
     """Wait until search has been fully cleared."""
-    while search.value != "" or search.has_class("search-active"):
+    for _ in range(_MAX_WAIT_TICKS):
+        if search.value == "" and not search.has_class("search-active"):
+            return
         await pilot.pause()
+    pytest.fail("Timed out waiting for search to clear")
 
 
 @pytest.mark.asyncio
@@ -1587,8 +1599,12 @@ async def test_main_screen_cancel_search_preserves_selected_idea(
         await pilot.pause()
         screen.action_cancel_search()
         await _wait_for_search_cleared(pilot, search)
-        while panel.get_selected_idea() is None:
+        for _ in range(_MAX_WAIT_TICKS):
+            if panel.get_selected_idea() is not None:
+                break
             await pilot.pause()
+        else:
+            pytest.fail("Timed out waiting for tree selection to be restored")
 
         assert app.focused is panel.browse_widget()
         selected_in_tree = panel.get_selected_idea()

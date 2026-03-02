@@ -485,6 +485,7 @@ async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
     service: IdeaService,
 ) -> None:
     """Search should support keyboard-only movement into and out of results."""
+    max_wait_ticks = 200
     service.create_idea("Alpha python result")
     service.create_idea("Beta python result")
     panel = IdeaListPanel(id="idea-list-panel")
@@ -499,8 +500,12 @@ async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
         search.focus()
         await pilot.pause()
         search.value = "python"
-        while not search.has_class("search-active"):
+        for _ in range(max_wait_ticks):
+            if search.has_class("search-active"):
+                break
             await pilot.pause()
+        else:
+            pytest.fail("Timed out waiting for search-active state")
         panel.load_search_results(
             service.search_results("python"),
             show_match_rows=True,
@@ -522,9 +527,13 @@ async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
 
         await pilot.press("up")
         await pilot.pause()
-        while not panel.is_first_result_selected():
+        for _ in range(max_wait_ticks):
+            if panel.is_first_result_selected():
+                break
             await pilot.press("up")
             await pilot.pause()
+        else:
+            pytest.fail("Timed out returning to the first search result")
 
         await pilot.press("up")
         await pilot.pause()
