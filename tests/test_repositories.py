@@ -568,7 +568,7 @@ class TestIdeaRepository:
         assert text_and_filter[0].matches == (
             SearchMatchFragment(
                 source="title",
-                text="Title: Grouped [[python]]",
+                text="Grouped [[python]]",
                 rank=0,
                 is_synthetic=True,
             ),

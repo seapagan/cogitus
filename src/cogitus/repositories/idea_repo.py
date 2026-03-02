@@ -33,7 +33,7 @@ _HIGHLIGHT_START = "[["
 _HIGHLIGHT_END = "]]"
 _DEFAULT_TEXT_MATCH = (_LEGACY_TEXT_MATCH_SCORE, ())
 _FTS_FRAGMENT_FIELDS: tuple[tuple[SearchMatchSource, int, str, bool], ...] = (
-    ("title", 0, "Title: ", True),
+    ("title", 0, "", True),
     ("body", 1, "", False),
 )
 

@@ -829,6 +829,39 @@ def test_search_results_widget_can_render_selectable_idea_rows() -> None:
     assert results.options[0].id == "idea-3"
 
 
+def test_search_results_widget_renders_title_once() -> None:
+    """Title fragments should only be labelled once in the UI."""
+    idea = cast(
+        "Idea",
+        SimpleNamespace(
+            pk=4, title="Python title", group=SimpleNamespace(name="backend")
+        ),
+    )
+    results = SearchResultsList(id="search-results")
+
+    results.load_results(
+        [
+            SearchResult(
+                idea=idea,
+                score=0.0,
+                matches=(
+                    SearchMatchFragment(
+                        source="title",
+                        text="[[Python]] title",
+                        rank=0,
+                        is_synthetic=True,
+                    ),
+                ),
+            )
+        ],
+        show_match_rows=True,
+    )
+
+    prompt = results.options[1].prompt
+    plain = prompt.plain if hasattr(prompt, "plain") else str(prompt)
+    assert plain == "  Title: Python title"
+
+
 def test_search_results_widget_event_ignores_unknown_option_ids(
     service: IdeaService,
     monkeypatch: pytest.MonkeyPatch,
