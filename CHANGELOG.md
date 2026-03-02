@@ -5,6 +5,15 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased](https://github.com/seapagan/cogitus/tree/HEAD)
+
+**New Features**
+
+- Add dedicated search results mode ([#28](https://github.com/seapagan/cogitus/pull/28)) by [seapagan](https://github.com/seapagan)
+- Overhaul search with fts5 and keyboard navigation ([#27](https://github.com/seapagan/cogitus/pull/27)) by [seapagan](https://github.com/seapagan)
+- Add autocomplete flows for search and tag inputs ([#26](https://github.com/seapagan/cogitus/pull/26)) by [seapagan](https://github.com/seapagan)
+
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.5.0...HEAD) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.5.0...HEAD.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.5.0...HEAD.patch)
 
 ## [0.5.0](https://github.com/seapagan/cogitus/releases/tag/0.5.0) (February 15, 2026)
 
