@@ -71,23 +71,23 @@ _UPSERT_SQL = """
     LEFT JOIN groups ON groups.pk = ideas.group_id
     WHERE ideas.pk = ?;
 """
-_SEARCH_SQL = """
+_SEARCH_SQL = f"""
     SELECT
         idea_pk,
         bm25(idea_search) AS score,
         snippet(
             idea_search,
             2,
-            '[[',
-            ']]',
+            '{_SNIPPET_START}',
+            '{_SNIPPET_END}',
             '...',
             12
         ) AS body_snippet,
         snippet(
             idea_search,
             1,
-            '[[',
-            ']]',
+            '{_SNIPPET_START}',
+            '{_SNIPPET_END}',
             '...',
             8
         ) AS title_snippet
@@ -95,23 +95,23 @@ _SEARCH_SQL = """
         snippet(
             idea_search,
             3,
-            '[[',
-            ']]',
+            '{_SNIPPET_START}',
+            '{_SNIPPET_END}',
             '...',
             8
         ) AS group_snippet,
         snippet(
             idea_search,
             4,
-            '[[',
-            ']]',
+            '{_SNIPPET_START}',
+            '{_SNIPPET_END}',
             '...',
             8
         ) AS tag_snippet
     FROM idea_search
     WHERE idea_search MATCH ?
     ORDER BY score, rowid;
-"""
+"""  # noqa: S608
 
 
 @dataclass(frozen=True)
