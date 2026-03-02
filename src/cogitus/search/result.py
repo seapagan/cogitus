@@ -43,6 +43,7 @@ class SearchResult:
                     source="body",
                     text=self.snippet,
                     rank=0,
+                    is_synthetic=True,
                 ),
             ),
         )
