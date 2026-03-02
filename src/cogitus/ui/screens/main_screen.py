@@ -15,6 +15,7 @@ from cogitus.config import (
     EditBodyCursorMode,
     NewIdeaGroupMode,
 )
+from cogitus.search import parse_search_query
 from cogitus.ui.clipboard import copy_to_clipboard
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
@@ -175,8 +176,12 @@ class MainScreen(Screen[None]):
         )
         search_query = panel.query_one("#search-input", Input).value.strip()
         if search_query:
+            parsed = parse_search_query(search_query)
             results = self._service.search_results(search_query)
-            panel.load_search_results(results)
+            panel.load_search_results(
+                results,
+                show_match_rows=parsed.text is not None,
+            )
             has_ideas = bool(results)
         else:
             grouped_ideas = self._service.list_ideas_grouped(None)
@@ -218,7 +223,11 @@ class MainScreen(Screen[None]):
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         query = event.query.strip()
         if query:
-            panel.load_search_results(self._service.search_results(query))
+            parsed = parse_search_query(query)
+            panel.load_search_results(
+                self._service.search_results(query),
+                show_match_rows=parsed.text is not None,
+            )
         else:
             grouped_ideas = self._service.list_ideas_grouped(None)
             panel.load_grouped_ideas(grouped_ideas)

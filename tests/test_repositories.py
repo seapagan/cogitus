@@ -9,7 +9,7 @@ from sqliter.exceptions import RecordInsertionError
 
 from cogitus.models import Idea
 from cogitus.repositories.idea_repo import IdeaRepository
-from cogitus.search import SearchFilter
+from cogitus.search import SearchFilter, parse_search_query
 from cogitus.search.result import SearchMatchFragment
 
 if TYPE_CHECKING:
@@ -540,12 +540,12 @@ class TestIdeaRepository:
 
         assert idea_repo._legacy_text_matches("body?") == {}
 
-    def test_fragment_helpers_cover_group_dedupe_and_fallback_paths(
+    def test_search_results_hide_visible_structured_match_fragments(
         self,
         idea_repo: IdeaRepository,
         group_repo: GroupRepository,
     ) -> None:
-        """Fragment helpers should cover group mismatch and dedupe branches."""
+        """Structured filters should constrain results without visible rows."""
         backend = group_repo.create("backend")
         idea = idea_repo.create(
             "Grouped python",
@@ -553,18 +553,23 @@ class TestIdeaRepository:
             tag_names=["python"],
         )
 
-        assert idea_repo._filter_match_fragments(
-            idea,
-            (
-                SearchFilter(field="group", value="frontend"),
-                SearchFilter(field="tag", value="python"),
-                SearchFilter(field="tag", value="python"),
-            ),
-        ) == (
+        structured_only = idea_repo.search_results(
+            parse_search_query("tag:python group:backend")
+        )
+        assert len(structured_only) == 1
+        assert structured_only[0].idea.pk == idea.pk
+        assert structured_only[0].matches == ()
+
+        text_and_filter = idea_repo.search_results(
+            parse_search_query("python tag:python")
+        )
+        assert len(text_and_filter) == 1
+        assert text_and_filter[0].idea.pk == idea.pk
+        assert text_and_filter[0].matches == (
             SearchMatchFragment(
-                source="tag",
-                text="Tag: [[python]]",
-                rank=50,
+                source="title",
+                text="Title: Grouped [[python]]",
+                rank=0,
                 is_synthetic=True,
             ),
         )
@@ -573,6 +578,17 @@ class TestIdeaRepository:
             idea_repo._mark_legacy_match("plain text", "missing")
             == "plain text"
         )
+        duplicate = SearchMatchFragment(
+            source="title",
+            text="Title: [[python]]",
+            rank=0,
+            is_synthetic=True,
+        )
+        assert idea_repo._merge_fragments(
+            (duplicate,),
+            (duplicate,),
+        ) == (duplicate,)
+        assert idea_repo._mark_exact_text("python") == "[[python]]"
         assert idea_repo._snippet_from_fragments(()) is None
 
 

@@ -35,8 +35,6 @@ _DEFAULT_TEXT_MATCH = (_LEGACY_TEXT_MATCH_SCORE, ())
 _FTS_FRAGMENT_FIELDS: tuple[tuple[SearchMatchSource, int, str, bool], ...] = (
     ("title", 0, "Title: ", True),
     ("body", 1, "", False),
-    ("tag", 2, "Tag: ", True),
-    ("group", 3, "Group: ", True),
 )
 
 
@@ -223,7 +221,6 @@ class IdeaRepository:
         return self._fetch_search_results(
             matched_pks,
             text_matches,
-            query.filters,
         )
 
     @staticmethod
@@ -312,17 +309,7 @@ class IdeaRepository:
             for idea in tag.ideas.fetch_all():  # type: ignore[attr-defined]
                 matched[idea.pk] = (
                     _LEGACY_TEXT_MATCH_SCORE,
-                    self._merge_fragments(
-                        matched.get(idea.pk, _DEFAULT_TEXT_MATCH)[1],
-                        (
-                            SearchMatchFragment(
-                                source="tag",
-                                text=f"Tag: {self._mark_exact_text(tag.name)}",
-                                rank=2,
-                                is_synthetic=True,
-                            ),
-                        ),
-                    ),
+                    matched.get(idea.pk, _DEFAULT_TEXT_MATCH)[1],
                 )
 
         return matched
@@ -390,7 +377,6 @@ class IdeaRepository:
             tuple[float, tuple[SearchMatchFragment, ...]],
         ]
         | None,
-        filters: tuple[SearchFilter, ...],
     ) -> list[SearchResult]:
         """Fetch fully-hydrated search results for the given primary keys."""
         ideas = self._fetch_ideas_by_pk(list(idea_pks))
@@ -406,8 +392,8 @@ class IdeaRepository:
             SearchResult(
                 idea=idea,
                 score=match[0],
-                matches=fragments,
-                snippet=self._snippet_from_fragments(fragments),
+                matches=match[1],
+                snippet=self._snippet_from_fragments(match[1]),
             )
             for idea in ideas
             for match in [
@@ -415,12 +401,6 @@ class IdeaRepository:
                     text_matches.get(idea.pk, _DEFAULT_TEXT_MATCH)
                     if text_matches is not None
                     else _DEFAULT_TEXT_MATCH
-                )
-            ]
-            for fragments in [
-                self._merge_fragments(
-                    match[1],
-                    self._filter_match_fragments(idea, filters),
                 )
             ]
         ]
@@ -454,44 +434,6 @@ class IdeaRepository:
             )
             rank += 1
         return tuple(fragments)
-
-    def _filter_match_fragments(
-        self,
-        idea: Idea,
-        filters: tuple[SearchFilter, ...],
-    ) -> tuple[SearchMatchFragment, ...]:
-        """Return synthetic fragments for structured filter matches."""
-        fragments: list[SearchMatchFragment] = []
-        rank = 50
-        tag_names = {tag.name for tag in idea.tags.fetch_all()}
-        for search_filter in filters:
-            if search_filter.field == "group":
-                if idea.group.name != search_filter.value:
-                    continue
-                fragments.append(
-                    SearchMatchFragment(
-                        source="group",
-                        text=(
-                            f"Group: {self._mark_exact_text(idea.group.name)}"
-                        ),
-                        rank=rank,
-                        is_synthetic=True,
-                    )
-                )
-                rank += 1
-                continue
-            if search_filter.value not in tag_names:
-                continue
-            fragments.append(
-                SearchMatchFragment(
-                    source="tag",
-                    text=(f"Tag: {self._mark_exact_text(search_filter.value)}"),
-                    rank=rank,
-                    is_synthetic=True,
-                )
-            )
-            rank += 1
-        return self._dedupe_fragments(fragments)
 
     @staticmethod
     def _merge_fragments(

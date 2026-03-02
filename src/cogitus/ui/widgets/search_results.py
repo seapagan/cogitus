@@ -23,7 +23,7 @@ class SearchResultSelection:
     """Selected match metadata in the search-results pane."""
 
     idea: Idea
-    fragment: SearchMatchFragment
+    fragment: SearchMatchFragment | None
 
 
 class SearchResultsList(OptionList):
@@ -49,13 +49,32 @@ class SearchResultsList(OptionList):
         self._selections_by_option_id: dict[str, SearchResultSelection] = {}
         self._ordered_match_option_ids: tuple[str, ...] = ()
 
-    def load_results(self, results: list[SearchResult]) -> None:
+    def load_results(
+        self,
+        results: list[SearchResult],
+        *,
+        show_match_rows: bool,
+    ) -> None:
         """Replace the option list contents with search results."""
         options: list[Option] = []
         selections: dict[str, SearchResultSelection] = {}
         ordered_ids: list[str] = []
 
         for result in results:
+            if not show_match_rows or not result.matches:
+                option_id = f"idea-{result.idea.pk}"
+                options.append(
+                    Option(
+                        _render_idea_prompt(result),
+                        id=option_id,
+                    )
+                )
+                selections[option_id] = SearchResultSelection(
+                    idea=result.idea,
+                    fragment=None,
+                )
+                ordered_ids.append(option_id)
+                continue
             options.append(
                 Option(
                     _render_heading_prompt(result),
@@ -139,10 +158,10 @@ class SearchResultsList(OptionList):
         return None if current is None else current[1].fragment
 
     def select_first_match_for_idea(self, idea_pk: int) -> bool:
-        """Highlight the first selectable fragment row for the given idea."""
-        prefix = f"idea-{idea_pk}-match-"
+        """Highlight the first selectable row for the given idea."""
+        prefixes = (f"idea-{idea_pk}-match-", f"idea-{idea_pk}")
         for option_id in self._ordered_match_option_ids:
-            if not option_id.startswith(prefix):
+            if not option_id.startswith(prefixes):
                 continue
             self.highlighted = self.get_option_index(option_id)
             return True
@@ -175,6 +194,14 @@ class SearchResultsList(OptionList):
 
 def _render_heading_prompt(result: SearchResult) -> Text:
     """Render one idea heading prompt."""
+    prompt = Text(result.idea.title, style="bold")
+    prompt.append("\n")
+    prompt.append(result.idea.group.name, style="dim")
+    return prompt
+
+
+def _render_idea_prompt(result: SearchResult) -> Text:
+    """Render one selectable idea row for structured-only results."""
     prompt = Text(result.idea.title, style="bold")
     prompt.append("\n")
     prompt.append(result.idea.group.name, style="dim")

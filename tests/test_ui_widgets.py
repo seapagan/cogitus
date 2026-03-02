@@ -199,7 +199,8 @@ async def test_idea_list_panel_renders_search_snippets(
                         )
                     ],
                 )
-            ]
+            ],
+            show_match_rows=True,
         )
         await pilot.pause()
 
@@ -228,7 +229,10 @@ async def test_idea_list_panel_search_mode_helpers_cover_selection_paths(
 
     async with app.run_test() as pilot:
         panel.query_one("#search-input", Input).value = "python"
-        panel.load_search_results(service.search_results("python"))
+        panel.load_search_results(
+            service.search_results("python"),
+            show_match_rows=True,
+        )
         await pilot.pause()
 
         assert panel.select_idea(idea.pk) is True
@@ -239,6 +243,62 @@ async def test_idea_list_panel_search_mode_helpers_cover_selection_paths(
             SearchResultsList,
         )
         assert panel.select_idea(999999) is False
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_structured_only_search_uses_idea_rows(
+    service: IdeaService,
+) -> None:
+    """Structured-only search should render selectable idea rows."""
+    tagged = service.create_idea("Tagged idea", tags=["python"])
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.query_one("#search-input", Input).value = "tag:python"
+        panel.load_search_results(
+            service.search_results("tag:python"),
+            show_match_rows=False,
+        )
+        await pilot.pause()
+
+        results = panel.query_one("#search-results", SearchResultsList)
+
+        assert len(results.options) == 1
+        assert results.options[0].id == f"idea-{tagged.pk}"
+        selected = panel.get_selected_idea()
+        assert selected is not None
+        assert selected.pk == tagged.pk
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_tag_only_text_match_falls_back_to_idea_row(
+    service: IdeaService,
+) -> None:
+    """Tag-only free-text matches should not render explicit tag rows."""
+    tagged = service.create_idea("No visible text hit", tags=["python"])
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.query_one("#search-input", Input).value = "python"
+        panel.load_search_results(
+            service.search_results("python"),
+            show_match_rows=True,
+        )
+        await pilot.pause()
+
+        results = panel.query_one("#search-results", SearchResultsList)
+        prompts = [
+            option.prompt.plain
+            if hasattr(option.prompt, "plain")
+            else str(option.prompt)
+            for option in results.options
+        ]
+
+        assert results.options[0].id == f"idea-{tagged.pk}"
+        assert prompts == [f"No visible text hit\n{tagged.group.name}"]
+        assert all("Tag:" not in prompt for prompt in prompts)
 
 
 @pytest.mark.asyncio
@@ -424,7 +484,10 @@ async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
         await pilot.pause()
         search.value = "python"
         await pilot.pause(0.3)
-        panel.load_search_results(service.search_results("python"))
+        panel.load_search_results(
+            service.search_results("python"),
+            show_match_rows=True,
+        )
         await pilot.pause()
 
         assert search.has_class("search-active")
@@ -704,7 +767,7 @@ def test_search_results_widget_helper_branches() -> None:
     assert results.adjacent_match_id(1) is None
     assert results.select_first_match_for_idea(1) is False
 
-    results.load_results([])
+    results.load_results([], show_match_rows=True)
     assert results.highlighted is None
 
     results.set_options([Option("Heading", disabled=True)])
@@ -742,6 +805,28 @@ def test_search_results_widget_helper_branches() -> None:
     assert results.has_next_match() is True
     results.highlighted = 1
     assert results.adjacent_match_id(1) is None
+
+
+def test_search_results_widget_can_render_selectable_idea_rows() -> None:
+    """Structured-only results should render one selectable row per idea."""
+    idea = cast(
+        "Idea",
+        SimpleNamespace(
+            pk=3, title="Tagged", group=SimpleNamespace(name="backend")
+        ),
+    )
+    results = SearchResultsList(id="search-results")
+
+    results.load_results(
+        [SearchResult(idea=idea, score=0.0, matches=())],
+        show_match_rows=False,
+    )
+
+    assert results.has_matches() is True
+    assert results.current_selection() is not None
+    assert results.get_selected_idea() is idea
+    assert results.get_selected_fragment() is None
+    assert results.options[0].id == "idea-3"
 
 
 def test_search_results_widget_event_ignores_unknown_option_ids(

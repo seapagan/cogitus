@@ -8,8 +8,9 @@ Search supports ranked free-text matching plus inline structured operators.
 - Results are ranked so stronger text matches appear before weaker ones.
 - When search is active, the left pane switches to a dedicated search-results
   view.
-- Search results are grouped by idea, with selectable match rows under each
-  idea heading.
+- Structured-only searches such as `tag:python` or `group:backend` show
+  matching ideas directly as selectable rows.
+- Searches with free text show selectable match rows under each idea heading.
 - `tag:<name>` filters by exact tag name.
 - `group:<name>` filters by exact group name.
 - Free text and structured filters are combined with an implicit `and`.
@@ -24,11 +25,12 @@ Search supports ranked free-text matching plus inline structured operators.
 4. Use `Shift+Tab`, `Up`, or `Down` to move between suggestions.
 5. Press `Enter` to accept the highlighted suggestion.
 6. Press `Down` to move from the search input into the filtered result list.
-7. Search results show idea headings plus one or more match rows.
-8. Use `Up` and `Down` in the result list to move between match rows.
-9. Press `Up` on the first result to return focus to the search input.
-10. Selecting a match row updates the right pane with that idea.
-11. Press `Esc` to close autocomplete first, then `Esc` again to leave
+7. Structured-only searches show one selectable idea row per result.
+8. Searches with free text show idea headings plus one or more match rows.
+9. Use `Up` and `Down` in the result list to move between selectable rows.
+10. Press `Up` on the first result to return focus to the search input.
+11. Selecting a result row updates the right pane with that idea.
+12. Press `Esc` to close autocomplete first, then `Esc` again to leave
    search focus.
 
 ## Examples
@@ -48,6 +50,8 @@ Search supports ranked free-text matching plus inline structured operators.
 - Plain word queries use prefix-style text matching.
 - Punctuation-heavy plain-text queries fall back to the broader legacy
   substring behavior when needed.
+- `tag:` and `group:` act as filters; they no longer add repeated visible
+  `Tag:` or `Group:` match rows.
 - While the search-results pane is focused with active search, `Esc` first returns
   focus to the search input; a second `Esc` clears the search.
 - While search is focused, `Tab` is reserved for autocomplete.

@@ -207,14 +207,24 @@ class IdeaListPanel(Vertical):
     def load_grouped_search_results(
         self,
         grouped_results: list[tuple[Group, list[SearchResult]]],
+        *,
+        show_match_rows: bool = True,
     ) -> None:
         """Compatibility helper that flattens grouped search results."""
         results: list[SearchResult] = []
         for _group, group_results in grouped_results:
             results.extend(group_results)
-        self.load_search_results(results)
+        self.load_search_results(
+            results,
+            show_match_rows=show_match_rows,
+        )
 
-    def load_search_results(self, results: list[SearchResult]) -> None:
+    def load_search_results(
+        self,
+        results: list[SearchResult],
+        *,
+        show_match_rows: bool = True,
+    ) -> None:
         """Replace the active-search view with dedicated search results."""
         self._show_search_results_mode()
         tree = self._reset_tree()
@@ -222,7 +232,10 @@ class IdeaListPanel(Vertical):
         for result in results:
             self._ideas_by_pk[result.idea.pk] = result.idea
         search_results = self.query_one("#search-results", SearchResultsList)
-        search_results.load_results(results)
+        search_results.load_results(
+            results,
+            show_match_rows=show_match_rows,
+        )
 
     def load_ideas(self, ideas: list[Idea]) -> None:
         """Compatibility helper to load ideas under a synthetic group."""

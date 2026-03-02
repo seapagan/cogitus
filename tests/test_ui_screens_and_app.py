@@ -1525,6 +1525,37 @@ async def test_main_screen_search_results_support_keyboard_navigation(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_tag_only_search_uses_selectable_idea_rows(
+    service: IdeaService,
+) -> None:
+    """Tag-only search should show idea rows without fragment children."""
+    tagged = service.create_idea("Tagged python", tags=["python"])
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "tag:python"
+        await pilot.pause(0.3)
+        panel.dismiss_autocomplete()
+        await pilot.pause()
+
+        assert len(results.options) == 1
+        assert results.options[0].id == f"idea-{tagged.pk}"
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.focused is results
+        selected = panel.get_selected_idea()
+        assert selected is not None
+        assert selected.pk == tagged.pk
+
+
+@pytest.mark.asyncio
 async def test_main_screen_search_results_footer_uses_prev_result_for_non_first(
     service: IdeaService,
 ) -> None:
