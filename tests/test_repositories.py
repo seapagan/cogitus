@@ -9,7 +9,8 @@ from sqliter.exceptions import RecordInsertionError
 
 from cogitus.models import Idea
 from cogitus.repositories.idea_repo import IdeaRepository
-from cogitus.search import SearchFilter
+from cogitus.search import SearchFilter, parse_search_query
+from cogitus.search.result import SearchMatchFragment
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -524,6 +525,84 @@ class TestIdeaRepository:
         assert highlighted.startswith("...")
         assert "python target" in highlighted
         assert highlighted.endswith("...")
+
+    def test_legacy_text_matches_skip_body_when_snippet_builder_returns_none(
+        self,
+        idea_repo: IdeaRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Legacy body branch should skip entries when snippet build fails."""
+        idea_repo.create(
+            "No title punctuation",
+            body="Body-only fallback for body? queries",
+        )
+        monkeypatch.setattr(idea_repo, "_legacy_snippet", lambda *_args: None)
+
+        assert idea_repo._legacy_text_matches("body?") == {}
+
+    def test_search_results_structured_only_have_no_visible_matches(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Structured-only filters should return ideas without match rows."""
+        backend = group_repo.create("backend")
+        idea = idea_repo.create(
+            "Grouped python",
+            group_pk=backend.pk,
+            tag_names=["python"],
+        )
+
+        structured_only = idea_repo.search_results(
+            parse_search_query("tag:python group:backend")
+        )
+        assert len(structured_only) == 1
+        assert structured_only[0].idea.pk == idea.pk
+        assert structured_only[0].matches == ()
+
+    def test_search_results_text_plus_filter_add_title_fragment(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Text plus structured filters should keep visible text fragments."""
+        idea = idea_repo.create("Grouped python", tag_names=["python"])
+
+        results = idea_repo.search_results(
+            parse_search_query("python tag:python")
+        )
+
+        assert len(results) == 1
+        assert results[0].idea.pk == idea.pk
+        assert results[0].matches == (
+            SearchMatchFragment(
+                source="title",
+                text="Grouped [[python]]",
+                rank=0,
+                is_synthetic=True,
+            ),
+        )
+
+    def test_search_result_fragment_helpers_cover_fallback_paths(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Fragment helpers should cover no-op and dedupe branches."""
+        assert (
+            idea_repo._mark_legacy_match("plain text", "missing")
+            == "plain text"
+        )
+        duplicate = SearchMatchFragment(
+            source="title",
+            text="Title: [[python]]",
+            rank=0,
+            is_synthetic=True,
+        )
+        assert idea_repo._merge_fragments(
+            (duplicate,),
+            (duplicate,),
+        ) == (duplicate,)
+        assert idea_repo._mark_exact_text("python") == "[[python]]"
+        assert idea_repo._snippet_from_fragments(()) is None
 
 
 class TestIdeaCursorStateRepository:

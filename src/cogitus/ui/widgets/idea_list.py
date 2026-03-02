@@ -13,10 +13,13 @@ from textual.message import Message
 from textual.reactive import reactive
 from textual.widgets import Input, OptionList, Tree
 
+from cogitus.ui.widgets.search_results import SearchResultsList
+
 if TYPE_CHECKING:
     from textual.app import ComposeResult
     from textual.events import Key
     from textual.timer import Timer
+    from textual.widget import Widget
     from textual.widgets.tree import TreeNode
 
     from cogitus.models.group import Group
@@ -138,7 +141,6 @@ class IdeaListPanel(Vertical):
         self._group_nodes_by_pk: dict[int, TreeNode[IdeaTreeNodeData]] = {}
         self._idea_nodes_by_pk: dict[int, TreeNode[IdeaTreeNodeData]] = {}
         self._result_order_pks: tuple[int, ...] = ()
-        self._snippets_by_pk: dict[int, str] = {}
         self._tag_suggestions: tuple[str, ...] = ()
         self._group_suggestions: tuple[str, ...] = ()
         self._autocomplete_state: _AutocompleteState | None = None
@@ -156,6 +158,7 @@ class IdeaListPanel(Vertical):
             data=IdeaTreeNodeData(kind="root"),
             id="idea-list",
         )
+        yield SearchResultsList(id="search-results", classes="-hidden")
 
     def _reset_tree(self) -> Tree[IdeaTreeNodeData]:
         """Clear tree and internal state, returning the tree widget."""
@@ -165,7 +168,6 @@ class IdeaListPanel(Vertical):
         self._group_nodes_by_pk.clear()
         self._idea_nodes_by_pk.clear()
         self._result_order_pks = ()
-        self._snippets_by_pk.clear()
         tree.root.label = "Ideas"
         tree.root.data = IdeaTreeNodeData(kind="root")
         return tree
@@ -173,12 +175,11 @@ class IdeaListPanel(Vertical):
     def load_grouped_ideas(
         self,
         grouped_ideas: list[tuple[Group, list[Idea]]],
-        *,
-        snippets_by_pk: dict[int, str] | None = None,
     ) -> None:
         """Replace the displayed grouped ideas."""
         tree = self._reset_tree()
-        self._snippets_by_pk = dict(snippets_by_pk or {})
+        self._show_tree_mode()
+        self.query_one("#search-results", SearchResultsList).clear_results()
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
         ordered_pks: list[int] = []
         for group, ideas in grouped_ideas:
@@ -193,7 +194,6 @@ class IdeaListPanel(Vertical):
                     group_node,
                     idea,
                     group_pk=group.pk,
-                    snippet=self._snippets_by_pk.get(idea.pk),
                 )
                 if first_idea_node is None:
                     first_idea_node = idea_node
@@ -207,25 +207,41 @@ class IdeaListPanel(Vertical):
     def load_grouped_search_results(
         self,
         grouped_results: list[tuple[Group, list[SearchResult]]],
+        *,
+        show_match_rows: bool = True,
     ) -> None:
-        """Replace displayed ideas with ranked search results."""
-        snippets_by_pk: dict[int, str] = {}
-        grouped_ideas: list[tuple[Group, list[Idea]]] = []
-        for group, results in grouped_results:
-            ideas: list[Idea] = []
-            for result in results:
-                ideas.append(result.idea)
-                if result.snippet:
-                    snippets_by_pk[result.idea.pk] = result.snippet
-            grouped_ideas.append((group, ideas))
-        self.load_grouped_ideas(
-            grouped_ideas,
-            snippets_by_pk=snippets_by_pk,
+        """Compatibility helper that flattens grouped search results."""
+        results: list[SearchResult] = []
+        for _group, group_results in grouped_results:
+            results.extend(group_results)
+        self.load_search_results(
+            results,
+            show_match_rows=show_match_rows,
+        )
+
+    def load_search_results(
+        self,
+        results: list[SearchResult],
+        *,
+        show_match_rows: bool = True,
+    ) -> None:
+        """Replace the active-search view with dedicated search results."""
+        self._show_search_results_mode()
+        tree = self._reset_tree()
+        tree.root.expand()
+        for result in results:
+            self._ideas_by_pk[result.idea.pk] = result.idea
+        search_results = self.query_one("#search-results", SearchResultsList)
+        search_results.load_results(
+            results,
+            show_match_rows=show_match_rows,
         )
 
     def load_ideas(self, ideas: list[Idea]) -> None:
         """Compatibility helper to load ideas under a synthetic group."""
         tree = self._reset_tree()
+        self._show_tree_mode()
+        self.query_one("#search-results", SearchResultsList).clear_results()
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
         ordered_pks: list[int] = []
         for idea in ideas:
@@ -248,15 +264,12 @@ class IdeaListPanel(Vertical):
         idea: Idea,
         *,
         group_pk: int | None = None,
-        snippet: str | None = None,
     ) -> TreeNode[IdeaTreeNodeData]:
         """Add an idea leaf node under parent and track it by primary key."""
         ts = _format_timestamp(idea.updated_at)
         label = Text(idea.title, style="bold")
         if ts:
             label.append(f" [{ts}]", style="dim")
-        if snippet:
-            label.append(f" | {_truncate_snippet(snippet)}", style="dim")
         node = parent.add_leaf(
             label,
             data=IdeaTreeNodeData(
@@ -271,6 +284,12 @@ class IdeaListPanel(Vertical):
 
     def select_idea(self, idea_pk: int) -> bool:
         """Select an idea node by primary key."""
+        if self.search_is_active():
+            results = self.query_one("#search-results", SearchResultsList)
+            selected = results.select_first_match_for_idea(idea_pk)
+            if selected:
+                self.refresh_bindings()
+            return selected
         tree = self.query_one("#idea-list", Tree)
         node = self._idea_nodes_by_pk.get(idea_pk)
         if node is None:
@@ -282,6 +301,11 @@ class IdeaListPanel(Vertical):
 
     def get_selected_idea(self) -> Idea | None:
         """Return the currently selected idea."""
+        if self.search_is_active():
+            return self.query_one(
+                "#search-results",
+                SearchResultsList,
+            ).get_selected_idea()
         tree = self.query_one("#idea-list", Tree)
         node = tree.cursor_node
         data = node.data if node is not None else None
@@ -293,6 +317,8 @@ class IdeaListPanel(Vertical):
 
     def get_selected_group_pk(self) -> int | None:
         """Return selected group pk when a group node is selected."""
+        if self.search_is_active():
+            return None
         tree = self.query_one("#idea-list", Tree)
         node = tree.cursor_node
         data = node.data if node is not None else None
@@ -345,6 +371,14 @@ class IdeaListPanel(Vertical):
         self.query_one("#search-input", Input).focus()
         event.stop()
 
+    def on_search_results_list_match_highlighted(
+        self,
+        event: SearchResultsList.MatchHighlighted,
+    ) -> None:
+        """Propagate search-result highlight changes as idea selections."""
+        self.refresh_bindings()
+        self.post_message(self.IdeaSelected(event.selection.idea))
+
     def _fire_search(self, query: str) -> None:
         """Post the debounced search message."""
         self.post_message(self.SearchChanged(query))
@@ -383,14 +417,15 @@ class IdeaListPanel(Vertical):
         self.query_one("#search-input", Input).focus()
 
     def focus_results(self) -> bool:
-        """Focus the result tree when active search has selectable ideas."""
+        """Focus the active search-results list when it has selectable rows."""
         if not self.search_is_active():
             return False
         if self.autocomplete_is_visible():
             return False
-        if not self._idea_nodes_by_pk:
+        results = self.query_one("#search-results", SearchResultsList)
+        if not results.has_matches():
             return False
-        self.query_one("#idea-list", Tree).focus()
+        results.focus()
         return True
 
     def clear_search(self) -> None:
@@ -427,8 +462,8 @@ class IdeaListPanel(Vertical):
     def on_key(self, event: Key) -> None:
         """Handle search-input and active-search result navigation keys."""
         search = self.query_one("#search-input", Input)
-        tree = self.query_one("#idea-list", Tree)
-        if self.app.focused is tree and self._handle_result_tree_key(
+        results = self.query_one("#search-results", SearchResultsList)
+        if self.app.focused is results and self._handle_result_tree_key(
             event,
             search,
         ):
@@ -444,24 +479,17 @@ class IdeaListPanel(Vertical):
         event: Key,
         search: Input,
     ) -> bool:
-        """Handle keys while the result tree is focused."""
-        if not self.search_is_active():
+        """Handle keys while the search-results list is focused."""
+        if (
+            not self.search_is_active()
+            or event.key != "up"
+            or not self._tree_cursor_is_first_result()
+        ):
             return False
-
-        if event.key == "up":
-            event.prevent_default()
-            event.stop()
-            if self._tree_cursor_is_first_result():
-                search.focus()
-                return True
-            return self._move_result_cursor(-1)
-
-        if event.key == "down":
-            event.prevent_default()
-            event.stop()
-            return self._move_result_cursor(1)
-
-        return False
+        event.prevent_default()
+        event.stop()
+        search.focus()
+        return True
 
     def _handle_search_input_key(self, event: Key) -> None:
         """Handle keys while the search input is focused."""
@@ -477,14 +505,8 @@ class IdeaListPanel(Vertical):
             self._cycle_visible_autocomplete(event, -1)
             return
 
-        if event.key == "down":
-            if self._autocomplete_is_visible():
-                self._cycle_visible_autocomplete(event, 1)
-                return
-            if self.focus_results():
-                event.prevent_default()
-                event.stop()
-                return
+        if event.key == "down" and self._handle_search_input_down_key(event):
+            return
 
         if event.key == "enter" and self._autocomplete_is_visible():
             event.prevent_default()
@@ -496,6 +518,27 @@ class IdeaListPanel(Vertical):
             event.prevent_default()
             event.stop()
             self.dismiss_autocomplete()
+
+    def _handle_search_input_down_key(self, event: Key) -> bool:
+        """Handle `Down` from the search input across autocomplete/results."""
+        if self._autocomplete_is_visible():
+            self._cycle_visible_autocomplete(event, 1)
+            return True
+        if self.focus_results():
+            event.prevent_default()
+            event.stop()
+            return True
+        if not self.search_is_active():
+            return False
+
+        event.prevent_default()
+        event.stop()
+        if self._debounce_timer is not None:
+            self._debounce_timer.stop()
+        search = self.query_one("#search-input", Input)
+        self._fire_search(search.value)
+        self.call_later(self.focus_results)
+        return True
 
     def _handle_autocomplete_cycle(
         self,
@@ -592,48 +635,37 @@ class IdeaListPanel(Vertical):
         """Apply active-search styling classes to input and tree."""
         search = self.query_one("#search-input", Input)
         tree = self.query_one("#idea-list", Tree)
+        results = self.query_one("#search-results", SearchResultsList)
         if self.search_is_active():
             search.add_class("search-active")
             tree.add_class("search-active")
+            results.add_class("search-active")
             return
         search.remove_class("search-active")
         tree.remove_class("search-active")
+        results.remove_class("search-active")
 
     def _tree_cursor_is_first_result(self) -> bool:
-        """Return whether the tree cursor is on the first selectable idea."""
-        selected = self.get_selected_idea()
-        first_pk = self._result_order_pks[0] if self._result_order_pks else None
-        return selected is not None and selected.pk == first_pk
+        """Return whether the first selectable active-search row is selected."""
+        results = self.query_one("#search-results", SearchResultsList)
+        return results.is_first_match_selected()
 
     def _move_result_cursor(self, direction: Literal[-1, 1]) -> bool:
-        """Move the tree cursor to the previous or next idea result."""
-        tree = self.query_one("#idea-list", Tree)
-        next_node = self._adjacent_result_node(direction)
-        if next_node is None:
-            return True
-        tree.move_cursor(next_node, animate=False)
+        """Move the active search-results cursor to the previous/next row."""
+        results = self.query_one("#search-results", SearchResultsList)
+        if direction > 0:
+            results.action_cursor_down()
+        else:
+            results.action_cursor_up()
         return True
 
     def _adjacent_result_node(
         self,
         direction: Literal[-1, 1],
-    ) -> TreeNode[IdeaTreeNodeData] | None:
-        """Return the adjacent idea node relative to the current cursor."""
-        if not self._result_order_pks:
-            return None
-        selected = self.get_selected_idea()
-        if selected is None:
-            target_pk = (
-                self._result_order_pks[0]
-                if direction > 0
-                else self._result_order_pks[-1]
-            )
-            return self._idea_nodes_by_pk[target_pk]
-        current_index = self._result_order_pks.index(selected.pk)
-        next_index = current_index + direction
-        if next_index < 0 or next_index >= len(self._result_order_pks):
-            return None
-        return self._idea_nodes_by_pk[self._result_order_pks[next_index]]
+    ) -> object | None:
+        """Return a placeholder when a previous/next search result exists."""
+        results = self.query_one("#search-results", SearchResultsList)
+        return results.adjacent_match_id(direction)
 
     def _ordered_result_nodes(self) -> tuple[TreeNode[IdeaTreeNodeData], ...]:
         """Return result idea nodes ordered by their current tree position."""
@@ -657,7 +689,10 @@ class IdeaListPanel(Vertical):
         if action not in footer_actions:
             return super().check_action(action, parameters)
 
-        if self.app.focused is not self.query_one("#idea-list", Tree):
+        if self.app.focused is not self.query_one(
+            "#search-results",
+            SearchResultsList,
+        ):
             return False
         if not self.search_is_active():
             return False
@@ -668,6 +703,30 @@ class IdeaListPanel(Vertical):
         elif action in {"footer_previous_result", "footer_back_to_search"}:
             result = True
         return result
+
+    def browse_widget(self) -> Widget:
+        """Return the normal browsing widget."""
+        return self.query_one("#idea-list", Tree)
+
+    def active_results_widget(self) -> Widget:
+        """Return the currently active list-side focus target."""
+        if self.search_is_active():
+            return self.query_one("#search-results", SearchResultsList)
+        return self.query_one("#idea-list", Tree)
+
+    def _show_tree_mode(self) -> None:
+        """Show the normal tree and hide dedicated search results."""
+        tree = self.query_one("#idea-list", Tree)
+        results = self.query_one("#search-results", SearchResultsList)
+        tree.remove_class("-hidden")
+        results.add_class("-hidden")
+
+    def _show_search_results_mode(self) -> None:
+        """Show dedicated search results and hide the normal tree."""
+        tree = self.query_one("#idea-list", Tree)
+        results = self.query_one("#search-results", SearchResultsList)
+        tree.add_class("-hidden")
+        results.remove_class("-hidden")
 
 
 def _normalize_suggestions(raw_values: list[str]) -> list[str]:
@@ -683,7 +742,7 @@ def _normalize_suggestions(raw_values: list[str]) -> list[str]:
 
 
 def _truncate_snippet(snippet: str) -> str:
-    """Trim snippets to a compact single line for the tree."""
+    """Trim snippets to a compact single line for compatibility helpers."""
     compact = " ".join(snippet.split())
     if len(compact) <= _MAX_SNIPPET_LENGTH:
         return compact

@@ -23,6 +23,7 @@ from cogitus.ui.screens.idea_form_screen import (
 from cogitus.ui.screens.main_screen import MainScreen
 from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
+from cogitus.ui.widgets.search_results import SearchResultsList
 from cogitus.ui.widgets.text_area import CogitusTextArea
 
 if TYPE_CHECKING:
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
 
     from pytest_mock import MockerFixture
     from sqliter import SqliterDB
+    from textual.pilot import Pilot
     from textual.screen import Screen
 
     from cogitus.services.idea_service import IdeaService
@@ -71,6 +73,46 @@ class _FakeSettings:
     def save(self) -> None:
         """Record save invocation."""
         self.saved = True
+
+
+_MAX_WAIT_TICKS = 200
+
+
+async def _wait_for_search_active(
+    pilot: Pilot[Any],
+    search: Input,
+) -> None:
+    """Wait until the search input enters active-search mode."""
+    for _ in range(_MAX_WAIT_TICKS):
+        if search.has_class("search-active"):
+            return
+        await pilot.pause()
+    pytest.fail("Timed out waiting for active-search mode")
+
+
+async def _wait_for_search_results(
+    pilot: Pilot[Any],
+    search: Input,
+    results: SearchResultsList,
+) -> None:
+    """Wait until active search has populated selectable result rows."""
+    for _ in range(_MAX_WAIT_TICKS):
+        if search.has_class("search-active") and results.has_matches():
+            return
+        await pilot.pause()
+    pytest.fail("Timed out waiting for selectable search results")
+
+
+async def _wait_for_search_cleared(
+    pilot: Pilot[Any],
+    search: Input,
+) -> None:
+    """Wait until search has been fully cleared."""
+    for _ in range(_MAX_WAIT_TICKS):
+        if search.value == "" and not search.has_class("search-active"):
+            return
+        await pilot.pause()
+    pytest.fail("Timed out waiting for search to clear")
 
 
 @pytest.mark.asyncio
@@ -952,12 +994,9 @@ async def test_main_screen_selection_and_search(
 
         search = mocker.patch.object(
             screen._service,
-            "list_search_results_grouped",
+            "search_results",
             return_value=[
-                (
-                    first.group,
-                    [SearchResult(idea=first, score=-1.0, snippet="First")],
-                )
+                SearchResult(idea=first, score=-1.0, snippet="First")
             ],
         )
         selected_view = mocker.patch.object(
@@ -1219,8 +1258,8 @@ async def test_main_screen_refresh_empty_selection_branch(
         show_empty = mocker.patch.object(view, "show_empty")
         list_grouped = mocker.patch.object(
             screen._service,
-            "list_search_results_grouped",
-            wraps=screen._service.list_search_results_grouped,
+            "search_results",
+            wraps=screen._service.search_results,
         )
 
         search.value = "First"
@@ -1439,11 +1478,12 @@ async def test_main_screen_cancel_search_noop_when_search_not_focused(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
+        results = panel.query_one("#search-results", SearchResultsList)
 
-        tree.focus()
-        await pilot.pause()
         search.value = "keep"
+        await _wait_for_search_active(pilot, search)
+        results.focus()
+        await pilot.pause()
         screen.action_cancel_search()
         await pilot.pause()
 
@@ -1489,12 +1529,12 @@ async def test_main_screen_search_results_support_keyboard_navigation(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
+        results = panel.query_one("#search-results", SearchResultsList)
 
         screen.action_focus_search()
         await pilot.pause()
         search.value = "python"
-        await pilot.pause()
+        await _wait_for_search_results(pilot, search, results)
         bindings = screen.active_bindings
         assert bindings["down"].binding.description == "Results"
         assert bindings["escape"].binding.description == "Exit Search"
@@ -1504,7 +1544,7 @@ async def test_main_screen_search_results_support_keyboard_navigation(
 
         await pilot.press("down")
         await pilot.pause()
-        assert app.focused is tree
+        assert app.focused is results
         assert search.value == "python"
         bindings = screen.active_bindings
         assert bindings["down"].binding.description == "Next Result"
@@ -1520,9 +1560,123 @@ async def test_main_screen_search_results_support_keyboard_navigation(
         assert search.value == "python"
 
         screen.action_cancel_search()
-        await pilot.pause()
-        assert app.focused is tree
+        await _wait_for_search_cleared(pilot, search)
+        assert app.focused is panel.browse_widget()
         assert search.value == ""
+
+
+@pytest.mark.asyncio
+async def test_main_screen_cancel_search_preserves_selected_idea(
+    service: IdeaService,
+) -> None:
+    """Leaving search should keep the selected idea in the normal tree."""
+    service.create_idea("Alpha python")
+    service.create_idea("Beta python")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "python"
+        await _wait_for_search_results(pilot, search, results)
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.focused is results
+        for _ in range(_MAX_WAIT_TICKS):
+            if not panel.is_first_result_selected():
+                break
+            await pilot.press("down")
+            await pilot.pause()
+        else:
+            pytest.fail("Timed out moving away from first search result")
+
+        selected_in_search = panel.get_selected_idea()
+        assert selected_in_search is not None
+
+        screen.action_cancel_search()
+        await pilot.pause()
+        screen.action_cancel_search()
+        await _wait_for_search_cleared(pilot, search)
+        for _ in range(_MAX_WAIT_TICKS):
+            if panel.get_selected_idea() is not None:
+                break
+            await pilot.pause()
+        else:
+            pytest.fail("Timed out waiting for tree selection to be restored")
+
+        assert app.focused is panel.browse_widget()
+        selected_in_tree = panel.get_selected_idea()
+        assert selected_in_tree is not None
+        assert selected_in_tree.pk == selected_in_search.pk
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_clear_reselects_previous_idea(
+    service: IdeaService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Clearing search should reselect the previously active idea."""
+    idea = service.create_idea("Keep selected")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test():
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        selected_pks: list[int] = []
+
+        def fake_select_idea(pk: int) -> bool:
+            selected_pks.append(pk)
+            return True
+
+        screen._selected_idea_pk = idea.pk
+        monkeypatch.setattr(
+            panel,
+            "select_idea",
+            fake_select_idea,
+        )
+
+        screen.on_idea_list_panel_search_changed(
+            IdeaListPanel.SearchChanged("")
+        )
+
+        assert selected_pks == [idea.pk]
+
+
+@pytest.mark.asyncio
+async def test_main_screen_tag_only_search_uses_selectable_idea_rows(
+    service: IdeaService,
+) -> None:
+    """Tag-only search should show idea rows without fragment children."""
+    tagged = service.create_idea("Tagged python", tags=["python"])
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "tag:python"
+        await _wait_for_search_results(pilot, search, results)
+        panel.dismiss_autocomplete()
+        await pilot.pause()
+
+        assert len(results.options) == 1
+        assert results.options[0].id == f"idea-{tagged.pk}"
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.focused is results
+        selected = panel.get_selected_idea()
+        assert selected is not None
+        assert selected.pk == tagged.pk
 
 
 @pytest.mark.asyncio
@@ -1538,27 +1692,25 @@ async def test_main_screen_search_results_footer_uses_prev_result_for_non_first(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
+        results = panel.query_one("#search-results", SearchResultsList)
 
         screen.action_focus_search()
         await pilot.pause()
         search.value = "footerprev"
-        await pilot.pause()
+        await _wait_for_search_results(pilot, search, results)
 
         await pilot.press("down")
         await pilot.pause()
-        assert app.focused is tree
+        assert app.focused is results
 
-        steps = 0
-        while panel.is_first_result_selected():
+        for _ in range(_MAX_WAIT_TICKS):
+            if not panel.is_first_result_selected():
+                break
             assert panel._adjacent_result_node(1) is not None
             await pilot.press("down")
             await pilot.pause()
-            steps += 1
-            assert steps < 50, (
-                "Navigation did not move away from first result "
-                "while panel.is_first_result_selected() stayed true"
-            )
+        else:
+            pytest.fail("Timed out moving away from first search result")
 
         bindings = screen.active_bindings
         assert bindings["up"].binding.description == "Prev Result"
@@ -1577,23 +1729,23 @@ async def test_main_screen_search_results_footer_hides_down_on_last_result(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
 
         screen.action_focus_search()
         await pilot.pause()
         search.value = "footerlast"
-        await pilot.pause()
+        await _wait_for_search_results(pilot, search, results)
 
         await pilot.press("down")
         await pilot.pause()
-        steps = 0
-        while panel._adjacent_result_node(1) is not None:
+        assert app.focused is results
+        for _ in range(_MAX_WAIT_TICKS):
+            if panel._adjacent_result_node(1) is None:
+                break
             await pilot.press("down")
             await pilot.pause()
-            steps += 1
-            assert steps < 50, (
-                "Navigation did not reach last result "
-                "while panel._adjacent_result_node(1) kept returning a node"
-            )
+        else:
+            pytest.fail("Timed out reaching final search result")
 
         bindings = screen.active_bindings
         assert "down" not in bindings
@@ -1644,15 +1796,15 @@ async def test_main_screen_search_results_disable_structural_actions_only(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
+        results = panel.query_one("#search-results", SearchResultsList)
 
         screen.action_focus_search()
         await pilot.pause()
         search.value = "actiongate"
-        await pilot.pause()
+        await _wait_for_search_results(pilot, search, results)
         await pilot.press("down")
         await pilot.pause()
-        assert app.focused is tree
+        assert app.focused is results
 
         for action in (
             "new_idea",

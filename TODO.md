@@ -29,12 +29,13 @@ None
 
 ## Search and Filtering
 
-- before the next release, fix search-result snippet rendering in the left pane:
-  snippets are currently appended inline after the title/timestamp and are
-  clipped by the tree width, so they are not actually usable. Render them with
-  dedicated visible space in search mode (likely a second line) and verify they
-  remain readable in narrow panes.
-- improve search-result snippet visibility and match highlighting.
+- fix search operator autocomplete chaining: accepting `tag:` or `group:` via
+  autocomplete `Enter` should immediately open the corresponding value
+  suggestions, matching the behavior of typing the trailing `:` manually.
+- upgrade dedicated search results from best-fragment rows to true
+  occurrence-level navigation: let one match row map to one specific occurrence
+  where practical, then scroll the right pane to that exact occurrence and add
+  inline match highlighting there.
 - optimize advanced search query execution to reduce multi-pass PK collection
   and re-fetch overhead as dataset size grows.
 

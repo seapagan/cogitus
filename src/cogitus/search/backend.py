@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -70,30 +71,59 @@ _UPSERT_SQL = """
     LEFT JOIN groups ON groups.pk = ideas.group_id
     WHERE ideas.pk = ?;
 """
-_SEARCH_SQL = """
+_SEARCH_SQL = f"""
     SELECT
         idea_pk,
         bm25(idea_search) AS score,
         snippet(
             idea_search,
             2,
-            '[[',
-            ']]',
+            '{_SNIPPET_START}',
+            '{_SNIPPET_END}',
             '...',
             12
         ) AS body_snippet,
         snippet(
             idea_search,
             1,
-            '[[',
-            ']]',
+            '{_SNIPPET_START}',
+            '{_SNIPPET_END}',
             '...',
             8
         ) AS title_snippet
+        ,
+        snippet(
+            idea_search,
+            3,
+            '{_SNIPPET_START}',
+            '{_SNIPPET_END}',
+            '...',
+            8
+        ) AS group_snippet,
+        snippet(
+            idea_search,
+            4,
+            '{_SNIPPET_START}',
+            '{_SNIPPET_END}',
+            '...',
+            8
+        ) AS tag_snippet
     FROM idea_search
     WHERE idea_search MATCH ?
     ORDER BY score, rowid;
-"""
+"""  # noqa: S608
+
+
+@dataclass(frozen=True)
+class FtsSearchMatch:
+    """One ranked text-search match from the FTS index."""
+
+    idea_pk: int
+    score: float
+    body_snippet: str
+    title_snippet: str
+    group_snippet: str
+    tag_snippet: str
 
 
 def ensure_search_tables(db: SqliterDB) -> None:
@@ -148,7 +178,7 @@ class FtsSearchBackend:
     def search_text(
         self,
         query_text: str,
-    ) -> list[tuple[int, float, str | None]] | None:
+    ) -> list[FtsSearchMatch] | None:
         """Search idea text with FTS5, returning ranked primary keys."""
         fts_query = _build_fts_query(query_text)
         if fts_query is None:
@@ -156,13 +186,13 @@ class FtsSearchBackend:
 
         rows = self._db.connect().execute(_SEARCH_SQL, (fts_query,)).fetchall()
         return [
-            (
-                int(row[0]),
-                float(row[1]),
-                _choose_snippet(
-                    body_snippet=str(row[2]),
-                    title_snippet=str(row[3]),
-                ),
+            FtsSearchMatch(
+                idea_pk=int(row[0]),
+                score=float(row[1]),
+                body_snippet=str(row[2]),
+                title_snippet=str(row[3]),
+                group_snippet=str(row[4]),
+                tag_snippet=str(row[5]),
             )
             for row in rows
         ]

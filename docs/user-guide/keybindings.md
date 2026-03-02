@@ -19,14 +19,14 @@
 
 ## Search Mode
 
-| Key         | Action                                              |
-| ----------- | --------------------------------------------------- |
-| `Down`      | Move into results, then to the next matching idea   |
-| `Up`        | Move to the previous idea, or back to search input  |
-| `Esc`       | Close autocomplete, then return/clear search        |
-| `Tab`       | Search autocomplete next suggestion                 |
-| `Shift+Tab` | Search autocomplete previous suggestion             |
-| `Enter`     | Accept highlighted autocomplete suggestion          |
+| Key         | Action                                               |
+| ----------- | ---------------------------------------------------- |
+| `Down`      | Move into search results, then to the next match row |
+| `Up`        | Move to the previous match row, or back to search    |
+| `Esc`       | Close autocomplete, then return/clear search         |
+| `Tab`       | Search autocomplete next suggestion                  |
+| `Shift+Tab` | Search autocomplete previous suggestion              |
+| `Enter`     | Accept highlighted autocomplete suggestion           |
 
 ## Idea Form
 
