@@ -540,12 +540,12 @@ class TestIdeaRepository:
 
         assert idea_repo._legacy_text_matches("body?") == {}
 
-    def test_search_results_hide_visible_structured_match_fragments(
+    def test_search_results_structured_only_have_no_visible_matches(
         self,
         idea_repo: IdeaRepository,
         group_repo: GroupRepository,
     ) -> None:
-        """Structured filters should constrain results without visible rows."""
+        """Structured-only filters should return ideas without match rows."""
         backend = group_repo.create("backend")
         idea = idea_repo.create(
             "Grouped python",
@@ -560,12 +560,20 @@ class TestIdeaRepository:
         assert structured_only[0].idea.pk == idea.pk
         assert structured_only[0].matches == ()
 
-        text_and_filter = idea_repo.search_results(
+    def test_search_results_text_plus_filter_add_title_fragment(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Text plus structured filters should keep visible text fragments."""
+        idea = idea_repo.create("Grouped python", tag_names=["python"])
+
+        results = idea_repo.search_results(
             parse_search_query("python tag:python")
         )
-        assert len(text_and_filter) == 1
-        assert text_and_filter[0].idea.pk == idea.pk
-        assert text_and_filter[0].matches == (
+
+        assert len(results) == 1
+        assert results[0].idea.pk == idea.pk
+        assert results[0].matches == (
             SearchMatchFragment(
                 source="title",
                 text="Grouped [[python]]",
@@ -574,6 +582,11 @@ class TestIdeaRepository:
             ),
         )
 
+    def test_search_result_fragment_helpers_cover_fallback_paths(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Fragment helpers should cover no-op and dedupe branches."""
         assert (
             idea_repo._mark_legacy_match("plain text", "missing")
             == "plain text"
