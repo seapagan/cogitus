@@ -388,22 +388,22 @@ class IdeaRepository:
                     _DEFAULT_TEXT_MATCH,
                 )[0]
             )
-        return [
-            SearchResult(
-                idea=idea,
-                score=match[0],
-                matches=match[1],
-                snippet=self._snippet_from_fragments(match[1]),
+        results: list[SearchResult] = []
+        for idea in ideas:
+            match = (
+                text_matches.get(idea.pk, _DEFAULT_TEXT_MATCH)
+                if text_matches is not None
+                else _DEFAULT_TEXT_MATCH
             )
-            for idea in ideas
-            for match in [
-                (
-                    text_matches.get(idea.pk, _DEFAULT_TEXT_MATCH)
-                    if text_matches is not None
-                    else _DEFAULT_TEXT_MATCH
+            results.append(
+                SearchResult(
+                    idea=idea,
+                    score=match[0],
+                    matches=match[1],
+                    snippet=self._snippet_from_fragments(match[1]),
                 )
-            ]
-        ]
+            )
+        return results
 
     def _fts_match_fragments(
         self,
