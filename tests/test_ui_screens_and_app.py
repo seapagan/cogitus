@@ -1588,9 +1588,13 @@ async def test_main_screen_cancel_search_preserves_selected_idea(
         await pilot.press("down")
         await pilot.pause()
         assert app.focused is results
-        while panel.is_first_result_selected():
+        for _ in range(_MAX_WAIT_TICKS):
+            if not panel.is_first_result_selected():
+                break
             await pilot.press("down")
             await pilot.pause()
+        else:
+            pytest.fail("Timed out moving away from first search result")
 
         selected_in_search = panel.get_selected_idea()
         assert selected_in_search is not None
