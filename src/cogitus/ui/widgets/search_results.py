@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from rich.text import Text
 from textual.message import Message
 from textual.widgets import OptionList
-from textual.widgets._option_list import Option
+from textual.widgets._option_list import Option, OptionListContent
 
 if TYPE_CHECKING:
     from cogitus.models.idea import Idea
@@ -39,13 +39,33 @@ class SearchResultsList(OptionList):
 
     def __init__(
         self,
-        *,
+        *content: OptionListContent,
         name: str | None = None,
-        id: str | None = None,  # noqa: A002
         classes: str | None = None,
+        disabled: bool = False,
+        markup: bool = True,
+        compact: bool = False,
+        **kwargs: object,
     ) -> None:
-        """Initialize the dedicated search-results option list."""
-        super().__init__(name=name, id=id, classes=classes)
+        """Initialize the widget and its per-instance selection state."""
+        widget_id = kwargs.pop("id", None)
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs))
+            msg = f"Unexpected keyword arguments: {unexpected}"
+            raise TypeError(msg)
+        if widget_id is not None and not isinstance(widget_id, str):
+            msg = "id must be a string or None"
+            raise TypeError(msg)
+
+        super().__init__(
+            *content,
+            name=name,
+            id=widget_id,
+            classes=classes,
+            disabled=disabled,
+            markup=markup,
+            compact=compact,
+        )
         self._selections_by_option_id: dict[str, SearchResultSelection] = {}
         self._ordered_match_option_ids: tuple[str, ...] = ()
 

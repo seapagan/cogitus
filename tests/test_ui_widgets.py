@@ -862,6 +862,18 @@ def test_search_results_widget_renders_title_once() -> None:
     assert plain == "  Title: Python title"
 
 
+def test_search_results_widget_rejects_unexpected_constructor_kwargs() -> None:
+    """Unexpected constructor kwargs should fail loudly."""
+    with pytest.raises(TypeError, match="Unexpected keyword arguments: nope"):
+        SearchResultsList(nope="value")
+
+
+def test_search_results_widget_rejects_non_string_id() -> None:
+    """Non-string widget ids should be rejected."""
+    with pytest.raises(TypeError, match="id must be a string or None"):
+        SearchResultsList(id=123)
+
+
 def test_search_results_widget_event_ignores_unknown_option_ids(
     service: IdeaService,
     monkeypatch: pytest.MonkeyPatch,
