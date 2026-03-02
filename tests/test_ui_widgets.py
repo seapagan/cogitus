@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, cast
 import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import Input, Markdown, OptionList, Static, Tree
-from textual.widgets._option_list import Option
+from textual.widgets.option_list import Option
 
 from cogitus.search import SearchMatchFragment, SearchResult
 from cogitus.ui.widgets.idea_list import (
