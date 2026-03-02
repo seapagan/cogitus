@@ -780,8 +780,8 @@ async def test_idea_list_panel_down_key_forces_search_before_focus(
         assert fired == ["python"]
 
 
-def test_search_results_widget_helper_branches() -> None:
-    """Search-results widget helpers should cover empty and unmatched states."""
+def test_search_results_widget_helpers_cover_empty_state() -> None:
+    """Search-results helpers should handle the empty state cleanly."""
     results = SearchResultsList(id="search-results")
 
     assert results.has_matches() is False
@@ -796,6 +796,13 @@ def test_search_results_widget_helper_branches() -> None:
     results.load_results([], show_match_rows=True)
     assert results.highlighted is None
 
+
+def test_search_results_widget_helpers_cover_unmatched_selection_paths() -> (
+    None
+):
+    """Search-results helpers should ignore unmatched highlighted rows."""
+    results = SearchResultsList(id="search-results")
+
     results.set_options([Option("Heading", disabled=True)])
     results.highlighted = 0
     assert results.current_selection() is None
@@ -809,6 +816,13 @@ def test_search_results_widget_helper_branches() -> None:
     results._ordered_match_option_ids = ("idea-1-match-0",)
     results.highlighted = None
     assert results.current_selection() is None
+
+
+def test_search_results_widget_helpers_cover_adjacent_match_navigation() -> (
+    None
+):
+    """Search-results helpers should navigate adjacent selectable matches."""
+    results = SearchResultsList(id="search-results")
 
     results.set_options(
         [
@@ -831,6 +845,13 @@ def test_search_results_widget_helper_branches() -> None:
     assert results.has_next_match() is True
     results.highlighted = 1
     assert results.adjacent_match_id(1) is None
+
+
+def test_search_results_widget_helpers_avoid_idea_id_prefix_collisions() -> (
+    None
+):
+    """Selecting one idea should not collide with a longer idea PK prefix."""
+    results = SearchResultsList(id="search-results")
 
     results.set_options(
         [

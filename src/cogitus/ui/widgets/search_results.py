@@ -88,39 +88,19 @@ class SearchResultsList(OptionList):
 
         for result in results:
             if not show_match_rows or not result.matches:
-                option_id = f"idea-{result.idea.pk}"
-                options.append(
-                    Option(
-                        _render_idea_prompt(result),
-                        id=option_id,
-                    )
+                self._append_idea_row(
+                    result,
+                    options=options,
+                    selections=selections,
+                    ordered_ids=ordered_ids,
                 )
-                selections[option_id] = SearchResultSelection(
-                    idea=result.idea,
-                    fragment=None,
-                )
-                ordered_ids.append(option_id)
                 continue
-            options.append(
-                Option(
-                    _render_heading_prompt(result),
-                    id=f"idea-heading-{result.idea.pk}",
-                    disabled=True,
-                )
+            self._append_match_rows(
+                result,
+                options=options,
+                selections=selections,
+                ordered_ids=ordered_ids,
             )
-            for index, fragment in enumerate(result.matches):
-                option_id = f"idea-{result.idea.pk}-match-{index}"
-                options.append(
-                    Option(
-                        _render_match_prompt(fragment),
-                        id=option_id,
-                    )
-                )
-                selections[option_id] = SearchResultSelection(
-                    idea=result.idea,
-                    fragment=fragment,
-                )
-                ordered_ids.append(option_id)
 
         self._selections_by_option_id = selections
         self._ordered_match_option_ids = tuple(ordered_ids)
@@ -128,6 +108,58 @@ class SearchResultsList(OptionList):
         if not ordered_ids:
             return
         self.highlighted = self.get_option_index(ordered_ids[0])
+
+    def _append_idea_row(
+        self,
+        result: SearchResult,
+        *,
+        options: list[Option],
+        selections: dict[str, SearchResultSelection],
+        ordered_ids: list[str],
+    ) -> None:
+        """Append one selectable idea-only row to the search results."""
+        option_id = f"idea-{result.idea.pk}"
+        options.append(
+            Option(
+                _render_idea_prompt(result),
+                id=option_id,
+            )
+        )
+        selections[option_id] = SearchResultSelection(
+            idea=result.idea,
+            fragment=None,
+        )
+        ordered_ids.append(option_id)
+
+    def _append_match_rows(
+        self,
+        result: SearchResult,
+        *,
+        options: list[Option],
+        selections: dict[str, SearchResultSelection],
+        ordered_ids: list[str],
+    ) -> None:
+        """Append one heading plus selectable fragment rows for a result."""
+        options.append(
+            Option(
+                _render_heading_prompt(result),
+                id=f"idea-heading-{result.idea.pk}",
+                disabled=True,
+            )
+        )
+        for index, fragment in enumerate(result.matches):
+            option_id = f"idea-{result.idea.pk}-match-{index}"
+            options.append(
+                Option(
+                    _render_match_prompt(fragment),
+                    id=option_id,
+                )
+            )
+            selections[option_id] = SearchResultSelection(
+                idea=result.idea,
+                fragment=fragment,
+            )
+            ordered_ids.append(option_id)
 
     def clear_results(self) -> None:
         """Clear the current search results."""
