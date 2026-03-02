@@ -311,12 +311,26 @@ async def test_idea_list_panel_remaining_branches(
     app = _WidgetApp(panel)
 
     async with app.run_test() as pilot:
+        panel.query_one("#search-input", Input).value = "compat"
+        panel.load_search_results(
+            [SearchResult(idea=idea, score=0.0, matches=())],
+            show_match_rows=False,
+        )
+        await pilot.pause()
+
         panel.load_ideas([idea])
         await pilot.pause()
 
+        tree = panel.query_one("#idea-list", Tree)
+        results = panel.query_one("#search-results", SearchResultsList)
+        assert not tree.has_class("-hidden")
+        assert results.has_class("-hidden")
+        assert results.option_count == 0
+
+        panel.query_one("#search-input", Input).value = ""
+        await pilot.pause()
         assert panel.select_idea(999999) is False
 
-        tree = panel.query_one("#idea-list", Tree)
         tree.move_cursor(tree.root, animate=False)
         await pilot.pause()
         assert panel.get_selected_idea() is None
@@ -330,7 +344,9 @@ async def test_idea_list_panel_remaining_branches(
         assert panel.get_selected_idea() is None
 
         panel.load_grouped_ideas(service.list_ideas_grouped())
+        tree = panel.query_one("#idea-list", Tree)
         group_node = tree.root.children[0]
+        tree.select_node(group_node)
         tree.move_cursor(group_node, animate=False)
         await pilot.pause()
         assert panel.get_selected_group_pk() is not None

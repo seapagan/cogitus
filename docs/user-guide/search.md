@@ -57,5 +57,5 @@ Search supports ranked free-text matching plus inline structured operators.
 - While search is focused, `Tab` is reserved for autocomplete.
 - The status bar shows search-specific hints while search is active, including
   when focus is in the results list.
-- The right pane currently updates to the selected idea but does not yet do
+- The right pane currently updates to the selected idea, but does not yet do
   exact occurrence-level scrolling or inline match highlighting.

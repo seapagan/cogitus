@@ -240,6 +240,8 @@ class IdeaListPanel(Vertical):
     def load_ideas(self, ideas: list[Idea]) -> None:
         """Compatibility helper to load ideas under a synthetic group."""
         tree = self._reset_tree()
+        self._show_tree_mode()
+        self.query_one("#search-results", SearchResultsList).clear_results()
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
         ordered_pks: list[int] = []
         for idea in ideas:
