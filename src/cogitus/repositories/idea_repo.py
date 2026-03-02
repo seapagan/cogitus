@@ -9,11 +9,12 @@ from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
 from cogitus.search import (
     SearchFilter,
+    SearchMatchFragment,
     SearchQuery,
     SearchResult,
     parse_search_query,
 )
-from cogitus.search.backend import FtsSearchBackend
+from cogitus.search.backend import FtsSearchBackend, FtsSearchMatch
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -24,10 +25,19 @@ if TYPE_CHECKING:
     from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.tag_repo import TagRepository
     from cogitus.search.query import FilterConnector
+    from cogitus.search.result import SearchMatchSource
 
 
 _LEGACY_TEXT_MATCH_SCORE = 0.0
-_DEFAULT_TEXT_MATCH = (_LEGACY_TEXT_MATCH_SCORE, None)
+_HIGHLIGHT_START = "[["
+_HIGHLIGHT_END = "]]"
+_DEFAULT_TEXT_MATCH = (_LEGACY_TEXT_MATCH_SCORE, ())
+_FTS_FRAGMENT_FIELDS: tuple[tuple[SearchMatchSource, int, str, bool], ...] = (
+    ("title", 0, "Title: ", True),
+    ("body", 1, "", False),
+    ("tag", 2, "Tag: ", True),
+    ("group", 3, "Group: ", True),
+)
 
 
 class IdeaRepository:
@@ -210,7 +220,11 @@ class IdeaRepository:
         )
         if not matched_pks:
             return []
-        return self._fetch_search_results(matched_pks, text_matches)
+        return self._fetch_search_results(
+            matched_pks,
+            text_matches,
+            query.filters,
+        )
 
     @staticmethod
     def _combine_match_sets(
@@ -229,12 +243,16 @@ class IdeaRepository:
     def _search_text_matches(
         self,
         text_query: str,
-    ) -> dict[int, tuple[float, str | None]]:
+    ) -> dict[int, tuple[float, tuple[SearchMatchFragment, ...]]]:
         """Return ranked text matches keyed by idea primary key."""
         backend_matches = self._search_backend.search_text(text_query)
         if backend_matches is not None:
             return {
-                pk: (score, snippet) for pk, score, snippet in backend_matches
+                match.idea_pk: (
+                    match.score,
+                    self._fts_match_fragments(match),
+                )
+                for match in backend_matches
             }
 
         return self._legacy_text_matches(text_query)
@@ -246,28 +264,44 @@ class IdeaRepository:
     def _legacy_text_matches(
         self,
         text_query: str,
-    ) -> dict[int, tuple[float, str | None]]:
+    ) -> dict[int, tuple[float, tuple[SearchMatchFragment, ...]]]:
         """Return idea primary keys matching text across title/body/tag."""
         query = text_query.strip()
         if not query:
             return {}
 
-        matched: dict[int, tuple[float, str | None]] = {}
+        matched: dict[int, tuple[float, tuple[SearchMatchFragment, ...]]] = {}
         for idea in (
             self._db.select(Idea).filter(title__icontains=query).fetch_all()
         ):
             matched[idea.pk] = (
                 _LEGACY_TEXT_MATCH_SCORE,
-                self._legacy_snippet(idea, query),
+                (
+                    SearchMatchFragment(
+                        source="title",
+                        text=self._legacy_marked_title_fragment(idea, query),
+                        rank=0,
+                        is_synthetic=True,
+                    ),
+                ),
             )
         for idea in (
             self._db.select(Idea).filter(body__icontains=query).fetch_all()
         ):
-            matched.setdefault(
-                idea.pk,
-                (
-                    _LEGACY_TEXT_MATCH_SCORE,
-                    self._legacy_snippet(idea, query),
+            body_snippet = self._legacy_snippet(idea, query)
+            if body_snippet is None:
+                continue
+            matched[idea.pk] = (
+                _LEGACY_TEXT_MATCH_SCORE,
+                self._merge_fragments(
+                    matched.get(idea.pk, _DEFAULT_TEXT_MATCH)[1],
+                    (
+                        SearchMatchFragment(
+                            source="body",
+                            text=self._mark_legacy_match(body_snippet, query),
+                            rank=1,
+                        ),
+                    ),
                 ),
             )
 
@@ -276,11 +310,18 @@ class IdeaRepository:
         )
         for tag in matching_tags:
             for idea in tag.ideas.fetch_all():  # type: ignore[attr-defined]
-                matched.setdefault(
-                    idea.pk,
-                    (
-                        _LEGACY_TEXT_MATCH_SCORE,
-                        self._legacy_snippet(idea, query),
+                matched[idea.pk] = (
+                    _LEGACY_TEXT_MATCH_SCORE,
+                    self._merge_fragments(
+                        matched.get(idea.pk, _DEFAULT_TEXT_MATCH)[1],
+                        (
+                            SearchMatchFragment(
+                                source="tag",
+                                text=f"Tag: {self._mark_exact_text(tag.name)}",
+                                rank=2,
+                                is_synthetic=True,
+                            ),
+                        ),
                     ),
                 )
 
@@ -344,31 +385,193 @@ class IdeaRepository:
     def _fetch_search_results(
         self,
         idea_pks: set[int],
-        text_matches: dict[int, tuple[float, str | None]] | None,
+        text_matches: dict[
+            int,
+            tuple[float, tuple[SearchMatchFragment, ...]],
+        ]
+        | None,
+        filters: tuple[SearchFilter, ...],
     ) -> list[SearchResult]:
         """Fetch fully-hydrated search results for the given primary keys."""
         ideas = self._fetch_ideas_by_pk(list(idea_pks))
-        if text_matches is None:
-            ideas.sort(key=lambda idea: idea.updated_at, reverse=True)
-            return [
-                SearchResult(idea=idea, score=_LEGACY_TEXT_MATCH_SCORE)
-                for idea in ideas
-            ]
-
-        ideas.sort(
-            key=lambda idea: (
-                text_matches.get(
+        ideas.sort(key=lambda idea: idea.updated_at, reverse=True)
+        if text_matches is not None:
+            ideas.sort(
+                key=lambda idea: text_matches.get(
                     idea.pk,
                     _DEFAULT_TEXT_MATCH,
-                )[0],
-                -idea.updated_at,
+                )[0]
             )
-        )
         return [
-            SearchResult(idea=idea, score=match[0], snippet=match[1])
+            SearchResult(
+                idea=idea,
+                score=match[0],
+                matches=fragments,
+                snippet=self._snippet_from_fragments(fragments),
+            )
             for idea in ideas
-            for match in [text_matches.get(idea.pk, _DEFAULT_TEXT_MATCH)]
+            for match in [
+                (
+                    text_matches.get(idea.pk, _DEFAULT_TEXT_MATCH)
+                    if text_matches is not None
+                    else _DEFAULT_TEXT_MATCH
+                )
+            ]
+            for fragments in [
+                self._merge_fragments(
+                    match[1],
+                    self._filter_match_fragments(idea, filters),
+                )
+            ]
         ]
+
+    def _fts_match_fragments(
+        self,
+        match: FtsSearchMatch,
+    ) -> tuple[SearchMatchFragment, ...]:
+        """Build visible match fragments from one FTS row."""
+        fragments: list[SearchMatchFragment] = []
+        snippets = (
+            match.title_snippet,
+            match.body_snippet,
+            match.tag_snippet,
+            match.group_snippet,
+        )
+        rank = 0
+        for source, snippet_index, prefix, synthetic in _FTS_FRAGMENT_FIELDS:
+            snippet = snippets[snippet_index]
+            if not self._marked_text_has_content(snippet):
+                continue
+            if not self._marked_text_has_highlight(snippet):
+                continue
+            fragments.append(
+                SearchMatchFragment(
+                    source=source,
+                    text=f"{prefix}{self._normalize_marked_text(snippet)}",
+                    rank=rank,
+                    is_synthetic=synthetic,
+                )
+            )
+            rank += 1
+        return tuple(fragments)
+
+    def _filter_match_fragments(
+        self,
+        idea: Idea,
+        filters: tuple[SearchFilter, ...],
+    ) -> tuple[SearchMatchFragment, ...]:
+        """Return synthetic fragments for structured filter matches."""
+        fragments: list[SearchMatchFragment] = []
+        rank = 50
+        tag_names = {tag.name for tag in idea.tags.fetch_all()}
+        for search_filter in filters:
+            if search_filter.field == "group":
+                if idea.group.name != search_filter.value:
+                    continue
+                fragments.append(
+                    SearchMatchFragment(
+                        source="group",
+                        text=(
+                            f"Group: {self._mark_exact_text(idea.group.name)}"
+                        ),
+                        rank=rank,
+                        is_synthetic=True,
+                    )
+                )
+                rank += 1
+                continue
+            if search_filter.value not in tag_names:
+                continue
+            fragments.append(
+                SearchMatchFragment(
+                    source="tag",
+                    text=(f"Tag: {self._mark_exact_text(search_filter.value)}"),
+                    rank=rank,
+                    is_synthetic=True,
+                )
+            )
+            rank += 1
+        return self._dedupe_fragments(fragments)
+
+    @staticmethod
+    def _merge_fragments(
+        existing: tuple[SearchMatchFragment, ...],
+        additional: tuple[SearchMatchFragment, ...],
+    ) -> tuple[SearchMatchFragment, ...]:
+        """Merge and deduplicate fragment sequences while preserving order."""
+        return IdeaRepository._dedupe_fragments([*existing, *additional])
+
+    @staticmethod
+    def _dedupe_fragments(
+        fragments: list[SearchMatchFragment] | tuple[SearchMatchFragment, ...],
+    ) -> tuple[SearchMatchFragment, ...]:
+        """Deduplicate fragments by source and visible text."""
+        deduped: list[SearchMatchFragment] = []
+        seen: set[tuple[str, str]] = set()
+        for fragment in sorted(fragments, key=lambda item: item.rank):
+            key = (fragment.source, fragment.text)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(fragment)
+        return tuple(deduped)
+
+    @staticmethod
+    def _marked_text_has_highlight(text: str) -> bool:
+        """Return whether marked text includes a highlighted region."""
+        return _HIGHLIGHT_START in text and _HIGHLIGHT_END in text
+
+    @staticmethod
+    def _marked_text_has_content(text: str) -> bool:
+        """Return whether marked text still has visible content."""
+        plain = text.replace(_HIGHLIGHT_START, "").replace(_HIGHLIGHT_END, "")
+        return bool(" ".join(plain.split()))
+
+    @staticmethod
+    def _normalize_marked_text(text: str) -> str:
+        """Collapse whitespace while preserving highlight markers."""
+        marked = text.replace(_HIGHLIGHT_START, "\x00").replace(
+            _HIGHLIGHT_END, "\x01"
+        )
+        compact = " ".join(marked.split())
+        return compact.replace("\x00", _HIGHLIGHT_START).replace(
+            "\x01",
+            _HIGHLIGHT_END,
+        )
+
+    @staticmethod
+    def _mark_exact_text(text: str) -> str:
+        """Wrap a text fragment in highlight markers."""
+        return f"{_HIGHLIGHT_START}{text}{_HIGHLIGHT_END}"
+
+    def _legacy_marked_title_fragment(self, idea: Idea, query: str) -> str:
+        """Build a highlighted legacy title fragment for title-only results."""
+        return self._mark_legacy_match(idea.title, query)
+
+    def _mark_legacy_match(self, text: str, query: str) -> str:
+        """Return text with the first legacy substring match highlighted."""
+        lowered = text.lower()
+        start = lowered.find(query.lower())
+        if start < 0:
+            return text
+        end = start + len(query)
+        return (
+            f"{text[:start]}{_HIGHLIGHT_START}{text[start:end]}"
+            f"{_HIGHLIGHT_END}{text[end:]}"
+        )
+
+    @staticmethod
+    def _snippet_from_fragments(
+        fragments: tuple[SearchMatchFragment, ...],
+    ) -> str | None:
+        """Return a plain-text compatibility snippet from the first fragment."""
+        if not fragments:
+            return None
+        return (
+            fragments[0]
+            .text.replace(_HIGHLIGHT_START, "")
+            .replace(_HIGHLIGHT_END, "")
+        )
 
     def list_for_group(self, group_pk: int) -> list[Idea]:
         """Return ideas for a specific group ordered by recency."""

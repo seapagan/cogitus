@@ -153,3 +153,35 @@ def test_punctuation_queries_stay_on_fts_path(
 def test_choose_snippet_returns_none_when_no_candidate_has_text() -> None:
     """Blank snippet candidates should collapse to None."""
     assert _choose_snippet(body_snippet=" ", title_snippet="\n\t") is None
+
+
+def test_choose_snippet_prefers_body_then_title_then_plain_fallback() -> None:
+    """Snippet chooser should exercise all highlight/fallback branches."""
+    assert (
+        _choose_snippet(
+            body_snippet="Body [[match]] text",
+            title_snippet="Title [[match]] text",
+        )
+        == "Body match text"
+    )
+    assert (
+        _choose_snippet(
+            body_snippet="body without highlight",
+            title_snippet="Title [[match]] text",
+        )
+        == "Title match text"
+    )
+    assert (
+        _choose_snippet(
+            body_snippet="body without highlight",
+            title_snippet="plain title",
+        )
+        == "body without highlight"
+    )
+    assert (
+        _choose_snippet(
+            body_snippet=" ",
+            title_snippet=" plain   title ",
+        )
+        == "plain title"
+    )

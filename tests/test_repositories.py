@@ -10,6 +10,7 @@ from sqliter.exceptions import RecordInsertionError
 from cogitus.models import Idea
 from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.search import SearchFilter
+from cogitus.search.result import SearchMatchFragment
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -524,6 +525,55 @@ class TestIdeaRepository:
         assert highlighted.startswith("...")
         assert "python target" in highlighted
         assert highlighted.endswith("...")
+
+    def test_legacy_text_matches_skip_body_when_snippet_builder_returns_none(
+        self,
+        idea_repo: IdeaRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Legacy body branch should skip entries when snippet build fails."""
+        idea_repo.create(
+            "No title punctuation",
+            body="Body-only fallback for body? queries",
+        )
+        monkeypatch.setattr(idea_repo, "_legacy_snippet", lambda *_args: None)
+
+        assert idea_repo._legacy_text_matches("body?") == {}
+
+    def test_fragment_helpers_cover_group_dedupe_and_fallback_paths(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Fragment helpers should cover group mismatch and dedupe branches."""
+        backend = group_repo.create("backend")
+        idea = idea_repo.create(
+            "Grouped python",
+            group_pk=backend.pk,
+            tag_names=["python"],
+        )
+
+        assert idea_repo._filter_match_fragments(
+            idea,
+            (
+                SearchFilter(field="group", value="frontend"),
+                SearchFilter(field="tag", value="python"),
+                SearchFilter(field="tag", value="python"),
+            ),
+        ) == (
+            SearchMatchFragment(
+                source="tag",
+                text="Tag: [[python]]",
+                rank=50,
+                is_synthetic=True,
+            ),
+        )
+
+        assert (
+            idea_repo._mark_legacy_match("plain text", "missing")
+            == "plain text"
+        )
+        assert idea_repo._snippet_from_fragments(()) is None
 
 
 class TestIdeaCursorStateRepository:
