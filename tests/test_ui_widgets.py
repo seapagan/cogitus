@@ -822,6 +822,26 @@ def test_search_results_widget_helper_branches() -> None:
     results.highlighted = 1
     assert results.adjacent_match_id(1) is None
 
+    results.set_options(
+        [
+            Option("idea 12", id="idea-12"),
+            Option("idea 1", id="idea-1"),
+        ]
+    )
+    results._ordered_match_option_ids = ("idea-12", "idea-1")
+    results._selections_by_option_id = {
+        "idea-12": SearchResultSelection(
+            idea=cast("Idea", SimpleNamespace(pk=12)),
+            fragment=None,
+        ),
+        "idea-1": SearchResultSelection(
+            idea=cast("Idea", SimpleNamespace(pk=1)),
+            fragment=None,
+        ),
+    }
+    assert results.select_first_match_for_idea(1) is True
+    assert results.highlighted == results.get_option_index("idea-1")
+
 
 def test_search_results_widget_can_render_selectable_idea_rows() -> None:
     """Structured-only results should render one selectable row per idea."""

@@ -185,9 +185,12 @@ class SearchResultsList(OptionList):
 
     def select_first_match_for_idea(self, idea_pk: int) -> bool:
         """Highlight the first selectable row for the given idea."""
-        prefixes = (f"idea-{idea_pk}-match-", f"idea-{idea_pk}")
+        exact_idea_id = f"idea-{idea_pk}"
+        match_prefix = f"idea-{idea_pk}-match-"
         for option_id in self._ordered_match_option_ids:
-            if not option_id.startswith(prefixes):
+            if option_id != exact_idea_id and not option_id.startswith(
+                match_prefix
+            ):
                 continue
             self.highlighted = self.get_option_index(option_id)
             return True
