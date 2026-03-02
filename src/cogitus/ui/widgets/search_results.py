@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias
 
 from rich.text import Text
 from textual.message import Message
 from textual.widgets import OptionList
-from textual.widgets._option_list import Option, OptionListContent
+from textual.widgets.option_list import Option
 
 if TYPE_CHECKING:
+    from textual.visual import VisualType
+
     from cogitus.models.idea import Idea
     from cogitus.search import SearchMatchFragment, SearchResult
+
+    OptionListContent: TypeAlias = Option | VisualType | None
+else:
+    OptionListContent = object
 
 _HIGHLIGHT_START = "[["
 _HIGHLIGHT_END = "]]"
