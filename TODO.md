@@ -29,6 +29,9 @@ None
 
 ## Search and Filtering
 
+- fix search operator autocomplete chaining: accepting `tag:` or `group:` via
+  autocomplete `Enter` should immediately open the corresponding value
+  suggestions, matching the behavior of typing the trailing `:` manually.
 - upgrade dedicated search results from best-fragment rows to true
   occurrence-level navigation: let one match row map to one specific occurrence
   where practical, then scroll the right pane to that exact occurrence and add
