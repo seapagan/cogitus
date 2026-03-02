@@ -499,7 +499,8 @@ async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
         search.focus()
         await pilot.pause()
         search.value = "python"
-        await pilot.pause(0.3)
+        while not search.has_class("search-active"):
+            await pilot.pause()
         panel.load_search_results(
             service.search_results("python"),
             show_match_rows=True,

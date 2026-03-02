@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
     from pytest_mock import MockerFixture
     from sqliter import SqliterDB
+    from textual.pilot import Pilot
     from textual.screen import Screen
 
     from cogitus.services.idea_service import IdeaService
@@ -72,6 +73,34 @@ class _FakeSettings:
     def save(self) -> None:
         """Record save invocation."""
         self.saved = True
+
+
+async def _wait_for_search_active(
+    pilot: Pilot[Any],
+    search: Input,
+) -> None:
+    """Wait until the search input enters active-search mode."""
+    while not search.has_class("search-active"):
+        await pilot.pause()
+
+
+async def _wait_for_search_results(
+    pilot: Pilot[Any],
+    search: Input,
+    results: SearchResultsList,
+) -> None:
+    """Wait until active search has populated selectable result rows."""
+    while not search.has_class("search-active") or not results.has_matches():
+        await pilot.pause()
+
+
+async def _wait_for_search_cleared(
+    pilot: Pilot[Any],
+    search: Input,
+) -> None:
+    """Wait until search has been fully cleared."""
+    while search.value != "" or search.has_class("search-active"):
+        await pilot.pause()
 
 
 @pytest.mark.asyncio
@@ -1440,7 +1469,7 @@ async def test_main_screen_cancel_search_noop_when_search_not_focused(
         results = panel.query_one("#search-results", SearchResultsList)
 
         search.value = "keep"
-        await pilot.pause(0.3)
+        await _wait_for_search_active(pilot, search)
         results.focus()
         await pilot.pause()
         screen.action_cancel_search()
@@ -1493,7 +1522,7 @@ async def test_main_screen_search_results_support_keyboard_navigation(
         screen.action_focus_search()
         await pilot.pause()
         search.value = "python"
-        await pilot.pause(0.3)
+        await _wait_for_search_results(pilot, search, results)
         bindings = screen.active_bindings
         assert bindings["down"].binding.description == "Results"
         assert bindings["escape"].binding.description == "Exit Search"
@@ -1519,7 +1548,7 @@ async def test_main_screen_search_results_support_keyboard_navigation(
         assert search.value == "python"
 
         screen.action_cancel_search()
-        await pilot.pause(0.3)
+        await _wait_for_search_cleared(pilot, search)
         assert app.focused is panel.browse_widget()
         assert search.value == ""
 
@@ -1542,7 +1571,7 @@ async def test_main_screen_cancel_search_preserves_selected_idea(
         screen.action_focus_search()
         await pilot.pause()
         search.value = "python"
-        await pilot.pause(0.3)
+        await _wait_for_search_results(pilot, search, results)
 
         await pilot.press("down")
         await pilot.pause()
@@ -1557,7 +1586,9 @@ async def test_main_screen_cancel_search_preserves_selected_idea(
         screen.action_cancel_search()
         await pilot.pause()
         screen.action_cancel_search()
-        await pilot.pause(0.3)
+        await _wait_for_search_cleared(pilot, search)
+        while panel.get_selected_idea() is None:
+            await pilot.pause()
 
         assert app.focused is panel.browse_widget()
         selected_in_tree = panel.get_selected_idea()
@@ -1614,7 +1645,7 @@ async def test_main_screen_tag_only_search_uses_selectable_idea_rows(
         screen.action_focus_search()
         await pilot.pause()
         search.value = "tag:python"
-        await pilot.pause(0.3)
+        await _wait_for_search_results(pilot, search, results)
         panel.dismiss_autocomplete()
         await pilot.pause()
 
@@ -1646,7 +1677,7 @@ async def test_main_screen_search_results_footer_uses_prev_result_for_non_first(
         screen.action_focus_search()
         await pilot.pause()
         search.value = "footerprev"
-        await pilot.pause(0.3)
+        await _wait_for_search_results(pilot, search, results)
 
         await pilot.press("down")
         await pilot.pause()
@@ -1685,7 +1716,7 @@ async def test_main_screen_search_results_footer_hides_down_on_last_result(
         screen.action_focus_search()
         await pilot.pause()
         search.value = "footerlast"
-        await pilot.pause(0.3)
+        await _wait_for_search_results(pilot, search, results)
 
         await pilot.press("down")
         await pilot.pause()
@@ -1754,7 +1785,7 @@ async def test_main_screen_search_results_disable_structural_actions_only(
         screen.action_focus_search()
         await pilot.pause()
         search.value = "actiongate"
-        await pilot.pause(0.3)
+        await _wait_for_search_results(pilot, search, results)
         await pilot.press("down")
         await pilot.pause()
         assert app.focused is results
