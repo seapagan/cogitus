@@ -1519,9 +1519,82 @@ async def test_main_screen_search_results_support_keyboard_navigation(
         assert search.value == "python"
 
         screen.action_cancel_search()
-        await pilot.pause()
+        await pilot.pause(0.3)
         assert app.focused is panel.browse_widget()
         assert search.value == ""
+
+
+@pytest.mark.asyncio
+async def test_main_screen_cancel_search_preserves_selected_idea(
+    service: IdeaService,
+) -> None:
+    """Leaving search should keep the selected idea in the normal tree."""
+    service.create_idea("Alpha python")
+    service.create_idea("Beta python")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "python"
+        await pilot.pause(0.3)
+
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.focused is results
+        while panel.is_first_result_selected():
+            await pilot.press("down")
+            await pilot.pause()
+
+        selected_in_search = panel.get_selected_idea()
+        assert selected_in_search is not None
+
+        screen.action_cancel_search()
+        await pilot.pause()
+        screen.action_cancel_search()
+        await pilot.pause(0.3)
+
+        assert app.focused is panel.browse_widget()
+        selected_in_tree = panel.get_selected_idea()
+        assert selected_in_tree is not None
+        assert selected_in_tree.pk == selected_in_search.pk
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_clear_reselects_previous_idea(
+    service: IdeaService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Clearing search should reselect the previously active idea."""
+    idea = service.create_idea("Keep selected")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test():
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        selected_pks: list[int] = []
+
+        def fake_select_idea(pk: int) -> bool:
+            selected_pks.append(pk)
+            return True
+
+        screen._selected_idea_pk = idea.pk
+        monkeypatch.setattr(
+            panel,
+            "select_idea",
+            fake_select_idea,
+        )
+
+        screen.on_idea_list_panel_search_changed(
+            IdeaListPanel.SearchChanged("")
+        )
+
+        assert selected_pks == [idea.pk]
 
 
 @pytest.mark.asyncio

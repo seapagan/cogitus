@@ -231,6 +231,8 @@ class MainScreen(Screen[None]):
         else:
             grouped_ideas = self._service.list_ideas_grouped(None)
             panel.load_grouped_ideas(grouped_ideas)
+            if self._selected_idea_pk is not None:
+                panel.select_idea(self._selected_idea_pk)
         view = self.query_one("#content-panel", IdeaView)
         selected = panel.get_selected_idea()
         if selected is not None:
