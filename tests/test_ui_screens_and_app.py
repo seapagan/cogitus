@@ -23,6 +23,7 @@ from cogitus.ui.screens.idea_form_screen import (
 from cogitus.ui.screens.main_screen import MainScreen
 from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
+from cogitus.ui.widgets.search_results import SearchResultsList
 from cogitus.ui.widgets.text_area import CogitusTextArea
 
 if TYPE_CHECKING:
@@ -952,12 +953,9 @@ async def test_main_screen_selection_and_search(
 
         search = mocker.patch.object(
             screen._service,
-            "list_search_results_grouped",
+            "search_results",
             return_value=[
-                (
-                    first.group,
-                    [SearchResult(idea=first, score=-1.0, snippet="First")],
-                )
+                SearchResult(idea=first, score=-1.0, snippet="First")
             ],
         )
         selected_view = mocker.patch.object(
@@ -1219,8 +1217,8 @@ async def test_main_screen_refresh_empty_selection_branch(
         show_empty = mocker.patch.object(view, "show_empty")
         list_grouped = mocker.patch.object(
             screen._service,
-            "list_search_results_grouped",
-            wraps=screen._service.list_search_results_grouped,
+            "search_results",
+            wraps=screen._service.search_results,
         )
 
         search.value = "First"
@@ -1439,11 +1437,12 @@ async def test_main_screen_cancel_search_noop_when_search_not_focused(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
+        results = panel.query_one("#search-results", SearchResultsList)
 
-        tree.focus()
-        await pilot.pause()
         search.value = "keep"
+        await pilot.pause(0.3)
+        results.focus()
+        await pilot.pause()
         screen.action_cancel_search()
         await pilot.pause()
 
@@ -1489,12 +1488,12 @@ async def test_main_screen_search_results_support_keyboard_navigation(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
+        results = panel.query_one("#search-results", SearchResultsList)
 
         screen.action_focus_search()
         await pilot.pause()
         search.value = "python"
-        await pilot.pause()
+        await pilot.pause(0.3)
         bindings = screen.active_bindings
         assert bindings["down"].binding.description == "Results"
         assert bindings["escape"].binding.description == "Exit Search"
@@ -1504,7 +1503,7 @@ async def test_main_screen_search_results_support_keyboard_navigation(
 
         await pilot.press("down")
         await pilot.pause()
-        assert app.focused is tree
+        assert app.focused is results
         assert search.value == "python"
         bindings = screen.active_bindings
         assert bindings["down"].binding.description == "Next Result"
@@ -1521,7 +1520,7 @@ async def test_main_screen_search_results_support_keyboard_navigation(
 
         screen.action_cancel_search()
         await pilot.pause()
-        assert app.focused is tree
+        assert app.focused is panel.browse_widget()
         assert search.value == ""
 
 
@@ -1538,16 +1537,16 @@ async def test_main_screen_search_results_footer_uses_prev_result_for_non_first(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
+        results = panel.query_one("#search-results", SearchResultsList)
 
         screen.action_focus_search()
         await pilot.pause()
         search.value = "footerprev"
-        await pilot.pause()
+        await pilot.pause(0.3)
 
         await pilot.press("down")
         await pilot.pause()
-        assert app.focused is tree
+        assert app.focused is results
 
         steps = 0
         while panel.is_first_result_selected():
@@ -1577,14 +1576,16 @@ async def test_main_screen_search_results_footer_hides_down_on_last_result(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
 
         screen.action_focus_search()
         await pilot.pause()
         search.value = "footerlast"
-        await pilot.pause()
+        await pilot.pause(0.3)
 
         await pilot.press("down")
         await pilot.pause()
+        assert app.focused is results
         steps = 0
         while panel._adjacent_result_node(1) is not None:
             await pilot.press("down")
@@ -1644,15 +1645,15 @@ async def test_main_screen_search_results_disable_structural_actions_only(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
+        results = panel.query_one("#search-results", SearchResultsList)
 
         screen.action_focus_search()
         await pilot.pause()
         search.value = "actiongate"
-        await pilot.pause()
+        await pilot.pause(0.3)
         await pilot.press("down")
         await pilot.pause()
-        assert app.focused is tree
+        assert app.focused is results
 
         for action in (
             "new_idea",

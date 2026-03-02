@@ -47,6 +47,11 @@ MainScreen {
     height: 1fr;
 }
 
+#idea-list.-hidden,
+#search-results.-hidden {
+    display: none;
+}
+
 #idea-list.search-active:focus > .tree--cursor {
     color: $text;
     background: $warning;
@@ -55,6 +60,26 @@ MainScreen {
 
 #idea-list.search-active > .tree--guides-selected {
     color: $warning;
+}
+
+#search-results {
+    height: 1fr;
+    background: $surface;
+}
+
+#search-results.search-active:focus {
+    border: tall $warning;
+}
+
+#search-results > .option-list--option-disabled {
+    color: $text-muted;
+    background: $panel;
+    text-style: bold;
+}
+
+#search-results > .option-list--option-highlighted {
+    background: $warning;
+    color: $text;
 }
 
 .idea-tags {

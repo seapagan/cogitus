@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from textual.binding import ActiveBinding, Binding, BindingType
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Input, Markdown, Tree
+from textual.widgets import Footer, Header, Input, Markdown
 
 from cogitus.config import (
     DEFAULT_EDIT_BODY_CURSOR_MODE,
@@ -25,6 +25,7 @@ from cogitus.ui.screens.idea_form_screen import (
 )
 from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
+from cogitus.ui.widgets.search_results import SearchResultsList
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -163,7 +164,7 @@ class MainScreen(Screen[None]):
         """Load ideas when screen mounts."""
         self.refresh_ideas(select_pk=self._initial_select_pk)
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        panel.query_one("#idea-list", Tree).focus()
+        panel.browse_widget().focus()
 
     def refresh_ideas(self, select_pk: int | None = None) -> None:
         """Reload the idea list from the service."""
@@ -174,13 +175,9 @@ class MainScreen(Screen[None]):
         )
         search_query = panel.query_one("#search-input", Input).value.strip()
         if search_query:
-            grouped_results = self._service.list_search_results_grouped(
-                search_query
-            )
-            panel.load_grouped_search_results(grouped_results)
-            has_ideas = any(
-                group_results for _, group_results in grouped_results
-            )
+            results = self._service.search_results(search_query)
+            panel.load_search_results(results)
+            has_ideas = bool(results)
         else:
             grouped_ideas = self._service.list_ideas_grouped(None)
             panel.load_grouped_ideas(grouped_ideas)
@@ -221,8 +218,7 @@ class MainScreen(Screen[None]):
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         query = event.query.strip()
         if query:
-            grouped_results = self._service.list_search_results_grouped(query)
-            panel.load_grouped_search_results(grouped_results)
+            panel.load_search_results(self._service.search_results(query))
         else:
             grouped_ideas = self._service.list_ideas_grouped(None)
             panel.load_grouped_ideas(grouped_ideas)
@@ -462,8 +458,8 @@ class MainScreen(Screen[None]):
         if panel.dismiss_autocomplete():
             return
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
-        if self.app.focused is tree and panel.search_is_active():
+        results = panel.query_one("#search-results", SearchResultsList)
+        if self.app.focused is results and panel.search_is_active():
             search.focus()
             return
 
@@ -475,7 +471,7 @@ class MainScreen(Screen[None]):
             self.query_one("#content-panel", IdeaView).focus()
             self._active_pane = "content"
         else:
-            panel.query_one("#idea-list", Tree).focus()
+            panel.active_results_widget().focus()
             self._active_pane = "list"
 
     def action_show_help(self) -> None:
@@ -492,8 +488,7 @@ class MainScreen(Screen[None]):
             content.focus()
             self._active_pane = "content"
         else:
-            tree = panel.query_one("#idea-list")
-            tree.focus()
+            panel.active_results_widget().focus()
             self._active_pane = "list"
 
     def action_toggle_list_panel(self) -> None:
@@ -502,7 +497,7 @@ class MainScreen(Screen[None]):
         content = self.query_one("#content-panel", IdeaView)
         if panel.has_class("collapsed"):
             panel.remove_class("collapsed")
-            panel.query_one("#idea-list", Tree).focus()
+            panel.active_results_widget().focus()
             self._active_pane = "list"
         else:
             panel.add_class("collapsed")
@@ -521,11 +516,11 @@ class MainScreen(Screen[None]):
         """Show search-mode footer hints only when they are relevant."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
+        results = panel.query_one("#search-results", SearchResultsList)
 
         if panel.search_is_active():
             if (
-                self.app.focused in {search, tree}
+                self.app.focused in {search, results}
                 and action in self._SEARCH_MODE_DISABLED_ACTIONS
             ):
                 return False
@@ -552,7 +547,7 @@ class MainScreen(Screen[None]):
         bindings = super().active_bindings
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
-        tree = panel.query_one("#idea-list", Tree)
+        results = panel.query_one("#search-results", SearchResultsList)
 
         if self.app.focused is search and panel.search_is_active():
             bindings = {
@@ -560,7 +555,7 @@ class MainScreen(Screen[None]):
                 for key, binding in bindings.items()
                 if binding.binding.action in self._SEARCH_INPUT_FOOTER_ACTIONS
             }
-        elif self.app.focused is tree and panel.search_is_active():
+        elif self.app.focused is results and panel.search_is_active():
             bindings = {
                 key: binding
                 for key, binding in bindings.items()
@@ -569,7 +564,7 @@ class MainScreen(Screen[None]):
 
         up_binding = bindings.get("up")
         if (
-            self.app.focused is tree
+            self.app.focused is results
             and panel.search_is_active()
             and up_binding is not None
             and up_binding.binding.action == "footer_previous_result"

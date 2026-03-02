@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, cast
 import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import Input, Markdown, OptionList, Static, Tree
+from textual.widgets._option_list import Option
 
-from cogitus.search import SearchResult
+from cogitus.search import SearchMatchFragment, SearchResult
 from cogitus.ui.widgets.idea_list import (
     IdeaListPanel,
     IdeaTreeNodeData,
@@ -21,6 +22,11 @@ from cogitus.ui.widgets.idea_list import (
     _truncate_snippet,
 )
 from cogitus.ui.widgets.idea_view import IdeaView, _format_full_timestamp
+from cogitus.ui.widgets.search_results import (
+    SearchResultSelection,
+    SearchResultsList,
+    _marked_text_to_text,
+)
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -28,6 +34,7 @@ if TYPE_CHECKING:
     from textual.widget import Widget
     from textual.widgets.tree import TreeNode
 
+    from cogitus.models.idea import Idea
     from cogitus.services.idea_service import IdeaService
 
 
@@ -171,7 +178,7 @@ async def test_idea_list_panel_refreshes_bindings_on_search_and_selection(
 async def test_idea_list_panel_renders_search_snippets(
     service: IdeaService,
 ) -> None:
-    """Search-result loading should include per-row snippets."""
+    """Active search should render dedicated heading + match rows."""
     idea = service.create_idea(
         "Snippet target",
         body="A searchable body snippet for python queries",
@@ -196,12 +203,42 @@ async def test_idea_list_panel_renders_search_snippets(
         )
         await pilot.pause()
 
-        tree = panel.query_one("#idea-list", Tree)
-        node_label = tree.root.children[0].children[0].label
-        plain = getattr(node_label, "plain", str(node_label))
+        results = panel.query_one("#search-results", SearchResultsList)
+        prompts = [
+            option.prompt.plain
+            if hasattr(option.prompt, "plain")
+            else str(option.prompt)
+            for option in results.options
+        ]
 
-        assert "Snippet target" in plain
-        assert "searchable body snippet for python" in plain
+        assert any("Snippet target" in prompt for prompt in prompts)
+        assert any(
+            "searchable body snippet for python" in prompt for prompt in prompts
+        )
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_search_mode_helpers_cover_selection_paths(
+    service: IdeaService,
+) -> None:
+    """Search-mode helpers should select ideas and hide group selection."""
+    idea = service.create_idea("Helper target", body="python helper")
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.query_one("#search-input", Input).value = "python"
+        panel.load_search_results(service.search_results("python"))
+        await pilot.pause()
+
+        assert panel.select_idea(idea.pk) is True
+        assert panel.get_selected_idea() is not None
+        assert panel.get_selected_group_pk() is None
+        assert panel.active_results_widget() is panel.query_one(
+            "#search-results",
+            SearchResultsList,
+        )
+        assert panel.select_idea(999999) is False
 
 
 @pytest.mark.asyncio
@@ -381,10 +418,13 @@ async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
         panel.load_grouped_ideas(service.list_ideas_grouped())
         search = panel.query_one("#search-input", Input)
         tree = panel.query_one("#idea-list", Tree)
+        results = panel.query_one("#search-results", SearchResultsList)
 
         search.focus()
         await pilot.pause()
         search.value = "python"
+        await pilot.pause(0.3)
+        panel.load_search_results(service.search_results("python"))
         await pilot.pause()
 
         assert search.has_class("search-active")
@@ -392,19 +432,19 @@ async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
 
         await pilot.press("down")
         await pilot.pause()
-        assert app.focused is tree
+        assert app.focused is results
 
         await pilot.press("down")
         await pilot.pause()
         selected = panel.get_selected_idea()
         assert selected is not None
-        assert selected.title == "Alpha python result"
+        assert selected.title in {"Alpha python result", "Beta python result"}
 
         await pilot.press("up")
         await pilot.pause()
-        selected = panel.get_selected_idea()
-        assert selected is not None
-        assert selected.title == "Beta python result"
+        while not panel.is_first_result_selected():
+            await pilot.press("up")
+            await pilot.pause()
 
         await pilot.press("up")
         await pilot.pause()
@@ -419,6 +459,7 @@ async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
 @pytest.mark.asyncio
 async def test_idea_list_panel_search_guard_paths(
     service: IdeaService,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Guard paths should safely no-op outside active result navigation."""
     panel = IdeaListPanel(id="idea-list-panel")
@@ -459,6 +500,14 @@ async def test_idea_list_panel_search_guard_paths(
             )
             is False
         )
+        monkeypatch.setattr(panel, "search_is_active", lambda: False)
+        assert (
+            panel._handle_result_tree_key(
+                cast("Key", _Event()),
+                panel.query_one("#search-input", Input),
+            )
+            is False
+        )
         panel.check_action("other_action", ())
 
 
@@ -468,51 +517,73 @@ def test_idea_list_panel_result_navigation_helpers_branches(
     """Result-navigation helpers should cover empty and boundary cases."""
     panel = IdeaListPanel(id="idea-list-panel")
 
-    class _Tree:
-        def __init__(self, cursor_line: int) -> None:
-            self.cursor_line = cursor_line
-            self.cursor_node: TreeNode[IdeaTreeNodeData] | None = None
-            self.moved_to: TreeNode[IdeaTreeNodeData] | None = None
-            self.root = SimpleNamespace(children=[])
+    class _Results:
+        def __init__(self) -> None:
+            self._ordered_match_option_ids = ("first", "last")
+            self.selection_id = "last"
+            self.down_calls = 0
+            self.up_calls = 0
 
-        def move_cursor(
-            self,
-            node: TreeNode[IdeaTreeNodeData],
-            *,
-            animate: bool,
-        ) -> None:
-            assert animate is False
-            self.cursor_node = node
-            self.moved_to = node
+        def current_selection(self) -> tuple[str, object]:
+            return (self.selection_id, object())
 
-    tree = _Tree(cursor_line=-1)
+        def action_cursor_down(self) -> None:
+            self.down_calls += 1
+
+        def action_cursor_up(self) -> None:
+            self.up_calls += 1
+
+        def is_first_match_selected(self) -> bool:
+            return self.selection_id == "first"
+
+        def adjacent_match_id(self, direction: int) -> str | None:
+            ordered_ids = list(self._ordered_match_option_ids)
+            current_index = ordered_ids.index(self.selection_id)
+            next_index = current_index + direction
+            if next_index < 0 or next_index >= len(ordered_ids):
+                return None
+            return ordered_ids[next_index]
+
+    results = _Results()
     monkeypatch.setattr(
         panel,
         "query_one",
-        lambda selector, *_args, **_kwargs: tree,
+        lambda selector, *_args, **_kwargs: results,
     )
 
+    assert panel._adjacent_result_node(-1) == "first"
     assert panel._adjacent_result_node(1) is None
     assert panel._move_result_cursor(1) is True
+    assert results.down_calls == 1
+    assert panel._move_result_cursor(-1) is True
+    assert results.up_calls == 1
 
-    first = _fake_idea_tree_node(line=2, pk=1)
-    last = _fake_idea_tree_node(line=8, pk=2)
-    panel._idea_nodes_by_pk = {1: first, 2: last}
-    panel._result_order_pks = (1, 2)
 
-    assert panel._adjacent_result_node(-1) is last
-    assert panel._adjacent_result_node(1) is first
+def test_idea_list_panel_down_key_returns_false_when_search_inactive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Down should not be consumed when search is inactive."""
+    panel = IdeaListPanel(id="idea-list-panel")
 
-    tree.cursor_line = last.line
-    tree.cursor_node = last
-    tree.moved_to = None
-    monkeypatch.setattr(
-        panel,
-        "get_selected_idea",
-        lambda: SimpleNamespace(pk=2),
-    )
-    assert panel._move_result_cursor(1) is True
-    assert tree.moved_to is None
+    class _Event:
+        prevented = False
+        stopped = False
+
+        def prevent_default(self) -> None:
+            self.prevented = True
+
+        def stop(self) -> None:
+            self.stopped = True
+
+    monkeypatch.setattr(panel, "_autocomplete_is_visible", lambda: False)
+    monkeypatch.setattr(panel, "focus_results", lambda: False)
+    monkeypatch.setattr(panel, "search_is_active", lambda: False)
+
+    event = _Event()
+
+    assert panel._handle_search_input_down_key(cast("Key", event)) is False
+    assert event.prevented is False
+    assert event.stopped is False
 
 
 def test_idea_list_panel_ordered_result_nodes_filters_missing_entries() -> None:
@@ -527,6 +598,34 @@ def test_idea_list_panel_ordered_result_nodes_filters_missing_entries() -> None:
     assert panel._ordered_result_nodes() == (second, first)
 
 
+def test_idea_list_panel_widget_helpers_switch_by_search_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Widget helpers should return the tree or results by search state."""
+    panel = IdeaListPanel(id="idea-list-panel")
+
+    tree = object()
+    results = object()
+
+    def fake_query_one(
+        selector: str, *_args: object, **_kwargs: object
+    ) -> object:
+        if selector == "#idea-list":
+            return tree
+        if selector == "#search-results":
+            return results
+        msg = f"unexpected selector: {selector}"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(panel, "query_one", fake_query_one)
+    monkeypatch.setattr(panel, "search_is_active", lambda: False)
+    assert panel.browse_widget() is tree
+    assert panel.active_results_widget() is tree
+
+    monkeypatch.setattr(panel, "search_is_active", lambda: True)
+    assert panel.active_results_widget() is results
+
+
 def test_idea_list_panel_focus_results_returns_false_for_visible_autocomplete(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -539,6 +638,22 @@ def test_idea_list_panel_focus_results_returns_false_for_visible_autocomplete(
     assert panel.focus_results() is False
 
 
+@pytest.mark.asyncio
+async def test_idea_list_panel_footer_actions_hide_when_search_inactive() -> (
+    None
+):
+    """Search footer hints should disappear when search is not active."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        results = panel.query_one("#search-results", SearchResultsList)
+        results.focus()
+        await pilot.pause()
+
+        assert panel.check_action("footer_next_result", ()) is False
+
+
 def test_idea_list_panel_truncate_snippet_adds_ellipsis() -> None:
     """Long inline snippets should be compacted with a trailing ellipsis."""
     snippet = "word " * 30
@@ -546,6 +661,147 @@ def test_idea_list_panel_truncate_snippet_adds_ellipsis() -> None:
 
     assert truncated.endswith("...")
     assert len(truncated) < len(" ".join(snippet.split()))
+    assert _truncate_snippet("short snippet") == "short snippet"
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_down_key_forces_search_before_focus(
+    service: IdeaService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Down in search should fire a pending search before focusing results."""
+    service.create_idea("Force search", body="python")
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        search = panel.query_one("#search-input", Input)
+        fired: list[str] = []
+
+        monkeypatch.setattr(panel, "focus_results", lambda: False)
+        monkeypatch.setattr(panel, "_fire_search", fired.append)
+
+        search.focus()
+        search.value = "python"
+        await pilot.pause()
+        await pilot.press("down")
+        await pilot.pause()
+
+        assert fired == ["python"]
+
+
+def test_search_results_widget_helper_branches() -> None:
+    """Search-results widget helpers should cover empty and unmatched states."""
+    results = SearchResultsList(id="search-results")
+
+    assert results.has_matches() is False
+    assert results.current_selection() is None
+    assert results.get_selected_idea() is None
+    assert results.get_selected_fragment() is None
+    assert results.has_next_match() is False
+    assert results.is_first_match_selected() is False
+    assert results.adjacent_match_id(1) is None
+    assert results.select_first_match_for_idea(1) is False
+
+    results.load_results([])
+    assert results.highlighted is None
+
+    results.set_options([Option("Heading", disabled=True)])
+    results.highlighted = 0
+    assert results.current_selection() is None
+    assert results.is_first_match_selected() is False
+
+    results.set_options([Option("match", id="idea-1-match-0")])
+    results.highlighted = 0
+    results._selections_by_option_id.clear()
+    assert results.current_selection() is None
+
+    results._ordered_match_option_ids = ("idea-1-match-0",)
+    results.highlighted = None
+    assert results.current_selection() is None
+
+    results.set_options(
+        [
+            Option("match", id="idea-2-match-0"),
+            Option("match2", id="idea-2-match-1"),
+        ]
+    )
+    results._ordered_match_option_ids = ("idea-2-match-0", "idea-2-match-1")
+    results._selections_by_option_id = {
+        "idea-2-match-0": SearchResultSelection(
+            idea=cast("Idea", SimpleNamespace()),
+            fragment=SearchMatchFragment(source="body", text="a", rank=0),
+        ),
+        "idea-2-match-1": SearchResultSelection(
+            idea=cast("Idea", SimpleNamespace()),
+            fragment=SearchMatchFragment(source="body", text="b", rank=1),
+        ),
+    }
+    assert results.select_first_match_for_idea(2) is True
+    assert results.has_next_match() is True
+    results.highlighted = 1
+    assert results.adjacent_match_id(1) is None
+
+
+def test_search_results_widget_event_ignores_unknown_option_ids(
+    service: IdeaService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unknown option IDs should not emit match-selection messages."""
+    idea = service.create_idea("Unknown option")
+    results = SearchResultsList(id="search-results")
+    selection = SearchResultSelection(
+        idea=idea,
+        fragment=SearchMatchFragment(source="body", text="match", rank=0),
+    )
+    captured: list[SearchResultSelection] = []
+    monkeypatch.setattr(
+        results,
+        "post_message",
+        lambda message: captured.append(message.selection),
+    )
+
+    results.on_option_list_option_highlighted(
+        cast(
+            "OptionList.OptionHighlighted",
+            SimpleNamespace(option_id=None),
+        )
+    )
+    results.on_option_list_option_selected(
+        cast(
+            "OptionList.OptionSelected",
+            SimpleNamespace(option_id=None),
+        )
+    )
+    results.on_option_list_option_selected(
+        cast(
+            "OptionList.OptionSelected",
+            SimpleNamespace(option_id="missing"),
+        )
+    )
+    results.on_option_list_option_highlighted(
+        cast(
+            "OptionList.OptionHighlighted",
+            SimpleNamespace(option_id="missing"),
+        )
+    )
+    results._selections_by_option_id["known"] = selection
+    results.on_option_list_option_selected(
+        cast(
+            "OptionList.OptionSelected",
+            SimpleNamespace(option_id="known"),
+        )
+    )
+
+    assert captured == [selection]
+
+
+def test_marked_text_to_text_handles_unclosed_marker() -> None:
+    """Unclosed highlight markers should fall back to plain text append."""
+    rendered = _marked_text_to_text("prefix [[broken")
+
+    assert rendered.plain == "prefix [[broken"
 
 
 @pytest.mark.asyncio
@@ -737,7 +993,7 @@ def test_idea_list_panel_autocomplete_pure_helpers_branches() -> None:
 def test_idea_list_panel_get_selected_idea_with_missing_pk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """get_selected_idea should return None when idea node has no PK."""
+    """Inactive search should still use the tree selection path."""
     panel = IdeaListPanel(id="idea-list-panel")
 
     class _Node:
@@ -746,6 +1002,7 @@ def test_idea_list_panel_get_selected_idea_with_missing_pk(
     class _Tree:
         cursor_node = _Node()
 
+    monkeypatch.setattr(panel, "search_is_active", lambda: False)
     monkeypatch.setattr(panel, "query_one", lambda *_args, **_kwargs: _Tree())
     assert panel.get_selected_idea() is None
 
