@@ -377,7 +377,11 @@ class IdeaListPanel(Vertical):
     ) -> None:
         """Propagate search-result highlight changes as idea selections."""
         self.refresh_bindings()
-        self.post_message(self.IdeaSelected(event.selection.idea))
+        if self.app.focused is self.query_one(
+            "#search-results",
+            SearchResultsList,
+        ):
+            self.post_message(self.IdeaSelected(event.selection.idea))
 
     def _fire_search(self, query: str) -> None:
         """Post the debounced search message."""
@@ -426,6 +430,9 @@ class IdeaListPanel(Vertical):
         if not results.has_matches():
             return False
         results.focus()
+        selected = results.get_selected_idea()
+        if selected is not None:
+            self.post_message(self.IdeaSelected(selected))
         return True
 
     def clear_search(self) -> None:

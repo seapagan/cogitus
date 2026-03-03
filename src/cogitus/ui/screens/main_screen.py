@@ -221,6 +221,7 @@ class MainScreen(Screen[None]):
     ) -> None:
         """Filter ideas based on search query."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        view = self.query_one("#content-panel", IdeaView)
         query = event.query.strip()
         if query:
             parsed = parse_search_query(query)
@@ -228,12 +229,17 @@ class MainScreen(Screen[None]):
                 self._service.search_results(query),
                 show_match_rows=parsed.text is not None,
             )
-        else:
-            grouped_ideas = self._service.list_ideas_grouped(None)
-            panel.load_grouped_ideas(grouped_ideas)
-            if self._selected_idea_pk is not None:
-                panel.select_idea(self._selected_idea_pk)
-        view = self.query_one("#content-panel", IdeaView)
+            selected = panel.get_selected_idea()
+            if selected is not None:
+                view.show_idea(selected)
+            else:
+                view.show_empty()
+            return
+
+        grouped_ideas = self._service.list_ideas_grouped(None)
+        panel.load_grouped_ideas(grouped_ideas)
+        if self._selected_idea_pk is not None:
+            panel.select_idea(self._selected_idea_pk)
         selected = panel.get_selected_idea()
         if selected is not None:
             self._set_selected_idea(selected.pk)

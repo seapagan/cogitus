@@ -1617,6 +1617,54 @@ async def test_main_screen_cancel_search_preserves_selected_idea(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_search_cancel_keeps_selection_without_navigation(
+    service: IdeaService,
+) -> None:
+    """Typing in search without entering results should not commit a hit."""
+    first = service.create_idea("Alpha keep selected")
+    service.create_idea("Beta python")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
+
+        panel.select_idea(first.pk)
+        screen._set_selected_idea(first.pk)
+        await pilot.pause()
+        selected_before_search = panel.get_selected_idea()
+        assert selected_before_search is not None
+        assert selected_before_search.pk == first.pk
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "python"
+        await _wait_for_search_results(pilot, search, results)
+
+        assert app.focused is search
+        selected_in_preview = panel.get_selected_idea()
+        assert selected_in_preview is not None
+        assert selected_in_preview.title == "Beta python"
+
+        screen.action_cancel_search()
+        await _wait_for_search_cleared(pilot, search)
+
+        for _ in range(_MAX_WAIT_TICKS):
+            if panel.get_selected_idea() is not None:
+                break
+            await pilot.pause()
+        else:
+            pytest.fail("Timed out waiting for tree selection to be restored")
+
+        assert app.focused is panel.browse_widget()
+        selected_in_tree = panel.get_selected_idea()
+        assert selected_in_tree is not None
+        assert selected_in_tree.pk == first.pk
+
+
+@pytest.mark.asyncio
 async def test_main_screen_search_clear_reselects_previous_idea(
     service: IdeaService,
     monkeypatch: pytest.MonkeyPatch,
