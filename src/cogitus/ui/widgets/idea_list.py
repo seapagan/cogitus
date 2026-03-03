@@ -435,6 +435,15 @@ class IdeaListPanel(Vertical):
             self.post_message(self.IdeaSelected(selected))
         return True
 
+    def focus_preferred_list_widget(self) -> None:
+        """Focus the correct list-side widget for the current search state."""
+        if self.focus_results():
+            return
+        if self.search_is_active():
+            self.query_one("#search-input", Input).focus()
+            return
+        self.browse_widget().focus()
+
     def clear_search(self) -> None:
         """Clear the search input."""
         search = self.query_one("#search-input", Input)

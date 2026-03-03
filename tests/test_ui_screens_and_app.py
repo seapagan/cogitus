@@ -1244,7 +1244,7 @@ async def test_main_screen_refresh_empty_selection_branch(
     service: IdeaService,
     mocker: MockerFixture,
 ) -> None:
-    """refresh_ideas should clear selection when no idea is selected."""
+    """Search refresh should preview empty state without clearing selection."""
     service.create_idea("First")
     screen = MainScreen(service)
     app = _SingleScreenApp(screen)
@@ -1267,8 +1267,38 @@ async def test_main_screen_refresh_empty_selection_branch(
         screen.refresh_ideas()
 
         list_grouped.assert_called_once_with("First")
-        set_selected.assert_called_with(None)
+        set_selected.assert_not_called()
         show_empty.assert_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_refresh_with_ideas_and_no_selected_idea(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Normal refresh should clear selection when ideas load without cursor."""
+    first = service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        view = screen.query_one("#content-panel", IdeaView)
+        set_selected = mocker.patch.object(screen, "_set_selected_idea")
+        show_empty = mocker.patch.object(view, "show_empty")
+
+        mocker.patch.object(
+            screen._service,
+            "list_ideas_grouped",
+            return_value=[(first.group, [first])],
+        )
+        mocker.patch.object(panel, "get_selected_idea", return_value=None)
+
+        screen.refresh_ideas()
+
+        set_selected.assert_called_once_with(None)
+        show_empty.assert_called_once_with()
         await pilot.pause()
 
 
@@ -1665,6 +1695,113 @@ async def test_main_screen_search_cancel_keeps_selection_without_navigation(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_search_refresh_keeps_committed_selection(
+    service: IdeaService,
+) -> None:
+    """Refreshing active search should not commit the previewed first hit."""
+    first = service.create_idea("Alpha keep selected")
+    service.create_idea("Beta python")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
+
+        panel.select_idea(first.pk)
+        screen._set_selected_idea(first.pk)
+        await pilot.pause()
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "python"
+        await _wait_for_search_results(pilot, search, results)
+
+        screen.refresh_ideas()
+
+        assert screen._selected_idea_pk == first.pk
+        preview_selected = panel.get_selected_idea()
+        assert preview_selected is not None
+        assert preview_selected.title == "Beta python"
+
+        screen.action_cancel_search()
+        await _wait_for_search_cleared(pilot, search)
+        for _ in range(_MAX_WAIT_TICKS):
+            if panel.get_selected_idea() is not None:
+                break
+            await pilot.pause()
+        else:
+            pytest.fail("Timed out waiting for tree selection to be restored")
+
+        selected_in_tree = panel.get_selected_idea()
+        assert selected_in_tree is not None
+        assert selected_in_tree.pk == first.pk
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_refresh_select_pk_commits_selected_hit(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Search refresh with `select_pk` should commit the matching result."""
+    idea = service.create_idea("Commit python")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        view = screen.query_one("#content-panel", IdeaView)
+        set_selected = mocker.patch.object(screen, "_set_selected_idea")
+        show_idea = mocker.patch.object(view, "show_idea")
+        selected_pks: list[int] = []
+
+        def fake_select_idea(pk: int) -> bool:
+            selected_pks.append(pk)
+            return True
+
+        search.value = "python"
+        await pilot.pause()
+        mocker.patch.object(panel, "select_idea", side_effect=fake_select_idea)
+        mocker.patch.object(panel, "get_selected_idea", return_value=idea)
+
+        screen.refresh_ideas(select_pk=idea.pk)
+
+        assert selected_pks == [idea.pk]
+        set_selected.assert_called_once_with(idea.pk)
+        show_idea.assert_called_once_with(idea)
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_preview_commit_empty_state(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Committed empty preview should clear selected idea state."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        view = screen.query_one("#content-panel", IdeaView)
+        set_selected = mocker.patch.object(screen, "_set_selected_idea")
+        show_empty = mocker.patch.object(view, "show_empty")
+
+        mocker.patch.object(panel, "get_selected_idea", return_value=None)
+
+        screen._show_search_selection_preview(
+            panel,
+            commit_selection=True,
+        )
+
+        set_selected.assert_called_once_with(None)
+        show_empty.assert_called_once_with()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_search_clear_reselects_previous_idea(
     service: IdeaService,
     monkeypatch: pytest.MonkeyPatch,
@@ -1905,6 +2042,72 @@ async def test_main_screen_toggle_list_panel(
         assert not panel.has_class("collapsed")
         list_focus.assert_called_once_with()
         await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_toggle_focus_commits_search_result_selection(
+    service: IdeaService,
+) -> None:
+    """Returning to the list during search should sync result selection."""
+    first = service.create_idea("Alpha keep selected")
+    service.create_idea("Beta python")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
+        content = screen.query_one("#content-panel", IdeaView)
+
+        panel.select_idea(first.pk)
+        screen._set_selected_idea(first.pk)
+        await pilot.pause()
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "python"
+        await _wait_for_search_results(pilot, search, results)
+
+        content.focus()
+        await pilot.pause()
+        screen.action_toggle_focus()
+        await pilot.pause()
+
+        assert app.focused is results
+        selected_in_results = panel.get_selected_idea()
+        assert selected_in_results is not None
+        assert screen._selected_idea_pk == selected_in_results.pk
+
+
+@pytest.mark.asyncio
+async def test_main_screen_toggle_list_panel_empty_search_focuses_input(
+    service: IdeaService,
+) -> None:
+    """Expanding empty search results should focus the search input."""
+    service.create_idea("Alpha keep selected")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        content = screen.query_one("#content-panel", IdeaView)
+
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "no-match"
+        await pilot.pause()
+
+        screen.action_toggle_list_panel()
+        await pilot.pause()
+        assert panel.has_class("collapsed")
+        assert app.focused is content
+
+        screen.action_toggle_list_panel()
+        await pilot.pause()
+        assert not panel.has_class("collapsed")
+        assert app.focused is search
 
 
 @pytest.mark.asyncio
