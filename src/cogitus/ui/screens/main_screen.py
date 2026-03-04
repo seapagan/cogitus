@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
 
     from cogitus.models.group import Group
+    from cogitus.models.idea import Idea
     from cogitus.services.idea_service import IdeaService
 
 
@@ -405,12 +406,12 @@ class MainScreen(Screen[None]):
 
     def action_copy_idea_body(self) -> None:
         """Copy the selected idea's body to the system clipboard."""
-        if self._selected_idea_pk is None:
-            self.notify("No idea selected", severity="warning")
-            return
-        idea = self._service.get_idea(self._selected_idea_pk)
+        idea, had_target = self._resolve_copy_target_idea()
         if idea is None:
-            self.notify("Idea not found", severity="error")
+            if had_target:
+                self.notify("Idea not found", severity="error")
+            else:
+                self.notify("No idea selected", severity="warning")
             return
         if not idea.body:
             self.notify("Idea has no body to copy", severity="warning")
@@ -425,6 +426,18 @@ class MainScreen(Screen[None]):
                 self.notify("Copied idea body to clipboard")
         else:
             self.notify("Clipboard unavailable", severity="warning")
+
+    def _resolve_copy_target_idea(self) -> tuple[Idea | None, bool]:
+        """Return the idea that copy-body actions should target."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        if panel.search_is_active():
+            selected = panel.get_selected_idea()
+            if selected is None:
+                return None, False
+            return self._service.get_idea(selected.pk), True
+        if self._selected_idea_pk is None:
+            return None, False
+        return self._service.get_idea(self._selected_idea_pk), True
 
     def _get_selected_rendered_body_text(self) -> str | None:
         """Return selected text in rendered body, if any."""

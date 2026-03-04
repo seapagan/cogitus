@@ -2320,6 +2320,71 @@ async def test_main_screen_copy_idea_body(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_copy_idea_body_uses_search_preview_target(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Active search should copy from the previewed result."""
+    base = service.create_idea("Base", body="base body")
+    preview = service.create_idea("Preview copy token", body="preview body")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
+        content = screen.query_one("#content-panel", IdeaView)
+        notify = mocker.patch.object(screen, "notify")
+        copy = mocker.patch("cogitus.ui.screens.main_screen.copy_to_clipboard")
+        copy.return_value = True
+
+        screen._selected_idea_pk = base.pk
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "token"
+        await _wait_for_search_results(pilot, search, results)
+        content.focus()
+        await pilot.pause()
+
+        screen.action_copy_idea_body()
+
+        copy.assert_called_once_with(preview.body, app)
+        notify.assert_called_with("Copied idea body to clipboard")
+
+
+@pytest.mark.asyncio
+async def test_main_screen_copy_idea_body_with_empty_search_results_warns(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Active search with no match should warn as no selected idea."""
+    base = service.create_idea("Base", body="base body")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        content = screen.query_one("#content-panel", IdeaView)
+        notify = mocker.patch.object(screen, "notify")
+        copy = mocker.patch("cogitus.ui.screens.main_screen.copy_to_clipboard")
+
+        screen._selected_idea_pk = base.pk
+        screen.action_focus_search()
+        await pilot.pause()
+        search.value = "no-match-token"
+        await _wait_for_search_active(pilot, search)
+        content.focus()
+        await pilot.pause()
+
+        screen.action_copy_idea_body()
+
+        notify.assert_called_with("No idea selected", severity="warning")
+        copy.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_selection_helper_falls_back_to_screen_selection(
     service: IdeaService,
     mocker: MockerFixture,
