@@ -1752,6 +1752,7 @@ async def test_main_screen_search_refresh_select_pk_commits_selected_hit(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
         view = screen.query_one("#content-panel", IdeaView)
         set_selected = mocker.patch.object(screen, "_set_selected_idea")
         show_idea = mocker.patch.object(view, "show_idea")
@@ -1762,9 +1763,11 @@ async def test_main_screen_search_refresh_select_pk_commits_selected_hit(
             return True
 
         search.value = "python"
-        await pilot.pause()
+        await _wait_for_search_results(pilot, search, results)
         mocker.patch.object(panel, "select_idea", side_effect=fake_select_idea)
         mocker.patch.object(panel, "get_selected_idea", return_value=idea)
+        set_selected.reset_mock()
+        show_idea.reset_mock()
 
         screen.refresh_ideas(select_pk=idea.pk)
 
