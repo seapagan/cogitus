@@ -1777,6 +1777,44 @@ async def test_main_screen_search_refresh_select_pk_commits_selected_hit(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_search_refresh_ignores_non_matching_select_pk(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Search refresh should not commit selection for absent `select_pk`."""
+    matching = service.create_idea("Match python")
+    missing = service.create_idea("Missing rust")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
+        view = screen.query_one("#content-panel", IdeaView)
+        set_selected = mocker.patch.object(screen, "_set_selected_idea")
+        show_idea = mocker.patch.object(view, "show_idea")
+        selected_pks: list[int] = []
+
+        def fake_select_idea(pk: int) -> bool:
+            selected_pks.append(pk)
+            return True
+
+        search.value = "python"
+        await _wait_for_search_results(pilot, search, results)
+        mocker.patch.object(panel, "select_idea", side_effect=fake_select_idea)
+        mocker.patch.object(panel, "get_selected_idea", return_value=matching)
+        set_selected.reset_mock()
+        show_idea.reset_mock()
+
+        screen.refresh_ideas(select_pk=missing.pk)
+
+        assert selected_pks == []
+        set_selected.assert_not_called()
+        show_idea.assert_called_once_with(matching)
+
+
+@pytest.mark.asyncio
 async def test_main_screen_search_preview_commit_empty_state(
     service: IdeaService,
     mocker: MockerFixture,

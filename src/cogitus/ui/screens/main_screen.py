@@ -216,12 +216,15 @@ class MainScreen(Screen[None]):
             search_results,
             show_match_rows=parsed.text is not None,
         )
-        if select_pk is not None:
-            panel.select_idea(select_pk)
+        matched_select_pk = False
+        if select_pk is not None and any(
+            result.idea.pk == select_pk for result in search_results
+        ):
+            matched_select_pk = panel.select_idea(select_pk)
         self._show_search_selection_preview(
             panel,
             commit_selection=(
-                select_pk is not None
+                matched_select_pk
                 or self.app.focused
                 is panel.query_one("#search-results", SearchResultsList)
             ),
