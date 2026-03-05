@@ -282,6 +282,60 @@ async def test_idea_form_initial_focus_edit_mode(
 
 
 @pytest.mark.asyncio
+async def test_idea_form_edit_mode_keeps_tags_autocomplete_hidden_on_mount(
+    service: IdeaService,
+) -> None:
+    """Edit mode should not open tags autocomplete from preloaded values."""
+    service.create_idea("Tag source", tags=["one", "two"])
+    idea = service.create_idea("Original", body="old", tags=["one", "two"])
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        body = screen.query_one("#body-input", CogitusTextArea)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        assert app.focused is body
+        assert autocomplete.has_class("-hidden")
+        assert autocomplete.option_count == 0
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_unfocused_tags_value_change_keeps_autocomplete_hidden(
+    service: IdeaService,
+) -> None:
+    """Programmatic tag updates should not open autocomplete off-focus."""
+    service.create_idea("Tag source", tags=["alpha"])
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        title = screen.query_one("#title-input", Input)
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        assert app.focused is title
+        tags_input.value = "a"
+        tags_input.cursor_position = 1
+        await pilot.pause()
+
+        assert app.focused is title
+        assert autocomplete.has_class("-hidden")
+        assert autocomplete.option_count == 0
+
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("l")
+        await pilot.pause()
+
+        assert not autocomplete.has_class("-hidden")
+        assert [str(option.prompt) for option in autocomplete.options] == [
+            "alpha"
+        ]
+
+
+@pytest.mark.asyncio
 async def test_idea_form_tags_autocomplete_keys_and_accept(
     service: IdeaService,
 ) -> None:
