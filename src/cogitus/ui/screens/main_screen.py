@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from textual.app import ComposeResult
 
     from cogitus.models.group import Group
+    from cogitus.models.idea import Idea
     from cogitus.services.idea_service import IdeaService
 
 
@@ -176,19 +177,17 @@ class MainScreen(Screen[None]):
         )
         search_query = panel.query_one("#search-input", Input).value.strip()
         if search_query:
-            parsed = parse_search_query(search_query)
-            results = self._service.search_results(search_query)
-            panel.load_search_results(
-                results,
-                show_match_rows=parsed.text is not None,
+            self._refresh_search_results(
+                panel,
+                search_query=search_query,
+                select_pk=select_pk,
             )
-            has_ideas = bool(results)
-        else:
-            grouped_ideas = self._service.list_ideas_grouped(None)
-            panel.load_grouped_ideas(grouped_ideas)
-            has_ideas = any(group_ideas for _, group_ideas in grouped_ideas)
+            return
 
         view = self.query_one("#content-panel", IdeaView)
+        grouped_ideas = self._service.list_ideas_grouped(None)
+        panel.load_grouped_ideas(grouped_ideas)
+        has_ideas = any(group_ideas for _, group_ideas in grouped_ideas)
         if has_ideas:
             if select_pk is not None:
                 panel.select_idea(select_pk)
@@ -202,6 +201,52 @@ class MainScreen(Screen[None]):
         else:
             self._set_selected_idea(None)
             view.show_empty()
+
+    def _refresh_search_results(
+        self,
+        panel: IdeaListPanel,
+        *,
+        search_query: str,
+        select_pk: int | None,
+    ) -> None:
+        """Refresh the active search view without clobbering preview state."""
+        parsed = parse_search_query(search_query)
+        search_results = self._service.search_results(search_query)
+        panel.load_search_results(
+            search_results,
+            show_match_rows=parsed.text is not None,
+        )
+        matched_select_pk = False
+        if select_pk is not None and any(
+            result.idea.pk == select_pk for result in search_results
+        ):
+            matched_select_pk = panel.select_idea(select_pk)
+        self._show_search_selection_preview(
+            panel,
+            commit_selection=(
+                matched_select_pk
+                or self.app.focused
+                is panel.query_one("#search-results", SearchResultsList)
+            ),
+        )
+
+    def _show_search_selection_preview(
+        self,
+        panel: IdeaListPanel,
+        *,
+        commit_selection: bool,
+    ) -> None:
+        """Show the current search preview and optionally commit it."""
+        view = self.query_one("#content-panel", IdeaView)
+        selected = panel.get_selected_idea()
+        if selected is not None:
+            if commit_selection:
+                self._set_selected_idea(selected.pk)
+            view.show_idea(selected)
+            return
+        if commit_selection:
+            self._set_selected_idea(None)
+        view.show_empty()
 
     def on_idea_list_panel_idea_selected(
         self, event: IdeaListPanel.IdeaSelected
@@ -221,6 +266,7 @@ class MainScreen(Screen[None]):
     ) -> None:
         """Filter ideas based on search query."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        view = self.query_one("#content-panel", IdeaView)
         query = event.query.strip()
         if query:
             parsed = parse_search_query(query)
@@ -228,12 +274,16 @@ class MainScreen(Screen[None]):
                 self._service.search_results(query),
                 show_match_rows=parsed.text is not None,
             )
-        else:
-            grouped_ideas = self._service.list_ideas_grouped(None)
-            panel.load_grouped_ideas(grouped_ideas)
-            if self._selected_idea_pk is not None:
-                panel.select_idea(self._selected_idea_pk)
-        view = self.query_one("#content-panel", IdeaView)
+            self._show_search_selection_preview(
+                panel,
+                commit_selection=False,
+            )
+            return
+
+        grouped_ideas = self._service.list_ideas_grouped(None)
+        panel.load_grouped_ideas(grouped_ideas)
+        if self._selected_idea_pk is not None:
+            panel.select_idea(self._selected_idea_pk)
         selected = panel.get_selected_idea()
         if selected is not None:
             self._set_selected_idea(selected.pk)
@@ -358,12 +408,12 @@ class MainScreen(Screen[None]):
 
     def action_copy_idea_body(self) -> None:
         """Copy the selected idea's body to the system clipboard."""
-        if self._selected_idea_pk is None:
-            self.notify("No idea selected", severity="warning")
-            return
-        idea = self._service.get_idea(self._selected_idea_pk)
+        idea, had_target = self._resolve_copy_target_idea()
         if idea is None:
-            self.notify("Idea not found", severity="error")
+            if had_target:
+                self.notify("Idea not found", severity="error")
+            else:
+                self.notify("No idea selected", severity="warning")
             return
         if not idea.body:
             self.notify("Idea has no body to copy", severity="warning")
@@ -378,6 +428,18 @@ class MainScreen(Screen[None]):
                 self.notify("Copied idea body to clipboard")
         else:
             self.notify("Clipboard unavailable", severity="warning")
+
+    def _resolve_copy_target_idea(self) -> tuple[Idea | None, bool]:
+        """Return the idea that copy-body actions should target."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        if panel.search_is_active():
+            selected = panel.get_selected_idea()
+            if selected is None:
+                return None, False
+            return self._service.get_idea(selected.pk), True
+        if self._selected_idea_pk is None:
+            return None, False
+        return self._service.get_idea(self._selected_idea_pk), True
 
     def _get_selected_rendered_body_text(self) -> str | None:
         """Return selected text in rendered body, if any."""
@@ -482,7 +544,7 @@ class MainScreen(Screen[None]):
             self.query_one("#content-panel", IdeaView).focus()
             self._active_pane = "content"
         else:
-            panel.active_results_widget().focus()
+            panel.focus_preferred_list_widget()
             self._active_pane = "list"
 
     def action_show_help(self) -> None:
@@ -499,7 +561,7 @@ class MainScreen(Screen[None]):
             content.focus()
             self._active_pane = "content"
         else:
-            panel.active_results_widget().focus()
+            panel.focus_preferred_list_widget()
             self._active_pane = "list"
 
     def action_toggle_list_panel(self) -> None:
@@ -508,7 +570,7 @@ class MainScreen(Screen[None]):
         content = self.query_one("#content-panel", IdeaView)
         if panel.has_class("collapsed"):
             panel.remove_class("collapsed")
-            panel.active_results_widget().focus()
+            panel.focus_preferred_list_widget()
             self._active_pane = "list"
         else:
             panel.add_class("collapsed")
