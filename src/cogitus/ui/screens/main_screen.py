@@ -271,11 +271,10 @@ class MainScreen(Screen[None]):
                 self._service.search_results(query),
                 show_match_rows=parsed.text is not None,
             )
-            selected = panel.get_selected_idea()
-            if selected is not None:
-                view.show_idea(selected)
-            else:
-                view.show_empty()
+            self._show_search_selection_preview(
+                panel,
+                commit_selection=False,
+            )
             return
 
         grouped_ideas = self._service.list_ideas_grouped(None)
