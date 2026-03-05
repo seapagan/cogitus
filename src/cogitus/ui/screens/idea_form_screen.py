@@ -304,6 +304,9 @@ class IdeaFormScreen(ModalScreen[int | None]):
     def _sync_tag_autocomplete(self) -> None:
         """Recompute tags autocomplete state for current token/cursor."""
         tags_input = self.query_one("#tags-input", Input)
+        if self.app.focused is not tags_input:
+            self.dismiss_tag_autocomplete()
+            return
         state = self._resolve_tag_autocomplete_state(
             tags_input.value,
             cursor_position=tags_input.cursor_position,
