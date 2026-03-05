@@ -13,6 +13,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Overhaul search with fts5 and keyboard navigation ([#27](https://github.com/seapagan/cogitus/pull/27)) by [seapagan](https://github.com/seapagan)
 - Add autocomplete flows for search and tag inputs ([#26](https://github.com/seapagan/cogitus/pull/26)) by [seapagan](https://github.com/seapagan)
 
+**Bug Fixes**
+
+- Fix idea form tag autocomplete visibility ([#30](https://github.com/seapagan/cogitus/pull/30)) by [seapagan](https://github.com/seapagan)
+- Fix search selection state handling ([#29](https://github.com/seapagan/cogitus/pull/29)) by [seapagan](https://github.com/seapagan)
+
 [`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.5.0...HEAD) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.5.0...HEAD.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.5.0...HEAD.patch)
 
 ## [0.5.0](https://github.com/seapagan/cogitus/releases/tag/0.5.0) (February 15, 2026)
