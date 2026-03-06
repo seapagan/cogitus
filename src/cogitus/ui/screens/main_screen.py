@@ -633,8 +633,7 @@ class MainScreen(Screen[None]):
             bindings = {
                 key: binding
                 for key, binding in bindings.items()
-                if binding.binding.action in self._SEARCH_INPUT_FOOTER_ACTIONS
-                and binding.binding.action == "footer_exit_search"
+                if binding.binding.action == "footer_exit_search"
             }
         elif self.app.focused is search and panel.search_is_active():
             bindings = {
