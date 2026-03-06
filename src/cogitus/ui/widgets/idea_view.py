@@ -25,7 +25,7 @@ def _format_full_timestamp(unix_ts: int) -> str:
 class IdeaView(Vertical):
     """Right panel showing full detail of an idea."""
 
-    can_focus = True
+    can_focus = False
 
     def compose(self) -> ComposeResult:
         """Compose the idea detail view."""
@@ -39,6 +39,11 @@ class IdeaView(Vertical):
             Markdown("", id="idea-view-body"),
             id="idea-view-container",
         )
+
+    def focus_content(self) -> None:
+        """Focus the scrollable content container for keyboard navigation."""
+        container = self.query_one("#idea-view-container", VerticalScroll)
+        container.focus()
 
     def show_idea(self, idea: Idea) -> None:
         """Display the given idea in the view."""

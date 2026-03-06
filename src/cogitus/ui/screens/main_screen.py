@@ -108,7 +108,7 @@ class MainScreen(Screen[None]):
             "tab",
             "toggle_focus",
             "Switch Pane",
-            show=False,
+            show=True,
         ),
         Binding(
             "ctrl+b",
@@ -541,7 +541,7 @@ class MainScreen(Screen[None]):
 
         search.value = ""
         if self._focus_before_search == "content":
-            self.query_one("#content-panel", IdeaView).focus()
+            self.query_one("#content-panel", IdeaView).focus_content()
             self._active_pane = "content"
         else:
             panel.focus_preferred_list_widget()
@@ -558,7 +558,7 @@ class MainScreen(Screen[None]):
             return
         if panel.has_focus_within:
             content = self.query_one("#content-panel", IdeaView)
-            content.focus()
+            content.focus_content()
             self._active_pane = "content"
         else:
             panel.focus_preferred_list_widget()
@@ -574,7 +574,7 @@ class MainScreen(Screen[None]):
             self._active_pane = "list"
         else:
             panel.add_class("collapsed")
-            content.focus()
+            content.focus_content()
             self._active_pane = "content"
 
     def action_quit_app(self) -> None:
@@ -611,7 +611,7 @@ class MainScreen(Screen[None]):
                 and bool(panel.get_selected_idea())
             )
         if action == "footer_exit_search":
-            return self.app.focused is search and panel.search_is_active()
+            return self.app.focused is search
         return super().check_action(action, parameters)
 
     @property
@@ -622,7 +622,20 @@ class MainScreen(Screen[None]):
         search = panel.query_one("#search-input", Input)
         results = panel.query_one("#search-results", SearchResultsList)
 
-        if self.app.focused is search and panel.search_is_active():
+        if self.app.focused is search or panel.search_is_active():
+            bindings = {
+                key: binding
+                for key, binding in bindings.items()
+                if binding.binding.action != "toggle_focus"
+            }
+
+        if self.app.focused is search and not panel.search_is_active():
+            bindings = {
+                key: binding
+                for key, binding in bindings.items()
+                if binding.binding.action == "footer_exit_search"
+            }
+        elif self.app.focused is search and panel.search_is_active():
             bindings = {
                 key: binding
                 for key, binding in bindings.items()
