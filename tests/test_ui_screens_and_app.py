@@ -10,7 +10,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.widgets import Button, Input, OptionList, Select, TextArea, Tree
 
-from cogitus.app import CogitusApp
+from cogitus.app import CSS_PATH, CogitusApp
 from cogitus.config import EditBodyCursorMode, NewIdeaGroupMode
 from cogitus.search import SearchResult
 from cogitus.ui.screens.idea_form_screen import (
@@ -52,6 +52,14 @@ class _SingleScreenApp(App[None]):
     def on_mount(self) -> None:
         """Push the test screen."""
         self.push_screen(self._screen)
+
+
+class _StyledSingleScreenApp(_SingleScreenApp):
+    """Host app that mounts a screen with the project stylesheet loaded."""
+
+    def __init__(self, screen: Screen[Any]) -> None:
+        App.__init__(self, css_path=CSS_PATH)
+        self._screen = screen
 
 
 class _FakeSettings:
@@ -191,6 +199,24 @@ async def test_idea_form_screen_edit_and_buttons(
         dismiss.reset_mock()
         IdeaFormScreen.action_cancel(screen)
         dismiss.assert_called_once_with(None)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_buttons_size_to_content(
+    service: IdeaService,
+) -> None:
+    """Idea-form buttons should size to content with balanced padding."""
+    screen = IdeaFormScreen(service)
+    app = _StyledSingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        for button_id in ("#save-btn", "#cancel-btn"):
+            button = screen.query_one(button_id, Button)
+            leftover = button.region.width - len(str(button.label))
+            assert leftover % 2 == 0
+            assert leftover >= 4
+
         await pilot.pause()
 
 
@@ -893,6 +919,40 @@ async def test_confirm_dialog_actions(mocker: MockerFixture) -> None:
         dismiss.reset_mock()
         await pilot.click("#confirm-no-btn")
         dismiss.assert_called_once_with(False)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_group_form_buttons_size_to_content(
+    service: IdeaService,
+) -> None:
+    """Group-form buttons should size to content with balanced padding."""
+    group_form = GroupFormScreen(service=service)
+    app = _StyledSingleScreenApp(group_form)
+
+    async with app.run_test() as pilot:
+        for button_id in ("#save-group-btn", "#cancel-group-btn"):
+            button = group_form.query_one(button_id, Button)
+            leftover = button.region.width - len(str(button.label))
+            assert leftover % 2 == 0
+            assert leftover >= 4
+
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_confirm_dialog_buttons_size_to_content() -> None:
+    """Confirm buttons should size to content with balanced padding."""
+    confirm = ConfirmDialog("Are you sure?")
+    app = _StyledSingleScreenApp(confirm)
+
+    async with app.run_test() as pilot:
+        for button_id in ("#confirm-yes-btn", "#confirm-no-btn"):
+            button = confirm.query_one(button_id, Button)
+            leftover = button.region.width - len(str(button.label))
+            assert leftover % 2 == 0
+            assert leftover >= 4
+
         await pilot.pause()
 
 
