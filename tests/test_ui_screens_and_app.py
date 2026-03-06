@@ -239,7 +239,7 @@ async def test_idea_form_screen_invalid_group_selection(
             type(group_select),
             "value",
             new_callable=PropertyMock,
-            return_value=Select.BLANK,
+            return_value=Select.NULL,
         )
 
         screen.action_save()
