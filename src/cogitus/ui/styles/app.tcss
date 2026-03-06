@@ -89,6 +89,13 @@ MainScreen {
 #idea-view-container {
     height: 1fr;
     padding: 1 2;
+    background: $surface;
+}
+
+#content-panel:focus-within #idea-view-header,
+#content-panel:focus-within #idea-view-container,
+#content-panel:focus-within #idea-view-body {
+    background-tint: $foreground 5%;
 }
 
 #idea-view-header {
@@ -116,6 +123,7 @@ MainScreen {
 #idea-view-body {
     padding: 1 2;
     height: auto;
+    background: $surface;
 }
 
 #empty-state {

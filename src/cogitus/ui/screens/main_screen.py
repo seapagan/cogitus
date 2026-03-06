@@ -541,7 +541,7 @@ class MainScreen(Screen[None]):
 
         search.value = ""
         if self._focus_before_search == "content":
-            self.query_one("#content-panel", IdeaView).focus()
+            self.query_one("#content-panel", IdeaView).focus_content()
             self._active_pane = "content"
         else:
             panel.focus_preferred_list_widget()
@@ -558,7 +558,7 @@ class MainScreen(Screen[None]):
             return
         if panel.has_focus_within:
             content = self.query_one("#content-panel", IdeaView)
-            content.focus()
+            content.focus_content()
             self._active_pane = "content"
         else:
             panel.focus_preferred_list_widget()
@@ -574,7 +574,7 @@ class MainScreen(Screen[None]):
             self._active_pane = "list"
         else:
             panel.add_class("collapsed")
-            content.focus()
+            content.focus_content()
             self._active_pane = "content"
 
     def action_quit_app(self) -> None:

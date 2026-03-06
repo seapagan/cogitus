@@ -1506,7 +1506,7 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
         panel.query_one("#idea-list", Tree).focus()
         await pilot.pause()
 
-        content_focus = mocker.patch.object(view, "focus")
+        content_focus = mocker.patch.object(view, "focus_content")
         list_focus = mocker.patch.object(
             panel.query_one("#idea-list"),
             "focus",
@@ -1586,6 +1586,7 @@ async def test_main_screen_search_cancel_restores_previous_focus(
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         content = screen.query_one("#content-panel", IdeaView)
+        view_container = content.query_one("#idea-view-container")
         search = panel.query_one("#search-input", Input)
         tree = panel.query_one("#idea-list", Tree)
 
@@ -1597,7 +1598,7 @@ async def test_main_screen_search_cancel_restores_previous_focus(
         screen.action_cancel_search()
         await pilot.pause()
         assert search.value == ""
-        assert app.focused is content
+        assert app.focused is view_container
 
         screen._active_pane = "list"
         screen.action_focus_search()
@@ -1648,6 +1649,7 @@ async def test_main_screen_cancel_search_ignores_non_search_focus(
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
         content = screen.query_one("#content-panel", IdeaView)
+        view_container = content.query_one("#idea-view-container")
 
         search.value = "keep"
         content.focus()
@@ -1657,7 +1659,7 @@ async def test_main_screen_cancel_search_ignores_non_search_focus(
         await pilot.pause()
 
         assert search.value == "keep"
-        assert app.focused is content
+        assert app.focused is view_container
 
 
 @pytest.mark.asyncio
@@ -2248,6 +2250,7 @@ async def test_main_screen_toggle_list_panel_empty_search_focuses_input(
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
         content = screen.query_one("#content-panel", IdeaView)
+        view_container = content.query_one("#idea-view-container")
 
         screen.action_focus_search()
         await pilot.pause()
@@ -2257,12 +2260,64 @@ async def test_main_screen_toggle_list_panel_empty_search_focuses_input(
         screen.action_toggle_list_panel()
         await pilot.pause()
         assert panel.has_class("collapsed")
-        assert app.focused is content
+        assert app.focused is view_container
 
         screen.action_toggle_list_panel()
         await pilot.pause()
         assert not panel.has_class("collapsed")
         assert app.focused is search
+
+
+@pytest.mark.asyncio
+async def test_main_screen_tab_from_tree_focuses_content_scroll_container(
+    service: IdeaService,
+) -> None:
+    """Tab from the tree should focus the scrollable content pane."""
+    service.create_idea("First", body="\n".join(f"Line {i}" for i in range(60)))
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        tree = panel.query_one("#idea-list", Tree)
+        view = screen.query_one("#content-panel", IdeaView)
+        view_container = view.query_one("#idea-view-container")
+
+        tree.focus()
+        await pilot.pause()
+        await pilot.press("tab")
+        await pilot.pause()
+
+        assert app.focused is view_container
+        assert view.has_focus_within
+
+
+@pytest.mark.asyncio
+async def test_main_screen_content_focus_scrolls_markdown(
+    service: IdeaService,
+) -> None:
+    """Focused content pane should respond to keyboard scrolling."""
+    service.create_idea("First", body="\n".join(f"Line {i}" for i in range(80)))
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        tree = panel.query_one("#idea-list", Tree)
+        view = screen.query_one("#content-panel", IdeaView)
+        view_container = view.query_one("#idea-view-container")
+
+        tree.focus()
+        await pilot.pause()
+        await pilot.press("tab")
+        await pilot.pause()
+
+        start_scroll = view_container.scroll_y
+        await pilot.press("down")
+        await pilot.pause()
+
+        assert app.focused is view_container
+        assert view_container.scroll_y > start_scroll
 
 
 @pytest.mark.asyncio
