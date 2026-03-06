@@ -108,7 +108,7 @@ class MainScreen(Screen[None]):
             "tab",
             "toggle_focus",
             "Switch Pane",
-            show=False,
+            show=True,
         ),
         Binding(
             "ctrl+b",
@@ -621,6 +621,13 @@ class MainScreen(Screen[None]):
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         search = panel.query_one("#search-input", Input)
         results = panel.query_one("#search-results", SearchResultsList)
+
+        if self.app.focused is search or panel.search_is_active():
+            bindings = {
+                key: binding
+                for key, binding in bindings.items()
+                if binding.binding.action != "toggle_focus"
+            }
 
         if self.app.focused is search and panel.search_is_active():
             bindings = {

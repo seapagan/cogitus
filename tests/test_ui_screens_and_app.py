@@ -1539,6 +1539,46 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_footer_shows_switch_pane_binding(
+    service: IdeaService,
+) -> None:
+    """Default footer should expose the pane-switch hint."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        bindings = screen.active_bindings
+        assert bindings["tab"].binding.description == "Switch Pane"
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_mode_hides_switch_pane_binding(
+    service: IdeaService,
+) -> None:
+    """Search input focus should hide the normal pane-switch footer hint."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+
+        screen.action_focus_search()
+        await pilot.pause()
+
+        bindings = screen.active_bindings
+        assert "tab" not in bindings
+
+        search.value = "First"
+        await _wait_for_search_active(pilot, search)
+        bindings = screen.active_bindings
+        assert "tab" not in bindings
+
+
+@pytest.mark.asyncio
 async def test_main_screen_cancel_search_closes_autocomplete_first(
     service: IdeaService,
 ) -> None:
@@ -1652,7 +1692,7 @@ async def test_main_screen_cancel_search_ignores_non_search_focus(
         view_container = content.query_one("#idea-view-container")
 
         search.value = "keep"
-        content.focus()
+        content.focus_content()
         await pilot.pause()
 
         screen.action_cancel_search()
@@ -2187,7 +2227,7 @@ async def test_main_screen_toggle_list_panel(
         content = screen.query_one("#content-panel", IdeaView)
         tree = panel.query_one("#idea-list", Tree)
 
-        content_focus = mocker.patch.object(content, "focus")
+        content_focus = mocker.patch.object(content, "focus_content")
         list_focus = mocker.patch.object(tree, "focus")
 
         assert not panel.has_class("collapsed")
@@ -2226,7 +2266,7 @@ async def test_main_screen_toggle_focus_commits_search_result_selection(
         search.value = "python"
         await _wait_for_search_results(pilot, search, results)
 
-        content.focus()
+        content.focus_content()
         await pilot.pause()
         screen.action_toggle_focus()
         await pilot.pause()
