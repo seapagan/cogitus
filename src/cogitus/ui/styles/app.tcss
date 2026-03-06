@@ -228,6 +228,7 @@ IdeaFormScreen {
 
 #form-buttons Button {
     min-width: 0;
+    padding: 0 1;
     margin: 0 1;
 }
 
@@ -263,6 +264,7 @@ ConfirmDialog {
 
 #confirm-buttons Button {
     min-width: 0;
+    padding: 0 1;
     margin: 0 1;
 }
 

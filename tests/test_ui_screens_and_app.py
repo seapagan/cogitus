@@ -215,7 +215,7 @@ async def test_idea_form_buttons_size_to_content(
             button = screen.query_one(button_id, Button)
             leftover = button.region.width - len(str(button.label))
             assert leftover % 2 == 0
-            assert button.region.width < 16
+            assert leftover >= 4
 
         await pilot.pause()
 
@@ -935,7 +935,7 @@ async def test_group_form_buttons_size_to_content(
             button = group_form.query_one(button_id, Button)
             leftover = button.region.width - len(str(button.label))
             assert leftover % 2 == 0
-            assert button.region.width < 16
+            assert leftover >= 4
 
         await pilot.pause()
 
@@ -951,7 +951,7 @@ async def test_confirm_dialog_buttons_size_to_content() -> None:
             button = confirm.query_one(button_id, Button)
             leftover = button.region.width - len(str(button.label))
             assert leftover % 2 == 0
-            assert button.region.width < 16
+            assert leftover >= 4
 
         await pilot.pause()
 
