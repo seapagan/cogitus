@@ -611,7 +611,7 @@ class MainScreen(Screen[None]):
                 and bool(panel.get_selected_idea())
             )
         if action == "footer_exit_search":
-            return self.app.focused is search and panel.search_is_active()
+            return self.app.focused is search
         return super().check_action(action, parameters)
 
     @property
@@ -629,7 +629,14 @@ class MainScreen(Screen[None]):
                 if binding.binding.action != "toggle_focus"
             }
 
-        if self.app.focused is search and panel.search_is_active():
+        if self.app.focused is search and not panel.search_is_active():
+            bindings = {
+                key: binding
+                for key, binding in bindings.items()
+                if binding.binding.action in self._SEARCH_INPUT_FOOTER_ACTIONS
+                and binding.binding.action == "footer_exit_search"
+            }
+        elif self.app.focused is search and panel.search_is_active():
             bindings = {
                 key: binding
                 for key, binding in bindings.items()

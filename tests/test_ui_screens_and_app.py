@@ -1571,6 +1571,11 @@ async def test_main_screen_search_mode_hides_switch_pane_binding(
 
         bindings = screen.active_bindings
         assert "tab" not in bindings
+        assert "slash" not in bindings
+        assert bindings["escape"].binding.description == "Exit Search"
+        assert {
+            binding.binding.description for binding in bindings.values()
+        } == {"Exit Search"}
 
         search.value = "First"
         await _wait_for_search_active(pilot, search)
