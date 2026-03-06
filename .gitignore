@@ -28,3 +28,6 @@ htmlcov/
 # local tool config
 .changelog_generator.toml
 site
+
+# local dev python version
+.python-version
