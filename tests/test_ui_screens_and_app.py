@@ -195,13 +195,19 @@ async def test_idea_form_screen_edit_and_buttons(
         save_action.assert_called_once()
         await pilot.click("#cancel-btn")
         cancel_action.assert_called_once()
+        await pilot.pause()
 
-        screen.query_one("#title-input", Input).value = "Original"
-        screen.query_one("#body-input", TextArea).text = "old"
-        screen.query_one("#tags-input", Input).value = "one, two"
-        dismiss.reset_mock()
-        IdeaFormScreen.action_cancel(screen)
-        dismiss.assert_called_once_with(None)
+    clean_screen = IdeaFormScreen(service, idea=updated)
+    app_clean = _SingleScreenApp(clean_screen)
+    async with app_clean.run_test() as pilot:
+        dismiss_clean = mocker.patch.object(clean_screen, "dismiss")
+        clean_screen.query_one("#title-input", Input).value = "Updated"
+        clean_screen.query_one("#body-input", TextArea).text = "new"
+        clean_screen.query_one("#tags-input", Input).value = "three"
+
+        IdeaFormScreen.action_cancel(clean_screen)
+
+        dismiss_clean.assert_called_once_with(None)
         await pilot.pause()
 
 
