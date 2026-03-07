@@ -154,6 +154,29 @@ class TestIdeaService:
         idea = service.create_idea("Test", group_pk=group.pk)
         assert idea.group.pk == group.pk
 
+    def test_rename_group(self, service: IdeaService) -> None:
+        """Existing groups can be renamed."""
+        group = service.create_group("backend")
+
+        renamed = service.rename_group(group.pk, "FrontEnd")
+
+        assert renamed is not None
+        assert renamed.name == "frontend"
+
+    def test_default_group_cannot_be_renamed(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Default group should remain protected from rename."""
+        default = next(
+            group
+            for group in service.list_groups()
+            if group.name == service.default_group_name
+        )
+
+        with pytest.raises(ValueError, match="cannot be renamed"):
+            service.rename_group(default.pk, "inbox")
+
     def test_update_idea_moves_group(self, service: IdeaService) -> None:
         """Existing idea can be moved between groups."""
         source = service.create_group("source")

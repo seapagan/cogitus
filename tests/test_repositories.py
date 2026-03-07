@@ -723,3 +723,41 @@ class TestGroupRepository:
 
         with pytest.raises(ValueError, match="already exists"):
             group_repo.get_or_create("backend")
+
+    def test_rename_group(self, group_repo: GroupRepository) -> None:
+        """Group rename updates the stored name."""
+        group = group_repo.create("backend")
+
+        renamed = group_repo.rename(group.pk, "FrontEnd")
+
+        assert renamed is not None
+        assert renamed.name == "frontend"
+        assert group_repo.find_by_name("frontend") is not None
+
+    def test_rename_group_rejects_duplicate(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Renaming to an existing group name should fail."""
+        source = group_repo.create("source")
+        group_repo.create("target")
+
+        with pytest.raises(ValueError, match="already exists"):
+            group_repo.rename(source.pk, "target")
+
+    def test_rename_group_rejects_empty_name(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Renaming to an empty name should fail."""
+        group = group_repo.create("backend")
+
+        with pytest.raises(ValueError, match="cannot be empty"):
+            group_repo.rename(group.pk, "   ")
+
+    def test_rename_group_missing_returns_none(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Renaming a missing group should return None."""
+        assert group_repo.rename(99999, "backend") is None

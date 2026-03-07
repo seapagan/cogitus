@@ -19,6 +19,7 @@ from cogitus.ui.screens.idea_form_screen import (
     GroupFormScreen,
     HelpScreen,
     IdeaFormScreen,
+    NameInputScreen,
 )
 from cogitus.ui.screens.main_screen import MainScreen
 from cogitus.ui.widgets.idea_list import IdeaListPanel
@@ -1120,6 +1121,38 @@ async def test_group_form_buttons_size_to_content(
 
 
 @pytest.mark.asyncio
+async def test_name_input_screen_prefills_and_validates(
+    mocker: MockerFixture,
+) -> None:
+    """Name input modal should preload text and validate empty input."""
+    screen = NameInputScreen(
+        title="Rename Idea",
+        initial_value="Old title",
+        placeholder="Idea title...",
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        name_input = screen.query_one("#name-input", Input)
+        assert name_input.value == "Old title"
+        assert name_input.cursor_position == len("Old title")
+
+        notify = mocker.patch.object(screen, "notify")
+        dismiss = mocker.patch.object(screen, "dismiss")
+
+        name_input.value = "   "
+        screen.action_save()
+        notify.assert_called_once_with("Name is required", severity="error")
+        dismiss.assert_not_called()
+
+        notify.reset_mock()
+        name_input.value = "Renamed"
+        screen.action_save()
+        dismiss.assert_called_once_with("Renamed")
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_confirm_dialog_buttons_size_to_content() -> None:
     """Confirm buttons should size to content with balanced padding."""
     confirm = ConfirmDialog("Are you sure?")
@@ -1145,6 +1178,18 @@ async def test_group_form_and_reassign_cancel_actions(
     async with app_group.run_test() as pilot:
         dismiss = mocker.patch.object(group_form, "dismiss")
         group_form.action_cancel()
+        dismiss.assert_called_once_with(None)
+        await pilot.pause()
+
+    name_input = NameInputScreen(
+        title="Rename Group",
+        initial_value="backend",
+        placeholder="Group name...",
+    )
+    app_name = _SingleScreenApp(name_input)
+    async with app_name.run_test() as pilot:
+        dismiss = mocker.patch.object(name_input, "dismiss")
+        name_input.action_cancel()
         dismiss.assert_called_once_with(None)
         await pilot.pause()
 
@@ -1391,6 +1436,43 @@ async def test_main_screen_create_edit_delete_and_form_result(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_rename_idea_actions(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Rename should open idea flow and handle empty selection branches."""
+    first = service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        push = mocker.patch.object(app, "push_screen")
+        notify = mocker.patch.object(screen, "notify")
+
+        mocker.patch.object(panel, "get_selected_group_pk", return_value=None)
+        mocker.patch.object(panel, "get_selected_idea", return_value=first)
+        screen.action_rename_selected()
+        assert isinstance(push.call_args.args[0], NameInputScreen)
+
+        push.reset_mock()
+        notify.reset_mock()
+        mocker.patch.object(panel, "get_selected_idea", return_value=None)
+        screen.action_rename_selected()
+        notify.assert_called_with(
+            "Nothing renameable selected",
+            severity="warning",
+        )
+
+        notify.reset_mock()
+        mocker.patch.object(panel, "get_selected_idea", return_value=first)
+        mocker.patch.object(screen._service, "get_idea", return_value=None)
+        screen.action_rename_selected()
+        notify.assert_called_with("Idea not found", severity="error")
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_new_idea_uses_contextual_group_selection(
     service: IdeaService,
     mocker: MockerFixture,
@@ -1532,6 +1614,34 @@ async def test_main_screen_group_actions(
             "Default group cannot be deleted",
             severity="warning",
         )
+
+        push.reset_mock()
+        notify.reset_mock()
+        mocker.patch.object(
+            panel,
+            "get_selected_group_pk",
+            return_value=backend.pk,
+        )
+        screen.action_rename_selected()
+        assert isinstance(push.call_args.args[0], NameInputScreen)
+
+        default = next(
+            group
+            for group in service.list_groups()
+            if group.name == service.default_group_name
+        )
+        push.reset_mock()
+        notify.reset_mock()
+        mocker.patch.object(
+            panel,
+            "get_selected_group_pk",
+            return_value=default.pk,
+        )
+        screen.action_rename_selected()
+        notify.assert_called_with(
+            "Default group cannot be renamed",
+            severity="warning",
+        )
         await pilot.pause()
 
 
@@ -1598,8 +1708,10 @@ async def test_main_screen_refresh_with_ideas_and_no_selected_idea(
         await pilot.pause()
 
 
-def test_main_screen_group_helper_branches(mocker: MockerFixture) -> None:
-    """Internal group callbacks should cover all branch paths."""
+def _main_screen_callback_test_context(
+    mocker: MockerFixture,
+) -> tuple[MainScreen, Any, Any, Any]:
+    """Return a screen with mocked service and common assertions hooks."""
     # These callbacks are intentionally exercised without mounting the screen.
     # If callbacks start querying widgets, this test should be converted to
     # a mounted async screen test.
@@ -1609,6 +1721,16 @@ def test_main_screen_group_helper_branches(mocker: MockerFixture) -> None:
     screen._service = service_mock
     notify = mocker.patch.object(screen, "notify")
     refresh = mocker.patch.object(screen, "refresh_ideas")
+    return screen, service_mock, notify, refresh
+
+
+def test_main_screen_group_form_and_delete_callbacks(
+    mocker: MockerFixture,
+) -> None:
+    """Group create/delete callbacks should handle success and errors."""
+    screen, service_mock, notify, refresh = _main_screen_callback_test_context(
+        mocker
+    )
 
     screen._on_group_form_dismiss(None)
     notify.assert_not_called()
@@ -1643,6 +1765,15 @@ def test_main_screen_group_helper_branches(mocker: MockerFixture) -> None:
     notify.assert_called_with("boom", severity="error")
     refresh.assert_not_called()
 
+
+def test_main_screen_group_reassign_and_rename_callbacks(
+    mocker: MockerFixture,
+) -> None:
+    """Group rename and move/delete callbacks should refresh correctly."""
+    screen, service_mock, notify, refresh = _main_screen_callback_test_context(
+        mocker
+    )
+
     # reassign: target None
     notify.reset_mock()
     refresh.reset_mock()
@@ -1660,6 +1791,74 @@ def test_main_screen_group_helper_branches(mocker: MockerFixture) -> None:
     screen._on_delete_group_reassign(1, 2)
     notify.assert_called_with("Group deleted and ideas moved")
     refresh.assert_called_once()
+
+    # group rename
+    notify.reset_mock()
+    refresh.reset_mock()
+    screen._on_group_rename_dismiss(1, None)
+    notify.assert_not_called()
+    refresh.assert_not_called()
+
+    notify.reset_mock()
+    refresh.reset_mock()
+    renamed_group = mocker.Mock()
+    renamed_group.pk = 3
+    service_mock.rename_group.return_value = renamed_group
+    screen._on_group_rename_dismiss(1, "renamed")
+    service_mock.rename_group.assert_called_once_with(1, "renamed")
+    notify.assert_called_with("Group renamed")
+    refresh.assert_called_once_with(select_group_pk=3)
+
+    notify.reset_mock()
+    refresh.reset_mock()
+    service_mock.rename_group.reset_mock()
+    service_mock.rename_group.return_value = None
+    screen._on_group_rename_dismiss(1, "missing")
+    notify.assert_called_with("Group not found", severity="error")
+    refresh.assert_not_called()
+
+
+def test_main_screen_idea_rename_callbacks(
+    mocker: MockerFixture,
+) -> None:
+    """Idea rename callback should cover cancel, success, and missing idea."""
+    screen, service_mock, notify, refresh = _main_screen_callback_test_context(
+        mocker
+    )
+
+    # idea rename
+    notify.reset_mock()
+    refresh.reset_mock()
+    screen._on_idea_rename_dismiss(1, None)
+    notify.assert_not_called()
+    refresh.assert_not_called()
+
+    notify.reset_mock()
+    refresh.reset_mock()
+    idea = mocker.Mock()
+    idea.body = "body"
+    idea.group.pk = 7
+    renamed_idea = mocker.Mock()
+    renamed_idea.pk = 4
+    service_mock.get_idea.return_value = idea
+    service_mock.update_idea.return_value = renamed_idea
+    screen._on_idea_rename_dismiss(1, "renamed idea")
+    service_mock.update_idea.assert_called_once_with(
+        1,
+        "renamed idea",
+        "body",
+        group_pk=7,
+    )
+    notify.assert_called_with("Idea renamed")
+    refresh.assert_called_once_with(select_pk=4)
+
+    notify.reset_mock()
+    refresh.reset_mock()
+    service_mock.get_idea.reset_mock()
+    service_mock.get_idea.return_value = None
+    screen._on_idea_rename_dismiss(1, "missing")
+    notify.assert_called_with("Idea not found", severity="error")
+    refresh.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -2347,6 +2546,7 @@ async def test_main_screen_search_input_disables_non_search_actions(
             "delete_group",
             "delete_idea",
             "edit_idea",
+            "rename_selected",
             "copy_idea_body",
         ):
             assert screen.check_action(action, ()) is False
@@ -2383,19 +2583,22 @@ async def test_main_screen_search_results_disable_structural_actions_only(
         ):
             assert screen.check_action(action, ()) is False
         assert screen.check_action("edit_idea", ()) is True
+        assert screen.check_action("rename_selected", ()) is True
         assert screen.check_action("copy_idea_body", ()) is True
 
         new_idea = mocker.patch.object(screen, "action_new_idea")
         delete_idea = mocker.patch.object(screen, "action_delete_idea")
         edit_idea = mocker.patch.object(screen, "action_edit_idea")
+        rename_selected = mocker.patch.object(screen, "action_rename_selected")
         copy_idea_body = mocker.patch.object(screen, "action_copy_idea_body")
 
-        await pilot.press("n", "d", "e", "y")
+        await pilot.press("n", "d", "e", "r", "y")
         await pilot.pause()
 
         new_idea.assert_not_called()
         delete_idea.assert_not_called()
         edit_idea.assert_called_once_with()
+        rename_selected.assert_called_once_with()
         copy_idea_body.assert_called_once_with()
 
 
