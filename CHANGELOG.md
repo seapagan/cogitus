@@ -15,8 +15,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 **Bug Fixes**
 
+- Confirm before discarding dirty idea edits ([#34](https://github.com/seapagan/cogitus/pull/34)) by [seapagan](https://github.com/seapagan)
+- Fix content pane keyboard focus and footer hints ([#32](https://github.com/seapagan/cogitus/pull/32)) by [seapagan](https://github.com/seapagan)
+- Fix modal button layout ([#31](https://github.com/seapagan/cogitus/pull/31)) by [seapagan](https://github.com/seapagan)
 - Fix idea form tag autocomplete visibility ([#30](https://github.com/seapagan/cogitus/pull/30)) by [seapagan](https://github.com/seapagan)
 - Fix search selection state handling ([#29](https://github.com/seapagan/cogitus/pull/29)) by [seapagan](https://github.com/seapagan)
+
+**Dependency Updates**
+
+- Upgrade textual to 8.x ([#33](https://github.com/seapagan/cogitus/pull/33)) by [seapagan](https://github.com/seapagan)
 
 [`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.5.0...HEAD) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.5.0...HEAD.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.5.0...HEAD.patch)
 
