@@ -551,11 +551,20 @@ class IdeaFormScreen(ModalScreen[int | None]):
             return
         self._restore_focus_after_cancel_reject()
 
+    @staticmethod
+    def _editable_focus_target(widget: Widget | None) -> Widget | None:
+        """Return a focus target only for editable form controls."""
+        if isinstance(widget, (Input, Select, CogitusTextArea)):
+            return widget
+        return None
+
     def _confirm_discard_changes(self) -> None:
         """Prompt before discarding unsaved edit changes."""
         focused = self.app.focused
         if focused is not None and focused.screen is self:
-            self._focus_after_cancel_reject = focused
+            self._focus_after_cancel_reject = self._editable_focus_target(
+                focused
+            )
         else:
             self._focus_after_cancel_reject = None
         self.app.push_screen(

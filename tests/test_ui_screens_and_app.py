@@ -668,6 +668,36 @@ async def test_idea_form_discard_confirm_without_focused_widget(
 
 
 @pytest.mark.asyncio
+async def test_idea_form_discard_confirm_ignores_button_focus_target(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Discard confirm should not restore focus to the cancel button."""
+    idea = service.create_idea("Original", body="abcdef")
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        body = screen.query_one("#body-input", CogitusTextArea)
+        cancel = screen.query_one("#cancel-btn", Button)
+        push_screen = mocker.patch.object(app, "push_screen")
+
+        body.focus()
+        body.text = "changed body"
+        await pilot.pause()
+
+        cancel.focus()
+        await pilot.pause()
+
+        screen._confirm_discard_changes()
+
+        assert app.focused is cancel
+        assert screen._focus_after_cancel_reject is None
+        push_screen.assert_called_once()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_idea_form_blur_defers_for_tag_option_selection(
     service: IdeaService,
 ) -> None:
