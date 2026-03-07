@@ -873,7 +873,7 @@ class HelpScreen(ModalScreen[None]):
         "  Enter            Accept tag suggestion\n"
         "  ,                Accept suggestion and add next tag\n"
         "  y (selection)    Copy selected text\n"
-        "  Escape           Cancel\n"
+        "  Escape           Cancel (confirm if edit is dirty)\n"
         "\n"
         "[bold]General[/bold]\n"
         "  ?                Toggle this help\n"

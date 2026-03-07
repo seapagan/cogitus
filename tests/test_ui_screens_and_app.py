@@ -1128,6 +1128,9 @@ async def test_group_form_and_reassign_cancel_actions(
 async def test_help_screen_close_action(mocker: MockerFixture) -> None:
     """Help modal close action should dismiss correctly."""
     help_screen = HelpScreen()
+    assert "Escape           Cancel (confirm if edit is dirty)" in (
+        help_screen.HELP_TEXT
+    )
     app2 = _SingleScreenApp(help_screen)
     async with app2.run_test() as pilot:
         dismiss = mocker.patch.object(help_screen, "dismiss")
