@@ -9,7 +9,6 @@ Ideas to add to Cogitus
 - continue navigation and keybinding polish.
 - add in-place right-pane markdown edit mode (view/edit toggle).
 - add contextual dynamic toolbar/actions by mode.
-- add ability to rename a group
 - add toggle and hotkey for the left tree to expand/collapse all. `space` does
   this for the individual nodes, but it would be good to have a toggle that does
   all (only to the group level, not the root node). Similarly, should the root
