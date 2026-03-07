@@ -195,6 +195,24 @@ class MainScreen(Screen[None]):
         view = self.query_one("#content-panel", IdeaView)
         grouped_ideas = self._service.list_ideas_grouped(None)
         panel.load_grouped_ideas(grouped_ideas)
+        self._refresh_grouped_ideas(
+            panel,
+            view,
+            grouped_ideas=grouped_ideas,
+            select_pk=select_pk,
+            select_group_pk=select_group_pk,
+        )
+
+    def _refresh_grouped_ideas(
+        self,
+        panel: IdeaListPanel,
+        view: IdeaView,
+        *,
+        grouped_ideas: list[tuple[Group, list[Idea]]],
+        select_pk: int | None,
+        select_group_pk: int | None,
+    ) -> None:
+        """Refresh normal grouped-idea tree state and right-pane preview."""
         has_ideas = any(group_ideas for _, group_ideas in grouped_ideas)
         if has_ideas:
             if select_pk is not None:
