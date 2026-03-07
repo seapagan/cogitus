@@ -33,7 +33,7 @@
 | Key         | Action                                             |
 | ----------- | -------------------------------------------------- |
 | `Ctrl+s`    | Save                                               |
-| `Esc`       | Cancel                                             |
+| `Esc`       | Cancel, with confirmation if the edit is dirty     |
 | `Tab`       | Next field (or cycle tag suggestions when visible) |
 | `Shift+Tab` | Previous field (or reverse-cycle tag suggestions)  |
 | `Enter`     | Accept highlighted tag suggestion (tags field)     |
