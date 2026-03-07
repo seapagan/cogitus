@@ -255,6 +255,21 @@ async def test_idea_form_screen_invalid_group_selection(
         await pilot.pause()
 
 
+def test_idea_form_restore_focus_after_cancel_reject_noop_without_target(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Focus restore should no-op when no pre-confirm target was stored."""
+    screen = IdeaFormScreen(service)
+
+    call_after_refresh = mocker.patch.object(screen, "call_after_refresh")
+    screen._focus_after_cancel_reject = None
+
+    screen._restore_focus_after_cancel_reject()
+
+    call_after_refresh.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_idea_form_tags_group_row_responsive_layout(
     service: IdeaService,
@@ -626,6 +641,30 @@ async def test_idea_form_escape_still_closes_autocomplete_before_dirty_confirm(
         await pilot.press("escape")
         await pilot.pause()
         assert isinstance(app.screen, ConfirmDialog)
+
+
+@pytest.mark.asyncio
+async def test_idea_form_discard_confirm_without_focused_widget(
+    service: IdeaService,
+    mocker: MockerFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Discard confirm should cope when the form has no focused widget."""
+    idea = service.create_idea("Original", body="abcdef")
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        push_screen = mocker.patch.object(app, "push_screen")
+        monkeypatch.setattr(type(app), "focused", property(lambda _self: None))
+
+        screen._confirm_discard_changes()
+
+        assert screen._focus_after_cancel_reject is None
+        push_screen.assert_called_once()
+        confirm = push_screen.call_args.args[0]
+        assert isinstance(confirm, ConfirmDialog)
+        await pilot.pause()
 
 
 @pytest.mark.asyncio
