@@ -131,6 +131,7 @@ cogitus
 
 - `n`: New idea
 - `e`: Edit selected idea
+- `r`: Rename selected idea or group
 - `d`: Delete selected idea
 - `g`: New group
 - `Shift+G`: Delete selected group

@@ -21,7 +21,8 @@ The app opens with:
 4. Select ideas in the tree and press `e` to edit.
    Pressing `Esc` or choosing Cancel with unsaved edit changes asks for
    confirmation before closing the form.
-5. Press `d` to delete an idea (with confirmation).
+5. Select an idea or group and press `r` to rename it.
+6. Press `d` to delete an idea (with confirmation).
 
 ## Search
 
