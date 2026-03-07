@@ -21,6 +21,7 @@ from cogitus.ui.widgets.text_area import CogitusTextArea
 if TYPE_CHECKING:
     from textual.app import ComposeResult
     from textual.events import Key, Resize
+    from textual.widget import Widget
 
     from cogitus.models.idea import Idea
     from cogitus.services.idea_service import IdeaService
@@ -33,6 +34,16 @@ class _TagAutocompleteState:
     candidates: tuple[str, ...]
     replace_start: int
     replace_end: int
+
+
+@dataclass(frozen=True)
+class _IdeaFormState:
+    """Normalized form state used for unsaved-change detection."""
+
+    title: str
+    body: str
+    tags: tuple[str, ...]
+    group_pk: int | None
 
 
 class TagsInput(Input):
@@ -97,6 +108,8 @@ class IdeaFormScreen(ModalScreen[int | None]):
         self._tag_usage_by_name: tuple[tuple[str, int], ...] = ()
         self._tag_autocomplete_state: _TagAutocompleteState | None = None
         self._suspend_tag_autocomplete_sync = False
+        self._initial_form_state = self._build_initial_form_state(idea)
+        self._focus_after_cancel_reject: Widget | None = None
 
     def compose(self) -> ComposeResult:
         """Compose the idea form."""
@@ -463,6 +476,95 @@ class IdeaFormScreen(ModalScreen[int | None]):
         line_prefix_len = sum(len(line) + 1 for line in lines[:line_no])
         return min(len(text), line_prefix_len + column)
 
+    @staticmethod
+    def _normalize_title(title: str) -> str:
+        """Normalize title for dirty-state comparison."""
+        return title.strip()
+
+    @staticmethod
+    def _normalize_tags(tags: list[str]) -> tuple[str, ...]:
+        """Normalize tags to match save-time semantics."""
+        seen: set[str] = set()
+        result: list[str] = []
+        for tag in tags:
+            normalized = tag.strip().lower()
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                result.append(normalized)
+        return tuple(result)
+
+    def _build_initial_form_state(
+        self,
+        idea: Idea | None,
+    ) -> _IdeaFormState | None:
+        """Build the initial edit snapshot for unsaved-change checks."""
+        if idea is None:
+            return None
+        return _IdeaFormState(
+            title=self._normalize_title(idea.title),
+            body=idea.body,
+            tags=self._normalize_tags(
+                [tag.name for tag in idea.tags.fetch_all()]
+            ),
+            group_pk=idea.group.pk,
+        )
+
+    def _current_form_state(self) -> _IdeaFormState:
+        """Return the normalized current state of the form."""
+        group_value = self.query_one("#group-select", Select).value
+        group_pk = group_value if isinstance(group_value, int) else None
+        return _IdeaFormState(
+            title=self._normalize_title(
+                self.query_one("#title-input", Input).value
+            ),
+            body=self.query_one("#body-input", CogitusTextArea).text,
+            tags=self._normalize_tags(
+                self.query_one("#tags-input", Input).value.split(",")
+            ),
+            group_pk=group_pk,
+        )
+
+    def _has_unsaved_changes(self) -> bool:
+        """Return whether the edit form differs from its initial state."""
+        if self._initial_form_state is None:
+            return False
+        return self._current_form_state() != self._initial_form_state
+
+    def _dismiss_canceled_form(self) -> None:
+        """Persist edit cursor state and close the form."""
+        self._persist_edit_cursor_position()
+        self.dismiss(None)
+
+    def _restore_focus_after_cancel_reject(self) -> None:
+        """Restore focus to the pre-confirmation widget when possible."""
+        focus_target = self._focus_after_cancel_reject
+        self._focus_after_cancel_reject = None
+        if focus_target is None or focus_target.screen is not self:
+            return
+        self.call_after_refresh(focus_target.focus)
+
+    def _on_discard_confirm(self, *, confirmed: bool) -> None:
+        """Handle the discard-changes confirmation result."""
+        if confirmed:
+            self._focus_after_cancel_reject = None
+            self._dismiss_canceled_form()
+            return
+        self._restore_focus_after_cancel_reject()
+
+    def _confirm_discard_changes(self) -> None:
+        """Prompt before discarding unsaved edit changes."""
+        focused = self.app.focused
+        if focused is not None and focused.screen is self:
+            self._focus_after_cancel_reject = focused
+        else:
+            self._focus_after_cancel_reject = None
+        self.app.push_screen(
+            ConfirmDialog("Discard unsaved changes?"),
+            callback=lambda confirmed: self._on_discard_confirm(
+                confirmed=confirmed
+            ),
+        )
+
     def _get_existing_tags(self) -> str:
         """Get comma-separated tags from the idea."""
         if self._idea is None:
@@ -554,8 +656,10 @@ class IdeaFormScreen(ModalScreen[int | None]):
 
     def action_cancel(self) -> None:
         """Cancel and dismiss."""
-        self._persist_edit_cursor_position()
-        self.dismiss(None)
+        if self._has_unsaved_changes():
+            self._confirm_discard_changes()
+            return
+        self._dismiss_canceled_form()
 
 
 class ConfirmDialog(ModalScreen[bool]):

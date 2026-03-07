@@ -196,6 +196,9 @@ async def test_idea_form_screen_edit_and_buttons(
         await pilot.click("#cancel-btn")
         cancel_action.assert_called_once()
 
+        screen.query_one("#title-input", Input).value = "Original"
+        screen.query_one("#body-input", TextArea).text = "old"
+        screen.query_one("#tags-input", Input).value = "one, two"
         dismiss.reset_mock()
         IdeaFormScreen.action_cancel(screen)
         dismiss.assert_called_once_with(None)
@@ -522,6 +525,107 @@ async def test_idea_form_escape_closes_tags_autocomplete_before_cancel(
         await pilot.press("escape")
         await pilot.pause()
         dismiss.assert_called_once_with(None)
+
+
+@pytest.mark.asyncio
+async def test_idea_form_cancel_confirms_before_discarding_dirty_edit(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Dirty edit cancel should require explicit discard confirmation."""
+    idea = service.create_idea("Original", body="abcdef", tags=["one"])
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+        set_cursor = mocker.patch.object(service, "set_idea_cursor_position")
+        push_screen = mocker.patch.object(app, "push_screen")
+        body = screen.query_one("#body-input", CogitusTextArea)
+        body.text = "changed"
+        body.cursor_location = screen._cursor_location_from_index(body.text, 4)
+
+        screen.action_cancel()
+
+        dismiss.assert_not_called()
+        set_cursor.assert_not_called()
+        push_screen.assert_called_once()
+        confirm = push_screen.call_args.args[0]
+        callback = push_screen.call_args.kwargs["callback"]
+
+        assert isinstance(confirm, ConfirmDialog)
+
+        callback(False)
+        dismiss.assert_not_called()
+        set_cursor.assert_not_called()
+
+        callback(True)
+        dismiss.assert_called_once_with(None)
+        set_cursor.assert_called_once_with(idea.pk, 4)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_escape_rejects_discard_and_restores_edit_focus(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Esc in discard confirm should resume editing without data loss."""
+    idea = service.create_idea("Original", body="abcdef")
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+        set_cursor = mocker.patch.object(service, "set_idea_cursor_position")
+        body = screen.query_one("#body-input", CogitusTextArea)
+
+        body.focus()
+        body.text = "changed body"
+        await pilot.pause()
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmDialog)
+
+        await pilot.press("escape")
+        await pilot.pause()
+
+        assert cast("object", app.screen) is screen
+        assert body.text == "changed body"
+        assert app.focused is body
+        dismiss.assert_not_called()
+        set_cursor.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_escape_still_closes_autocomplete_before_dirty_confirm(
+    service: IdeaService,
+) -> None:
+    """Autocomplete dismissal should still win before discard confirm."""
+    idea = service.create_idea("Original", body="old", tags=["alpha"])
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+        screen.query_one("#body-input", CogitusTextArea).text = "changed"
+
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert autocomplete.has_class("-hidden")
+        assert app.screen is screen
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmDialog)
 
 
 @pytest.mark.asyncio
