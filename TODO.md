@@ -9,6 +9,11 @@ Ideas to add to Cogitus
 - continue navigation and keybinding polish.
 - add in-place right-pane markdown edit mode (view/edit toggle).
 - add contextual dynamic toolbar/actions by mode.
+- add ability to rename a group
+- add toggle and hotkey for the left tree to expand/collapse all. `space` does
+  this for the individual nodes, but it would be good to have a toggle that does
+  all (only to the group level, not the root node). Similarly, should the root
+  node (`Ideas`) be locked so it cant be manually collapsed?
 - add a tag management dialog with usage counts, rename/edit support, and
   explicit stale-tag pruning (selected/all stale with confirmation).
 - extract shared autocomplete lifecycle logic currently duplicated across
@@ -17,7 +22,13 @@ Ideas to add to Cogitus
 
 ## CLI
 
-None
+- add CLI commands to list, add and prune tags and groups
+
+## Database Layer
+
+- In the `db` module there are a few places where we still use raw SQL.
+  investigate how we can update `sqliter-py` to add missing functionality -
+  especially SQL `ALTER` and listing a helper to list indexes on fields/tables
 
 ## Tests
 
@@ -38,6 +49,8 @@ None
   inline match highlighting there.
 - optimize advanced search query execution to reduce multi-pass PK collection
   and re-fetch overhead as dataset size grows.
+- for search results, put the `group` on the same line as the title, maybe in
+  parethesis but defo dimmed as it is now
 
 ## Export, Import, and Backup
 
