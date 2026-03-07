@@ -376,41 +376,49 @@ class MainScreen(Screen[None]):
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         group_pk = panel.get_selected_group_pk()
         if group_pk is not None:
-            group = next(
-                (
-                    item
-                    for item in self._service.list_groups()
-                    if item.pk == group_pk
-                ),
-                None,
-            )
-            if group is None:
-                self.notify("Group not found", severity="error")
-                return
-            if group.name == self._service.default_group_name:
-                self.notify(
-                    "Default group cannot be renamed",
-                    severity="warning",
-                )
-                return
-            self.app.push_screen(
-                NameInputScreen(
-                    title="Rename Group",
-                    initial_value=group.name,
-                    placeholder="Group name...",
-                ),
-                callback=lambda name: self._on_group_rename_dismiss(
-                    group.pk,
-                    name,
-                ),
-            )
+            self._rename_selected_group(group_pk)
             return
 
         idea = panel.get_selected_idea()
         if idea is None:
             self.notify("Nothing renameable selected", severity="warning")
             return
-        fresh = self._service.get_idea(idea.pk)
+        self._rename_selected_idea(idea.pk)
+
+    def _rename_selected_group(self, group_pk: int) -> None:
+        """Open rename flow for a selected group."""
+        group = next(
+            (
+                item
+                for item in self._service.list_groups()
+                if item.pk == group_pk
+            ),
+            None,
+        )
+        if group is None:
+            self.notify("Group not found", severity="error")
+            return
+        if group.name == self._service.default_group_name:
+            self.notify(
+                "Default group cannot be renamed",
+                severity="warning",
+            )
+            return
+        self.app.push_screen(
+            NameInputScreen(
+                title="Rename Group",
+                initial_value=group.name,
+                placeholder="Group name...",
+            ),
+            callback=lambda name: self._on_group_rename_dismiss(
+                group.pk,
+                name,
+            ),
+        )
+
+    def _rename_selected_idea(self, idea_pk: int) -> None:
+        """Open rename flow for a selected idea."""
+        fresh = self._service.get_idea(idea_pk)
         if fresh is None:
             self.notify("Idea not found", severity="error")
             return
