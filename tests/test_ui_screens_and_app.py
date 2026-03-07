@@ -195,10 +195,19 @@ async def test_idea_form_screen_edit_and_buttons(
         save_action.assert_called_once()
         await pilot.click("#cancel-btn")
         cancel_action.assert_called_once()
+        await pilot.pause()
 
-        dismiss.reset_mock()
-        IdeaFormScreen.action_cancel(screen)
-        dismiss.assert_called_once_with(None)
+    clean_screen = IdeaFormScreen(service, idea=updated)
+    app_clean = _SingleScreenApp(clean_screen)
+    async with app_clean.run_test() as pilot:
+        dismiss_clean = mocker.patch.object(clean_screen, "dismiss")
+        clean_screen.query_one("#title-input", Input).value = "Updated"
+        clean_screen.query_one("#body-input", TextArea).text = "new"
+        clean_screen.query_one("#tags-input", Input).value = "three"
+
+        IdeaFormScreen.action_cancel(clean_screen)
+
+        dismiss_clean.assert_called_once_with(None)
         await pilot.pause()
 
 
@@ -250,6 +259,21 @@ async def test_idea_form_screen_invalid_group_selection(
         )
         dismiss.assert_not_called()
         await pilot.pause()
+
+
+def test_idea_form_restore_focus_after_cancel_reject_noop_without_target(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Focus restore should no-op when no pre-confirm target was stored."""
+    screen = IdeaFormScreen(service)
+
+    call_after_refresh = mocker.patch.object(screen, "call_after_refresh")
+    screen._focus_after_cancel_reject = None
+
+    screen._restore_focus_after_cancel_reject()
+
+    call_after_refresh.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -522,6 +546,161 @@ async def test_idea_form_escape_closes_tags_autocomplete_before_cancel(
         await pilot.press("escape")
         await pilot.pause()
         dismiss.assert_called_once_with(None)
+
+
+@pytest.mark.asyncio
+async def test_idea_form_cancel_confirms_before_discarding_dirty_edit(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Dirty edit cancel should require explicit discard confirmation."""
+    idea = service.create_idea("Original", body="abcdef", tags=["one"])
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+        set_cursor = mocker.patch.object(service, "set_idea_cursor_position")
+        push_screen = mocker.patch.object(app, "push_screen")
+        body = screen.query_one("#body-input", CogitusTextArea)
+        body.text = "changed"
+        body.cursor_location = screen._cursor_location_from_index(body.text, 4)
+
+        screen.action_cancel()
+
+        dismiss.assert_not_called()
+        set_cursor.assert_not_called()
+        push_screen.assert_called_once()
+        confirm = push_screen.call_args.args[0]
+        callback = push_screen.call_args.kwargs["callback"]
+
+        assert isinstance(confirm, ConfirmDialog)
+
+        callback(False)
+        dismiss.assert_not_called()
+        set_cursor.assert_not_called()
+
+        callback(True)
+        dismiss.assert_called_once_with(None)
+        set_cursor.assert_called_once_with(idea.pk, 4)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_escape_rejects_discard_and_restores_edit_focus(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Esc in discard confirm should resume editing without data loss."""
+    idea = service.create_idea("Original", body="abcdef")
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+        set_cursor = mocker.patch.object(service, "set_idea_cursor_position")
+        body = screen.query_one("#body-input", CogitusTextArea)
+
+        body.focus()
+        body.text = "changed body"
+        await pilot.pause()
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmDialog)
+
+        await pilot.press("escape")
+        await pilot.pause()
+
+        assert cast("object", app.screen) is screen
+        assert body.text == "changed body"
+        assert app.focused is body
+        dismiss.assert_not_called()
+        set_cursor.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_escape_still_closes_autocomplete_before_dirty_confirm(
+    service: IdeaService,
+) -> None:
+    """Autocomplete dismissal should still win before discard confirm."""
+    idea = service.create_idea("Original", body="old", tags=["alpha"])
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        tags_input = screen.query_one("#tags-input", Input)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+        screen.query_one("#body-input", CogitusTextArea).text = "changed"
+
+        tags_input.focus()
+        await pilot.pause()
+        await pilot.press("a")
+        await pilot.pause()
+        assert not autocomplete.has_class("-hidden")
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert autocomplete.has_class("-hidden")
+        assert app.screen is screen
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmDialog)
+
+
+@pytest.mark.asyncio
+async def test_idea_form_discard_confirm_without_focused_widget(
+    service: IdeaService,
+    mocker: MockerFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Discard confirm should cope when the form has no focused widget."""
+    idea = service.create_idea("Original", body="abcdef")
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        push_screen = mocker.patch.object(app, "push_screen")
+        monkeypatch.setattr(type(app), "focused", property(lambda _self: None))
+
+        screen._confirm_discard_changes()
+
+        assert screen._focus_after_cancel_reject is None
+        push_screen.assert_called_once()
+        confirm = push_screen.call_args.args[0]
+        assert isinstance(confirm, ConfirmDialog)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_discard_confirm_ignores_button_focus_target(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Discard confirm should not restore focus to the cancel button."""
+    idea = service.create_idea("Original", body="abcdef")
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        body = screen.query_one("#body-input", CogitusTextArea)
+        cancel = screen.query_one("#cancel-btn", Button)
+        push_screen = mocker.patch.object(app, "push_screen")
+
+        body.focus()
+        body.text = "changed body"
+        await pilot.pause()
+
+        cancel.focus()
+        await pilot.pause()
+
+        screen._confirm_discard_changes()
+
+        assert app.focused is cancel
+        assert screen._focus_after_cancel_reject is None
+        push_screen.assert_called_once()
+        await pilot.pause()
 
 
 @pytest.mark.asyncio
@@ -985,6 +1164,9 @@ async def test_group_form_and_reassign_cancel_actions(
 async def test_help_screen_close_action(mocker: MockerFixture) -> None:
     """Help modal close action should dismiss correctly."""
     help_screen = HelpScreen()
+    assert "Escape           Cancel (confirm if edit is dirty)" in (
+        help_screen.HELP_TEXT
+    )
     app2 = _SingleScreenApp(help_screen)
     async with app2.run_test() as pilot:
         dismiss = mocker.patch.object(help_screen, "dismiss")
