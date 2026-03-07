@@ -299,6 +299,19 @@ class IdeaListPanel(Vertical):
         self.refresh_bindings()
         return True
 
+    def select_group(self, group_pk: int) -> bool:
+        """Select a group node by primary key."""
+        if self.search_is_active():
+            return False
+        tree = self.query_one("#idea-list", Tree)
+        node = self._group_nodes_by_pk.get(group_pk)
+        if node is None:
+            return False
+        tree.select_node(node)
+        tree.move_cursor(node, animate=False)
+        self.refresh_bindings()
+        return True
+
     def get_selected_idea(self) -> Idea | None:
         """Return the currently selected idea."""
         if self.search_is_active():

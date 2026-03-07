@@ -35,6 +35,26 @@ class GroupRepository:
         """Return a group by primary key."""
         return self._db.get(Group, pk)
 
+    def rename(self, pk: int, name: str) -> Group | None:
+        """Rename an existing group."""
+        group = self.get(pk)
+        if group is None:
+            return None
+
+        normalized = name.strip().lower()
+        if not normalized:
+            msg = "Group name cannot be empty"
+            raise ValueError(msg)
+
+        existing = self.find_by_name(normalized)
+        if existing is not None and existing.pk != pk:
+            msg = f'Group "{normalized}" already exists'
+            raise ValueError(msg)
+
+        group.name = normalized
+        self._db.update(group)
+        return group
+
     def find_by_name(self, name: str) -> Group | None:
         """Find a group by exact name."""
         normalized = name.strip().lower()

@@ -23,6 +23,7 @@ from cogitus.ui.screens.idea_form_screen import (
     GroupFormScreen,
     HelpScreen,
     IdeaFormScreen,
+    NameInputScreen,
 )
 from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
@@ -52,6 +53,7 @@ class MainScreen(Screen[None]):
     _SEARCH_INPUT_DISABLED_ACTIONS: ClassVar[frozenset[str]] = frozenset(
         {
             "edit_idea",
+            "rename_selected",
             "copy_idea_body",
         }
     )
@@ -79,6 +81,7 @@ class MainScreen(Screen[None]):
             key_display="G",
         ),
         Binding("e", "edit_idea", "Edit", key_display="e"),
+        Binding("r", "rename_selected", "Rename", key_display="r"),
         Binding("d", "delete_idea", "Delete", key_display="d"),
         Binding("slash", "focus_search", "Search", key_display="/"),
         Binding("escape", "cancel_search", "Back", show=False),
@@ -168,7 +171,12 @@ class MainScreen(Screen[None]):
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         panel.browse_widget().focus()
 
-    def refresh_ideas(self, select_pk: int | None = None) -> None:
+    def refresh_ideas(
+        self,
+        select_pk: int | None = None,
+        *,
+        select_group_pk: int | None = None,
+    ) -> None:
         """Reload the idea list from the service."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         panel.set_autocomplete_sources(
@@ -191,6 +199,8 @@ class MainScreen(Screen[None]):
         if has_ideas:
             if select_pk is not None:
                 panel.select_idea(select_pk)
+            elif select_group_pk is not None:
+                panel.select_group(select_group_pk)
             selected = panel.get_selected_idea()
             if selected is not None:
                 self._set_selected_idea(selected.pk)
@@ -199,6 +209,8 @@ class MainScreen(Screen[None]):
                 self._set_selected_idea(None)
                 view.show_empty()
         else:
+            if select_group_pk is not None:
+                panel.select_group(select_group_pk)
             self._set_selected_idea(None)
             view.show_empty()
 
@@ -359,6 +371,61 @@ class MainScreen(Screen[None]):
             ),
         )
 
+    def action_rename_selected(self) -> None:
+        """Rename the currently selected group or idea."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        group_pk = panel.get_selected_group_pk()
+        if group_pk is not None:
+            group = next(
+                (
+                    item
+                    for item in self._service.list_groups()
+                    if item.pk == group_pk
+                ),
+                None,
+            )
+            if group is None:
+                self.notify("Group not found", severity="error")
+                return
+            if group.name == self._service.default_group_name:
+                self.notify(
+                    "Default group cannot be renamed",
+                    severity="warning",
+                )
+                return
+            self.app.push_screen(
+                NameInputScreen(
+                    title="Rename Group",
+                    initial_value=group.name,
+                    placeholder="Group name...",
+                ),
+                callback=lambda name: self._on_group_rename_dismiss(
+                    group.pk,
+                    name,
+                ),
+            )
+            return
+
+        idea = panel.get_selected_idea()
+        if idea is None:
+            self.notify("Nothing renameable selected", severity="warning")
+            return
+        fresh = self._service.get_idea(idea.pk)
+        if fresh is None:
+            self.notify("Idea not found", severity="error")
+            return
+        self.app.push_screen(
+            NameInputScreen(
+                title="Rename Idea",
+                initial_value=fresh.title,
+                placeholder="Idea title...",
+            ),
+            callback=lambda title: self._on_idea_rename_dismiss(
+                fresh.pk,
+                title,
+            ),
+        )
+
     def action_delete_group(self) -> None:
         """Delete selected group with optional bulk move."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
@@ -481,6 +548,49 @@ class MainScreen(Screen[None]):
         if result is not None:
             self.notify("Group created")
             self.refresh_ideas()
+
+    def _on_group_rename_dismiss(
+        self,
+        group_pk: int,
+        name: str | None,
+    ) -> None:
+        """Handle group rename flow completion."""
+        if name is None:
+            return
+        try:
+            renamed = self._service.rename_group(group_pk, name)
+        except ValueError as exc:
+            self.notify(str(exc), severity="error")
+            return
+        if renamed is None:
+            self.notify("Group not found", severity="error")
+            return
+        self.notify("Group renamed")
+        self.refresh_ideas(select_group_pk=renamed.pk)
+
+    def _on_idea_rename_dismiss(
+        self,
+        idea_pk: int,
+        title: str | None,
+    ) -> None:
+        """Handle idea rename flow completion."""
+        if title is None:
+            return
+        idea = self._service.get_idea(idea_pk)
+        if idea is None:
+            self.notify("Idea not found", severity="error")
+            return
+        renamed = self._service.update_idea(
+            idea_pk,
+            title,
+            idea.body,
+            group_pk=idea.group.pk,
+        )
+        if renamed is None:
+            self.notify("Idea not found", severity="error")
+            return
+        self.notify("Idea renamed")
+        self.refresh_ideas(select_pk=renamed.pk)
 
     def _on_delete_group_confirm(
         self,
@@ -612,7 +722,20 @@ class MainScreen(Screen[None]):
             )
         if action == "footer_exit_search":
             return self.app.focused is search
+        if action == "rename_selected":
+            return self._can_rename_selection()
         return super().check_action(action, parameters)
+
+    def _can_rename_selection(self) -> bool:
+        """Return whether the current focus/selection supports rename."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+
+        if self.app.focused is search:
+            return False
+        if panel.get_selected_group_pk() is not None:
+            return True
+        return panel.get_selected_idea() is not None
 
     @property
     def active_bindings(self) -> dict[str, ActiveBinding]:

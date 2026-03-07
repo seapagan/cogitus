@@ -199,6 +199,19 @@ class IdeaService:
         """Create a new group."""
         return self._group_repo.create(name)
 
+    def rename_group(self, pk: int, name: str) -> Group | None:
+        """Rename an existing group."""
+        group = self._group_repo.get(pk)
+        if group is None:
+            return None
+        if group.name == self._default_group_name:
+            msg = "Default group cannot be renamed"
+            raise ValueError(msg)
+        renamed = self._group_repo.rename(pk, name)
+        if renamed is not None:
+            self._idea_repo.rebuild_search_index()
+        return renamed
+
     def has_ideas_in_group(self, group_pk: int) -> bool:
         """Return whether the given group currently contains ideas."""
         return self._idea_repo.has_for_group(group_pk)
