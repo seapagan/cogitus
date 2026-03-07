@@ -2721,6 +2721,31 @@ async def test_main_screen_can_rename_selection_false_when_search_focused(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_can_rename_selection_false_for_default_group(
+    service: IdeaService,
+) -> None:
+    """Default-group selection should not advertise rename availability."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        default = next(
+            group
+            for group in service.list_groups()
+            if group.name == service.default_group_name
+        )
+        tree = panel.query_one("#idea-list", Tree)
+        group_node = panel._group_nodes_by_pk[default.pk]
+        tree.select_node(group_node)
+        tree.move_cursor(group_node, animate=False)
+        await pilot.pause()
+
+        assert screen._can_rename_selection() is False
+        assert screen.check_action("rename_selected", ()) is False
+
+
+@pytest.mark.asyncio
 async def test_main_screen_search_results_disable_structural_actions_only(
     service: IdeaService,
     mocker: MockerFixture,

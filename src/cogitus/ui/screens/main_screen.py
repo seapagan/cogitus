@@ -759,8 +759,20 @@ class MainScreen(Screen[None]):
 
         if self.app.focused is search:
             return False
-        if panel.get_selected_group_pk() is not None:
-            return True
+        group_pk = panel.get_selected_group_pk()
+        if group_pk is not None:
+            group = next(
+                (
+                    item
+                    for item in self._service.list_groups()
+                    if item.pk == group_pk
+                ),
+                None,
+            )
+            return (
+                group is not None
+                and group.name != self._service.default_group_name
+            )
         return panel.get_selected_idea() is not None
 
     @property
