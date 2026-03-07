@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqliter.exceptions import RecordInsertionError
+from sqliter.exceptions import RecordInsertionError, RecordUpdateError
 
 from cogitus.models.group import Group
 
@@ -52,7 +52,11 @@ class GroupRepository:
             raise ValueError(msg)
 
         group.name = normalized
-        self._db.update(group)
+        try:
+            self._db.update(group)
+        except RecordUpdateError as exc:
+            msg = f'Group "{normalized}" already exists'
+            raise ValueError(msg) from exc
         return group
 
     def find_by_name(self, name: str) -> Group | None:

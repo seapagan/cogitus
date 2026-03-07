@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from sqliter.exceptions import RecordInsertionError
+from sqliter.exceptions import RecordInsertionError, RecordUpdateError
 
 from cogitus.models import Idea
 from cogitus.repositories.idea_repo import IdeaRepository
@@ -761,3 +761,19 @@ class TestGroupRepository:
     ) -> None:
         """Renaming a missing group should return None."""
         assert group_repo.rename(99999, "backend") is None
+
+    def test_rename_group_translates_update_race(
+        self,
+        group_repo: GroupRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Update races should surface as duplicate-name ValueErrors."""
+        group = group_repo.create("backend")
+        mocker.patch.object(
+            group_repo._db,
+            "update",
+            side_effect=RecordUpdateError("update failed"),
+        )
+
+        with pytest.raises(ValueError, match='Group "frontend" already exists'):
+            group_repo.rename(group.pk, "frontend")
