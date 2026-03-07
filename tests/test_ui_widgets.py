@@ -353,6 +353,29 @@ async def test_idea_list_panel_remaining_branches(
 
 
 @pytest.mark.asyncio
+async def test_idea_list_panel_select_group_branches(
+    service: IdeaService,
+) -> None:
+    """Group selection helper should cover missing, success, and search."""
+    backend = service.create_group("backend")
+    service.create_idea("Grouped", group_pk=backend.pk)
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        await pilot.pause()
+
+        assert panel.select_group(999999) is False
+        assert panel.select_group(backend.pk) is True
+        assert panel.get_selected_group_pk() == backend.pk
+
+        panel.query_one("#search-input", Input).value = "grouped"
+        await pilot.pause()
+        assert panel.select_group(backend.pk) is False
+
+
+@pytest.mark.asyncio
 async def test_idea_list_panel_search_autocomplete_flow(
     service: IdeaService,
 ) -> None:

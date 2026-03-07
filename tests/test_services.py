@@ -72,6 +72,21 @@ class TestIdeaService:
         assert fetched is not None
         assert fetched.title == "Test"
 
+    def test_get_idea_with_relations(self, service: IdeaService) -> None:
+        """Idea relations should be available from eager-loading helper."""
+        group = service.create_group("backend")
+        idea = service.create_idea(
+            "Test",
+            tags=["python"],
+            group_pk=group.pk,
+        )
+
+        fetched = service.get_idea_with_relations(idea.pk)
+
+        assert fetched is not None
+        assert fetched.group.pk == group.pk
+        assert [tag.name for tag in fetched.tags.fetch_all()] == ["python"]
+
     def test_get_idea_not_found(self, service: IdeaService) -> None:
         """None is returned for a missing primary key."""
         assert service.get_idea(999) is None
@@ -162,6 +177,13 @@ class TestIdeaService:
 
         assert renamed is not None
         assert renamed.name == "frontend"
+
+    def test_rename_group_missing_returns_none(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Missing groups should return None when renamed."""
+        assert service.rename_group(99999, "backend") is None
 
     def test_default_group_cannot_be_renamed(
         self,

@@ -1175,6 +1175,34 @@ async def test_name_input_screen_enter_submits(
 
 
 @pytest.mark.asyncio
+async def test_name_input_screen_button_routing(
+    mocker: MockerFixture,
+) -> None:
+    """Name input modal buttons should route to save and cancel actions."""
+    screen = NameInputScreen(
+        title="Rename Group",
+        initial_value="backend",
+        placeholder="Group name...",
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        save_action = mocker.patch.object(screen, "action_save")
+        cancel_action = mocker.patch.object(screen, "action_cancel")
+
+        screen.on_button_pressed(
+            Button.Pressed(screen.query_one("#save-name-btn", Button))
+        )
+        screen.on_button_pressed(
+            Button.Pressed(screen.query_one("#cancel-name-btn", Button))
+        )
+
+        save_action.assert_called_once_with()
+        cancel_action.assert_called_once_with()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_confirm_dialog_buttons_size_to_content() -> None:
     """Confirm buttons should size to content with balanced padding."""
     confirm = ConfirmDialog("Are you sure?")
@@ -1495,6 +1523,68 @@ async def test_main_screen_rename_idea_actions(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_refresh_selects_group_when_requested(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Refresh should reselect group context when a group PK is requested."""
+    backend = service.create_group("backend")
+    idea = service.create_idea("Grouped", group_pk=backend.pk)
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        view = screen.query_one("#content-panel", IdeaView)
+
+        select_group = mocker.patch.object(panel, "select_group")
+        mocker.patch.object(
+            screen._service,
+            "list_ideas_grouped",
+            return_value=[(backend, [idea])],
+        )
+        mocker.patch.object(panel, "get_selected_idea", return_value=None)
+        show_empty = mocker.patch.object(view, "show_empty")
+
+        screen.refresh_ideas(select_group_pk=backend.pk)
+
+        select_group.assert_called_once_with(backend.pk)
+        show_empty.assert_called_once_with()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_refresh_selects_group_without_ideas(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Refresh should still reselect group context when list is empty."""
+    backend = service.create_group("backend")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        view = screen.query_one("#content-panel", IdeaView)
+
+        select_group = mocker.patch.object(panel, "select_group")
+        mocker.patch.object(
+            screen._service,
+            "list_ideas_grouped",
+            return_value=[(backend, [])],
+        )
+        set_selected = mocker.patch.object(screen, "_set_selected_idea")
+        show_empty = mocker.patch.object(view, "show_empty")
+
+        screen.refresh_ideas(select_group_pk=backend.pk)
+
+        select_group.assert_called_once_with(backend.pk)
+        set_selected.assert_called_once_with(None)
+        show_empty.assert_called_once_with()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_new_idea_uses_contextual_group_selection(
     service: IdeaService,
     mocker: MockerFixture,
@@ -1664,6 +1754,28 @@ async def test_main_screen_group_actions(
             "Default group cannot be renamed",
             severity="warning",
         )
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_rename_group_missing_selection(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Rename should error when a selected group PK no longer exists."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        notify = mocker.patch.object(screen, "notify")
+        push = mocker.patch.object(app, "push_screen")
+
+        mocker.patch.object(panel, "get_selected_group_pk", return_value=54321)
+        screen.action_rename_selected()
+
+        notify.assert_called_with("Group not found", severity="error")
+        push.assert_not_called()
         await pilot.pause()
 
 
@@ -1839,6 +1951,14 @@ def test_main_screen_group_reassign_and_rename_callbacks(
     notify.assert_called_with("Group not found", severity="error")
     refresh.assert_not_called()
 
+    notify.reset_mock()
+    refresh.reset_mock()
+    service_mock.rename_group.reset_mock()
+    service_mock.rename_group.side_effect = ValueError("bad rename")
+    screen._on_group_rename_dismiss(1, "bad")
+    notify.assert_called_with("bad rename", severity="error")
+    refresh.assert_not_called()
+
 
 def test_main_screen_idea_rename_callbacks(
     mocker: MockerFixture,
@@ -1879,6 +1999,16 @@ def test_main_screen_idea_rename_callbacks(
     service_mock.get_idea.reset_mock()
     service_mock.get_idea.return_value = None
     screen._on_idea_rename_dismiss(1, "missing")
+    notify.assert_called_with("Idea not found", severity="error")
+    refresh.assert_not_called()
+
+    notify.reset_mock()
+    refresh.reset_mock()
+    service_mock.get_idea.reset_mock()
+    service_mock.update_idea.reset_mock()
+    service_mock.get_idea.return_value = idea
+    service_mock.update_idea.return_value = None
+    screen._on_idea_rename_dismiss(1, "missing after update")
     notify.assert_called_with("Idea not found", severity="error")
     refresh.assert_not_called()
 
@@ -2572,6 +2702,22 @@ async def test_main_screen_search_input_disables_non_search_actions(
             "copy_idea_body",
         ):
             assert screen.check_action(action, ()) is False
+
+
+@pytest.mark.asyncio
+async def test_main_screen_can_rename_selection_false_when_search_focused(
+    service: IdeaService,
+) -> None:
+    """Direct rename helper should return False while search has focus."""
+    service.create_idea("Alpha")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        screen.action_focus_search()
+        await pilot.pause()
+
+        assert screen._can_rename_selection() is False
 
 
 @pytest.mark.asyncio
