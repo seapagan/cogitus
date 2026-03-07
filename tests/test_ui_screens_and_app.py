@@ -1175,6 +1175,28 @@ async def test_name_input_screen_enter_submits(
 
 
 @pytest.mark.asyncio
+async def test_name_input_screen_ctrl_s_submits(
+    mocker: MockerFixture,
+) -> None:
+    """Ctrl+s should submit the rename modal from the text input."""
+    screen = NameInputScreen(
+        title="Rename Group",
+        initial_value="backend",
+        placeholder="Group name...",
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+
+        screen.query_one("#name-input", Input).value = "frontend"
+        await pilot.press("ctrl+s")
+
+        dismiss.assert_called_once_with("frontend")
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_name_input_screen_button_routing(
     mocker: MockerFixture,
 ) -> None:
