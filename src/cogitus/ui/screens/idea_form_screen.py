@@ -848,6 +848,11 @@ class NameInputScreen(ModalScreen[str | None]):
         elif event.button.id == "cancel-name-btn":
             self.action_cancel()
 
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Submit the modal when Enter is pressed in the name input."""
+        if event.input.id == "name-input":
+            self.action_save()
+
     def action_save(self) -> None:
         """Validate and return the entered name."""
         name = self.query_one("#name-input", Input).value.strip()

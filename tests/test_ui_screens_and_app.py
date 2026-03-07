@@ -1153,6 +1153,28 @@ async def test_name_input_screen_prefills_and_validates(
 
 
 @pytest.mark.asyncio
+async def test_name_input_screen_enter_submits(
+    mocker: MockerFixture,
+) -> None:
+    """Enter should submit the rename modal from the text input."""
+    screen = NameInputScreen(
+        title="Rename Group",
+        initial_value="backend",
+        placeholder="Group name...",
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+
+        screen.query_one("#name-input", Input).value = "frontend"
+        await pilot.press("enter")
+
+        dismiss.assert_called_once_with("frontend")
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_confirm_dialog_buttons_size_to_content() -> None:
     """Confirm buttons should size to content with balanced padding."""
     confirm = ConfirmDialog("Are you sure?")
