@@ -805,7 +805,7 @@ class NameInputScreen(ModalScreen[str | None]):
         title: str,
         initial_value: str = "",
         placeholder: str,
-        save_label: str = "Save [Ctrl+s]",
+        save_label: str = "Save [Enter/Ctrl+s]",
     ) -> None:
         """Initialize the modal with labels and initial input value."""
         super().__init__()
