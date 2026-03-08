@@ -8,7 +8,15 @@ from unittest.mock import PropertyMock
 import pytest
 from textual.app import App, ComposeResult
 from textual.containers import Container
-from textual.widgets import Button, Input, OptionList, Select, TextArea, Tree
+from textual.widgets import (
+    Button,
+    Input,
+    Markdown,
+    OptionList,
+    Select,
+    TextArea,
+    Tree,
+)
 
 from cogitus.app import CSS_PATH, CogitusApp
 from cogitus.config import EditBodyCursorMode, NewIdeaGroupMode
@@ -1578,9 +1586,8 @@ async def test_main_screen_refresh_selects_group_when_requested(
 @pytest.mark.asyncio
 async def test_main_screen_refresh_clears_selection_when_group_missing(
     service: IdeaService,
-    mocker: MockerFixture,
 ) -> None:
-    """Refresh should clear stale preview if requested group is missing."""
+    """Missing group restore should leave both panes with no selection."""
     backend = service.create_group("backend")
     idea = service.create_idea("Grouped", group_pk=backend.pk)
     screen = MainScreen(service)
@@ -1588,35 +1595,19 @@ async def test_main_screen_refresh_clears_selection_when_group_missing(
 
     async with app.run_test() as pilot:
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
-        view = screen.query_one("#content-panel", IdeaView)
+        body = screen.query_one("#idea-view-body", Markdown)
 
-        select_group = mocker.patch.object(
-            panel,
-            "select_group",
-            return_value=False,
-        )
-        get_selected_idea = mocker.patch.object(
-            panel,
-            "get_selected_idea",
-            return_value=idea,
-        )
-        mocker.patch.object(
-            screen._service,
-            "list_ideas_grouped",
-            return_value=[(backend, [idea])],
-        )
-        set_selected = mocker.patch.object(screen, "_set_selected_idea")
-        show_empty = mocker.patch.object(view, "show_empty")
-        show_idea = mocker.patch.object(view, "show_idea")
+        assert panel.get_selected_idea() is not None
+        assert screen._selected_idea_pk == idea.pk
 
         screen.refresh_ideas(select_group_pk=99999)
-
-        select_group.assert_called_once_with(99999)
-        get_selected_idea.assert_not_called()
-        set_selected.assert_called_once_with(None)
-        show_empty.assert_called_once_with()
-        show_idea.assert_not_called()
         await pilot.pause()
+        await pilot.pause()
+
+        assert panel.get_selected_idea() is None
+        assert panel.get_selected_group_pk() is None
+        assert screen._selected_idea_pk is None
+        assert "Select an idea from the list" in str(body._markdown)
 
 
 @pytest.mark.asyncio

@@ -198,7 +198,10 @@ class MainScreen(Screen[None]):
 
         view = self.query_one("#content-panel", IdeaView)
         grouped_ideas = self._service.list_ideas_grouped(None)
-        panel.load_grouped_ideas(grouped_ideas)
+        panel.load_grouped_ideas(
+            grouped_ideas,
+            auto_select_first=select_group_pk is None,
+        )
         self._refresh_grouped_ideas(
             panel,
             view,
