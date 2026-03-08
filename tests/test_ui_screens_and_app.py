@@ -2887,10 +2887,7 @@ async def test_main_screen_can_rename_selection_false_for_default_group(
             for group in service.list_groups()
             if group.name == service.default_group_name
         )
-        tree = panel.query_one("#idea-list", Tree)
-        group_node = panel._group_nodes_by_pk[default.pk]
-        tree.select_node(group_node)
-        tree.move_cursor(group_node, animate=False)
+        assert panel.select_group(default.pk) is True
         await pilot.pause()
 
         assert screen._can_rename_selection() is False
