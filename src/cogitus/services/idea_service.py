@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from cogitus.config import normalize_default_group_name
@@ -21,6 +22,9 @@ if TYPE_CHECKING:
     from cogitus.models.idea import Idea
     from cogitus.models.tag import Tag
     from cogitus.search import SearchResult
+
+
+logger = logging.getLogger(__name__)
 
 
 class IdeaService:
@@ -124,7 +128,14 @@ class IdeaService:
         Returns:
             The updated Idea, or None if not found.
         """
-        return self._idea_repo.rename(pk=pk, title=title)
+        try:
+            return self._idea_repo.rename(pk=pk, title=title)
+        except ValueError:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to rename idea pk=%s", pk)
+            msg = "Failed to rename idea"
+            raise ValueError(msg) from exc
 
     def delete_idea(self, pk: int) -> None:
         """Delete an idea by primary key.
@@ -219,10 +230,18 @@ class IdeaService:
         if group.name == self._default_group_name:
             msg = "Default group cannot be renamed"
             raise ValueError(msg)
-        renamed = self._group_repo.rename(pk, name)
-        if renamed is not None:
-            self._idea_repo.rebuild_search_index()
-        return renamed
+        try:
+            renamed = self._group_repo.rename(pk, name)
+            if renamed is not None:
+                self._idea_repo.rebuild_search_index()
+        except ValueError:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to rename group pk=%s", pk)
+            msg = "Failed to rename group"
+            raise ValueError(msg) from exc
+        else:
+            return renamed
 
     def has_ideas_in_group(self, group_pk: int) -> bool:
         """Return whether the given group currently contains ideas."""

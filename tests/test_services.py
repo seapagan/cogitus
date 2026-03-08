@@ -9,6 +9,7 @@ import pytest
 from cogitus.services.idea_service import IdeaService
 
 if TYPE_CHECKING:
+    from pytest_mock import MockerFixture
     from sqliter import SqliterDB
 
 
@@ -76,6 +77,42 @@ class TestIdeaService:
     def test_rename_idea_not_found(self, service: IdeaService) -> None:
         """None is returned for a missing idea rename."""
         assert service.rename_idea(999, "Renamed") is None
+
+    def test_rename_idea_preserves_validation_error(
+        self,
+        service: IdeaService,
+        mocker: MockerFixture,
+    ) -> None:
+        """Repository validation errors should pass through unchanged."""
+        mocker.patch.object(
+            service._idea_repo,
+            "rename",
+            side_effect=ValueError("bad title"),
+        )
+
+        with pytest.raises(ValueError, match="bad title"):
+            service.rename_idea(1, "Renamed")
+
+    def test_rename_idea_normalizes_storage_error(
+        self,
+        service: IdeaService,
+        mocker: MockerFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Unexpected rename failures should become UI-safe ValueErrors."""
+        mocker.patch.object(
+            service._idea_repo,
+            "rename",
+            side_effect=RuntimeError("disk full"),
+        )
+
+        with (
+            caplog.at_level("ERROR"),
+            pytest.raises(ValueError, match="Failed to rename idea"),
+        ):
+            service.rename_idea(1, "Renamed")
+
+        assert "Failed to rename idea pk=1" in caplog.text
 
     def test_delete_idea(self, service: IdeaService) -> None:
         """Idea is removed by delete."""
@@ -204,6 +241,44 @@ class TestIdeaService:
     ) -> None:
         """Missing groups should return None when renamed."""
         assert service.rename_group(99999, "backend") is None
+
+    def test_rename_group_preserves_validation_error(
+        self,
+        service: IdeaService,
+        mocker: MockerFixture,
+    ) -> None:
+        """Repository validation errors should pass through unchanged."""
+        group = service.create_group("backend")
+        mocker.patch.object(
+            service._group_repo,
+            "rename",
+            side_effect=ValueError("already exists"),
+        )
+
+        with pytest.raises(ValueError, match="already exists"):
+            service.rename_group(group.pk, "frontend")
+
+    def test_rename_group_normalizes_storage_error(
+        self,
+        service: IdeaService,
+        mocker: MockerFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Unexpected group rename failures should become UI-safe errors."""
+        group = service.create_group("backend")
+        mocker.patch.object(
+            service._group_repo,
+            "rename",
+            side_effect=RuntimeError("disk full"),
+        )
+
+        with (
+            caplog.at_level("ERROR"),
+            pytest.raises(ValueError, match="Failed to rename group"),
+        ):
+            service.rename_group(group.pk, "frontend")
+
+        assert f"Failed to rename group pk={group.pk}" in caplog.text
 
     def test_default_group_cannot_be_renamed(
         self,
