@@ -796,11 +796,35 @@ class TestGroupRepository:
     ) -> None:
         """Update races should surface as duplicate-name ValueErrors."""
         group = group_repo.create("backend")
+        conflicting = group_repo.create("frontend")
         mocker.patch.object(
             group_repo._db,
             "update",
             side_effect=RecordUpdateError("update failed"),
         )
+        find_by_name = mocker.patch.object(
+            group_repo,
+            "find_by_name",
+            side_effect=[None, conflicting],
+        )
 
         with pytest.raises(ValueError, match='Group "frontend" already exists'):
+            group_repo.rename(group.pk, "frontend")
+
+        assert find_by_name.call_count == 2
+
+    def test_rename_group_preserves_non_duplicate_update_errors(
+        self,
+        group_repo: GroupRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Non-duplicate update failures should not be rewritten."""
+        group = group_repo.create("backend")
+        mocker.patch.object(
+            group_repo._db,
+            "update",
+            side_effect=RecordUpdateError("disk full"),
+        )
+
+        with pytest.raises(RecordUpdateError, match="disk full"):
             group_repo.rename(group.pk, "frontend")

@@ -55,8 +55,11 @@ class GroupRepository:
         try:
             self._db.update(group)
         except RecordUpdateError as exc:
-            msg = f'Group "{normalized}" already exists'
-            raise ValueError(msg) from exc
+            existing = self.find_by_name(normalized)
+            if existing is not None and existing.pk != pk:
+                msg = f'Group "{normalized}" already exists'
+                raise ValueError(msg) from exc
+            raise
         return group
 
     def find_by_name(self, name: str) -> Group | None:
