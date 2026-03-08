@@ -1584,6 +1584,30 @@ async def test_main_screen_refresh_selects_group_when_requested(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_refresh_falls_back_to_group_when_idea_missing(
+    service: IdeaService,
+) -> None:
+    """Missing idea restore should fall back to the requested group."""
+    backend = service.create_group("backend")
+    service.create_idea("Grouped", group_pk=backend.pk)
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        body = screen.query_one("#idea-view-body", Markdown)
+
+        screen.refresh_ideas(select_pk=99999, select_group_pk=backend.pk)
+        await pilot.pause()
+        await pilot.pause()
+
+        assert panel.get_selected_idea() is None
+        assert panel.get_selected_group_pk() == backend.pk
+        assert screen._selected_idea_pk is None
+        assert "Select an idea from the list" in str(body._markdown)
+
+
+@pytest.mark.asyncio
 async def test_main_screen_refresh_clears_selection_when_group_missing(
     service: IdeaService,
 ) -> None:

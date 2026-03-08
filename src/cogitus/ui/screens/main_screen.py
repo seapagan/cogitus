@@ -222,9 +222,10 @@ class MainScreen(Screen[None]):
         """Refresh normal grouped-idea tree state and right-pane preview."""
         has_ideas = any(group_ideas for _, group_ideas in grouped_ideas)
         if has_ideas:
-            if select_pk is not None:
-                panel.select_idea(select_pk)
-            elif not self._restore_group_selection(
+            restored_idea = select_pk is not None and panel.select_idea(
+                select_pk
+            )
+            if not restored_idea and not self._restore_group_selection(
                 panel,
                 view,
                 select_group_pk=select_group_pk,
