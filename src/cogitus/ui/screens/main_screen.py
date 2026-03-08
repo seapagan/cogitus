@@ -217,8 +217,12 @@ class MainScreen(Screen[None]):
         if has_ideas:
             if select_pk is not None:
                 panel.select_idea(select_pk)
-            elif select_group_pk is not None:
-                panel.select_group(select_group_pk)
+            elif select_group_pk is not None and not panel.select_group(
+                select_group_pk
+            ):
+                self._set_selected_idea(None)
+                view.show_empty()
+                return
             selected = panel.get_selected_idea()
             if selected is not None:
                 self._set_selected_idea(selected.pk)
@@ -227,8 +231,12 @@ class MainScreen(Screen[None]):
                 self._set_selected_idea(None)
                 view.show_empty()
         else:
-            if select_group_pk is not None:
-                panel.select_group(select_group_pk)
+            if select_group_pk is not None and not panel.select_group(
+                select_group_pk
+            ):
+                self._set_selected_idea(None)
+                view.show_empty()
+                return
             self._set_selected_idea(None)
             view.show_empty()
 

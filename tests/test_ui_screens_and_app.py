@@ -1576,6 +1576,50 @@ async def test_main_screen_refresh_selects_group_when_requested(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_refresh_clears_selection_when_group_missing(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Refresh should clear stale preview if requested group is missing."""
+    backend = service.create_group("backend")
+    idea = service.create_idea("Grouped", group_pk=backend.pk)
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        view = screen.query_one("#content-panel", IdeaView)
+
+        select_group = mocker.patch.object(
+            panel,
+            "select_group",
+            return_value=False,
+        )
+        get_selected_idea = mocker.patch.object(
+            panel,
+            "get_selected_idea",
+            return_value=idea,
+        )
+        mocker.patch.object(
+            screen._service,
+            "list_ideas_grouped",
+            return_value=[(backend, [idea])],
+        )
+        set_selected = mocker.patch.object(screen, "_set_selected_idea")
+        show_empty = mocker.patch.object(view, "show_empty")
+        show_idea = mocker.patch.object(view, "show_idea")
+
+        screen.refresh_ideas(select_group_pk=99999)
+
+        select_group.assert_called_once_with(99999)
+        get_selected_idea.assert_not_called()
+        set_selected.assert_called_once_with(None)
+        show_empty.assert_called_once_with()
+        show_idea.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_refresh_selects_group_without_ideas(
     service: IdeaService,
     mocker: MockerFixture,
@@ -1601,6 +1645,41 @@ async def test_main_screen_refresh_selects_group_without_ideas(
         screen.refresh_ideas(select_group_pk=backend.pk)
 
         select_group.assert_called_once_with(backend.pk)
+        set_selected.assert_called_once_with(None)
+        show_empty.assert_called_once_with()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_refresh_empty_tree_clears_missing_group_request(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Empty refresh should clear selection if requested group is missing."""
+    backend = service.create_group("backend")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        view = screen.query_one("#content-panel", IdeaView)
+
+        select_group = mocker.patch.object(
+            panel,
+            "select_group",
+            return_value=False,
+        )
+        mocker.patch.object(
+            screen._service,
+            "list_ideas_grouped",
+            return_value=[(backend, [])],
+        )
+        set_selected = mocker.patch.object(screen, "_set_selected_idea")
+        show_empty = mocker.patch.object(view, "show_empty")
+
+        screen.refresh_ideas(select_group_pk=99999)
+
+        select_group.assert_called_once_with(99999)
         set_selected.assert_called_once_with(None)
         show_empty.assert_called_once_with()
         await pilot.pause()
