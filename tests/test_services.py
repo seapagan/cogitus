@@ -220,6 +220,19 @@ class TestIdeaService:
         assert "default" in names
         assert "backend" in names
 
+    def test_get_group(self, service: IdeaService) -> None:
+        """Group should be retrievable by primary key."""
+        group = service.create_group("backend")
+
+        fetched = service.get_group(group.pk)
+
+        assert fetched is not None
+        assert fetched.pk == group.pk
+
+    def test_get_group_not_found(self, service: IdeaService) -> None:
+        """Missing groups should return None."""
+        assert service.get_group(99999) is None
+
     def test_create_idea_in_selected_group(self, service: IdeaService) -> None:
         """Idea can be assigned to a selected group."""
         group = service.create_group("backend")

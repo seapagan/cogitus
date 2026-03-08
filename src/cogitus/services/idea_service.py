@@ -218,6 +218,10 @@ class IdeaService:
         """List all groups alphabetically."""
         return self._group_repo.list_all()
 
+    def get_group(self, pk: int) -> Group | None:
+        """Fetch a single group by primary key."""
+        return self._group_repo.get(pk)
+
     def create_group(self, name: str) -> Group:
         """Create a new group."""
         return self._group_repo.create(name)

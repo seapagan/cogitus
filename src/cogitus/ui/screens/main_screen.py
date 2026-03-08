@@ -413,14 +413,7 @@ class MainScreen(Screen[None]):
 
     def _rename_selected_group(self, group_pk: int) -> None:
         """Open rename flow for a selected group."""
-        group = next(
-            (
-                item
-                for item in self._service.list_groups()
-                if item.pk == group_pk
-            ),
-            None,
-        )
+        group = self._service.get_group(group_pk)
         if group is None:
             self.notify("Group not found", severity="error")
             return
@@ -764,14 +757,7 @@ class MainScreen(Screen[None]):
             return False
         group_pk = panel.get_selected_group_pk()
         if group_pk is not None:
-            group = next(
-                (
-                    item
-                    for item in self._service.list_groups()
-                    if item.pk == group_pk
-                ),
-                None,
-            )
+            group = self._service.get_group(group_pk)
             return (
                 group is not None
                 and group.name != self._service.default_group_name
