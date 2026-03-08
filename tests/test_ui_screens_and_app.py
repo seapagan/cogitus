@@ -1604,6 +1604,7 @@ async def test_main_screen_refresh_falls_back_to_group_when_idea_missing(
         assert panel.get_selected_idea() is None
         assert panel.get_selected_group_pk() == backend.pk
         assert screen._selected_idea_pk is None
+        # Textual's Markdown widget does not expose a public content getter.
         assert "Select an idea from the list" in str(body._markdown)
 
 
@@ -1631,6 +1632,7 @@ async def test_main_screen_refresh_clears_selection_when_group_missing(
         assert panel.get_selected_idea() is None
         assert panel.get_selected_group_pk() is None
         assert screen._selected_idea_pk is None
+        # Textual's Markdown widget does not expose a public content getter.
         assert "Select an idea from the list" in str(body._markdown)
 
 
