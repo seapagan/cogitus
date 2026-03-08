@@ -1250,7 +1250,7 @@ async def test_idea_view_show_and_empty(service: IdeaService) -> None:
         assert "Renderable" in str(title.content)
         assert "python" in str(tags.content)
         assert "Created:" in str(timestamps.content)
-        assert body._markdown is not None
+        assert body.source != ""
 
         view.show_empty()
         await pilot.pause()
@@ -1258,5 +1258,4 @@ async def test_idea_view_show_and_empty(service: IdeaService) -> None:
         assert str(title.content) == ""
         assert str(tags.content) == ""
         assert str(timestamps.content) == ""
-        # Textual's Markdown widget does not expose a public content getter.
-        assert "Select an idea from the list" in str(body._markdown)
+        assert "Select an idea from the list" in body.source

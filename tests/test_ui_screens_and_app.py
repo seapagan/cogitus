@@ -1543,12 +1543,15 @@ async def test_main_screen_rename_idea_actions(
             "Nothing renameable selected",
             severity="warning",
         )
+        push.assert_not_called()
 
+        push.reset_mock()
         notify.reset_mock()
         mocker.patch.object(panel, "get_selected_idea", return_value=first)
         mocker.patch.object(screen._service, "get_idea", return_value=None)
         screen.action_rename_selected()
         notify.assert_called_with("Idea not found", severity="error")
+        push.assert_not_called()
         await pilot.pause()
 
 
@@ -1604,8 +1607,7 @@ async def test_main_screen_refresh_falls_back_to_group_when_idea_missing(
         assert panel.get_selected_idea() is None
         assert panel.get_selected_group_pk() == backend.pk
         assert screen._selected_idea_pk is None
-        # Textual's Markdown widget does not expose a public content getter.
-        assert "Select an idea from the list" in str(body._markdown)
+        assert "Select an idea from the list" in body.source
 
 
 @pytest.mark.asyncio
@@ -1632,8 +1634,7 @@ async def test_main_screen_refresh_clears_selection_when_group_missing(
         assert panel.get_selected_idea() is None
         assert panel.get_selected_group_pk() is None
         assert screen._selected_idea_pk is None
-        # Textual's Markdown widget does not expose a public content getter.
-        assert "Select an idea from the list" in str(body._markdown)
+        assert "Select an idea from the list" in body.source
 
 
 @pytest.mark.asyncio
@@ -1872,6 +1873,7 @@ async def test_main_screen_group_actions(
             "Default group cannot be renamed",
             severity="warning",
         )
+        push.assert_not_called()
         await pilot.pause()
 
 
