@@ -217,28 +217,44 @@ class MainScreen(Screen[None]):
         if has_ideas:
             if select_pk is not None:
                 panel.select_idea(select_pk)
-            elif select_group_pk is not None and not panel.select_group(
-                select_group_pk
+            elif not self._restore_group_selection(
+                panel,
+                view,
+                select_group_pk=select_group_pk,
             ):
-                self._set_selected_idea(None)
-                view.show_empty()
                 return
             selected = panel.get_selected_idea()
             if selected is not None:
                 self._set_selected_idea(selected.pk)
                 view.show_idea(selected)
             else:
-                self._set_selected_idea(None)
-                view.show_empty()
+                self._clear_selected_idea_view(view)
         else:
-            if select_group_pk is not None and not panel.select_group(
-                select_group_pk
+            if not self._restore_group_selection(
+                panel,
+                view,
+                select_group_pk=select_group_pk,
             ):
-                self._set_selected_idea(None)
-                view.show_empty()
                 return
-            self._set_selected_idea(None)
-            view.show_empty()
+            self._clear_selected_idea_view(view)
+
+    def _restore_group_selection(
+        self,
+        panel: IdeaListPanel,
+        view: IdeaView,
+        *,
+        select_group_pk: int | None,
+    ) -> bool:
+        """Restore requested group selection or clear the preview on failure."""
+        if select_group_pk is None or panel.select_group(select_group_pk):
+            return True
+        self._clear_selected_idea_view(view)
+        return False
+
+    def _clear_selected_idea_view(self, view: IdeaView) -> None:
+        """Clear the selected idea and show an empty preview pane."""
+        self._set_selected_idea(None)
+        view.show_empty()
 
     def _refresh_search_results(
         self,
