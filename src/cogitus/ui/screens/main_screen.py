@@ -192,6 +192,10 @@ class MainScreen(Screen[None]):
             )
             return
 
+        local_select_pk = select_pk
+        if local_select_pk is None and select_group_pk is None:
+            local_select_pk = self._selected_idea_pk
+
         view = self.query_one("#content-panel", IdeaView)
         grouped_ideas = self._service.list_ideas_grouped(None)
         panel.load_grouped_ideas(grouped_ideas)
@@ -199,7 +203,7 @@ class MainScreen(Screen[None]):
             panel,
             view,
             grouped_ideas=grouped_ideas,
-            select_pk=select_pk,
+            select_pk=local_select_pk,
             select_group_pk=select_group_pk,
         )
 

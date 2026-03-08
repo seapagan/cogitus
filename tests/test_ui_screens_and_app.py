@@ -1943,6 +1943,53 @@ async def test_main_screen_refresh_with_ideas_and_no_selected_idea(
         await pilot.pause()
 
 
+@pytest.mark.asyncio
+async def test_main_screen_refresh_reuses_selected_idea_pk_in_grouped_mode(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """No-arg refresh should reuse committed idea selection in tree mode."""
+    first = service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        screen._selected_idea_pk = first.pk
+        refresh_grouped = mocker.patch.object(screen, "_refresh_grouped_ideas")
+
+        screen.refresh_ideas()
+
+        refresh_grouped.assert_called_once()
+        assert refresh_grouped.call_args.kwargs["select_pk"] == first.pk
+        assert refresh_grouped.call_args.kwargs["select_group_pk"] is None
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_refresh_reuses_selected_idea_pk_in_search_mode(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Search refresh should not force committed tree selection into results."""
+    first = service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        search.value = "First"
+        screen._selected_idea_pk = first.pk
+        refresh_search = mocker.patch.object(screen, "_refresh_search_results")
+
+        screen.refresh_ideas()
+
+        refresh_search.assert_called_once()
+        assert refresh_search.call_args.kwargs["search_query"] == "First"
+        assert refresh_search.call_args.kwargs["select_pk"] is None
+        await pilot.pause()
+
+
 def _main_screen_callback_test_context(
     mocker: MockerFixture,
 ) -> tuple[MainScreen, Any, Any, Any]:
