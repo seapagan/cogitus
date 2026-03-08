@@ -816,14 +816,14 @@ class NameInputScreen(ModalScreen[str | None]):
 
     def compose(self) -> ComposeResult:
         """Compose the name input modal."""
-        with Vertical(id="confirm-container"):
+        with Vertical(id="name-input-container"):
             yield Static(self._title, id="form-title")
             yield Input(
                 value=self._initial_value,
                 placeholder=self._placeholder,
                 id="name-input",
             )
-            with Horizontal(id="confirm-buttons"):
+            with Horizontal(id="name-input-buttons"):
                 yield Button(
                     self._save_label,
                     variant="primary",
