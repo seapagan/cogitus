@@ -602,16 +602,11 @@ class MainScreen(Screen[None]):
         """Handle idea rename flow completion."""
         if title is None:
             return
-        idea = self._service.get_idea(idea_pk)
-        if idea is None:
-            self.notify("Idea not found", severity="error")
+        try:
+            renamed = self._service.rename_idea(idea_pk, title)
+        except ValueError as exc:
+            self.notify(str(exc), severity="error")
             return
-        renamed = self._service.update_idea(
-            idea_pk,
-            title,
-            idea.body,
-            group_pk=idea.group.pk,
-        )
         if renamed is None:
             self.notify("Idea not found", severity="error")
             return

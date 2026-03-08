@@ -114,6 +114,18 @@ class IdeaService:
             group_pk=group_pk,
         )
 
+    def rename_idea(self, pk: int, title: str) -> Idea | None:
+        """Rename an existing idea without rewriting other fields.
+
+        Args:
+            pk: Primary key of the idea to rename.
+            title: New title.
+
+        Returns:
+            The updated Idea, or None if not found.
+        """
+        return self._idea_repo.rename(pk=pk, title=title)
+
     def delete_idea(self, pk: int) -> None:
         """Delete an idea by primary key.
 

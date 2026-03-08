@@ -172,6 +172,25 @@ class IdeaRepository:
         self._search_backend.upsert_idea(idea.pk)
         return idea
 
+    def rename(self, pk: int, title: str) -> Idea | None:
+        """Update only an idea title.
+
+        Args:
+            pk: The primary key of the idea to update.
+            title: The new title.
+
+        Returns:
+            The updated Idea, or None if not found.
+        """
+        idea = self._db.get(Idea, pk)
+        if idea is None:
+            return None
+
+        idea.title = title
+        self._db.update(idea)
+        self._search_backend.upsert_idea(idea.pk)
+        return idea
+
     def delete(self, pk: int) -> None:
         """Delete an idea by primary key.
 

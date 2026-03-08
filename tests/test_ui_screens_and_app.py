@@ -1985,7 +1985,7 @@ def test_main_screen_group_reassign_and_rename_callbacks(
 def test_main_screen_idea_rename_callbacks(
     mocker: MockerFixture,
 ) -> None:
-    """Idea rename callback should cover cancel, success, and missing idea."""
+    """Idea rename callback should cover cancel, success, and errors."""
     screen, service_mock, notify, refresh = _main_screen_callback_test_context(
         mocker
     )
@@ -1999,39 +1999,28 @@ def test_main_screen_idea_rename_callbacks(
 
     notify.reset_mock()
     refresh.reset_mock()
-    idea = mocker.Mock()
-    idea.body = "body"
-    idea.group.pk = 7
     renamed_idea = mocker.Mock()
     renamed_idea.pk = 4
-    service_mock.get_idea.return_value = idea
-    service_mock.update_idea.return_value = renamed_idea
+    service_mock.rename_idea.return_value = renamed_idea
     screen._on_idea_rename_dismiss(1, "renamed idea")
-    service_mock.update_idea.assert_called_once_with(
-        1,
-        "renamed idea",
-        "body",
-        group_pk=7,
-    )
+    service_mock.rename_idea.assert_called_once_with(1, "renamed idea")
     notify.assert_called_with("Idea renamed")
     refresh.assert_called_once_with(select_pk=4)
 
     notify.reset_mock()
     refresh.reset_mock()
-    service_mock.get_idea.reset_mock()
-    service_mock.get_idea.return_value = None
+    service_mock.rename_idea.reset_mock()
+    service_mock.rename_idea.return_value = None
     screen._on_idea_rename_dismiss(1, "missing")
     notify.assert_called_with("Idea not found", severity="error")
     refresh.assert_not_called()
 
     notify.reset_mock()
     refresh.reset_mock()
-    service_mock.get_idea.reset_mock()
-    service_mock.update_idea.reset_mock()
-    service_mock.get_idea.return_value = idea
-    service_mock.update_idea.return_value = None
-    screen._on_idea_rename_dismiss(1, "missing after update")
-    notify.assert_called_with("Idea not found", severity="error")
+    service_mock.rename_idea.reset_mock()
+    service_mock.rename_idea.side_effect = ValueError("bad rename")
+    screen._on_idea_rename_dismiss(1, "bad")
+    notify.assert_called_with("bad rename", severity="error")
     refresh.assert_not_called()
 
 

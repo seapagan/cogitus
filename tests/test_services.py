@@ -57,6 +57,26 @@ class TestIdeaService:
         """None is returned for a missing idea update."""
         assert service.update_idea(999, "X", "Y") is None
 
+    def test_rename_idea(self, service: IdeaService) -> None:
+        """Idea rename should only update the title."""
+        group = service.create_group("backend")
+        idea = service.create_idea(
+            "Original",
+            body="Body text",
+            group_pk=group.pk,
+        )
+
+        renamed = service.rename_idea(idea.pk, "Renamed")
+
+        assert renamed is not None
+        assert renamed.title == "Renamed"
+        assert renamed.body == "Body text"
+        assert renamed.group.pk == group.pk
+
+    def test_rename_idea_not_found(self, service: IdeaService) -> None:
+        """None is returned for a missing idea rename."""
+        assert service.rename_idea(999, "Renamed") is None
+
     def test_delete_idea(self, service: IdeaService) -> None:
         """Idea is removed by delete."""
         idea = service.create_idea("To delete")

@@ -196,6 +196,33 @@ class TestIdeaRepository:
         assert updated is not None
         assert updated.group.pk == source.pk
 
+    def test_rename_updates_only_title(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Rename should preserve body and group assignment."""
+        source = group_repo.create("source")
+        created = idea_repo.create(
+            "Original",
+            body="Body text",
+            group_pk=source.pk,
+        )
+
+        renamed = idea_repo.rename(created.pk, "Renamed")
+
+        assert renamed is not None
+        assert renamed.title == "Renamed"
+        assert renamed.body == "Body text"
+        assert renamed.group.pk == source.pk
+
+    def test_rename_missing_idea_returns_none(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Rename should return None for a missing idea."""
+        assert idea_repo.rename(99999, "Renamed") is None
+
     def test_update_idea_tags(self, idea_repo: IdeaRepository) -> None:
         """Tags are replaced by update."""
         created = idea_repo.create("Test", tag_names=["old"])
