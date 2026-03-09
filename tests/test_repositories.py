@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from sqliter.exceptions import RecordInsertionError
+from sqliter.exceptions import RecordInsertionError, RecordUpdateError
 
 from cogitus.models import Idea
 from cogitus.repositories.idea_repo import IdeaRepository
@@ -195,6 +195,33 @@ class TestIdeaRepository:
 
         assert updated is not None
         assert updated.group.pk == source.pk
+
+    def test_rename_updates_only_title(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Rename should preserve body and group assignment."""
+        source = group_repo.create("source")
+        created = idea_repo.create(
+            "Original",
+            body="Body text",
+            group_pk=source.pk,
+        )
+
+        renamed = idea_repo.rename(created.pk, "Renamed")
+
+        assert renamed is not None
+        assert renamed.title == "Renamed"
+        assert renamed.body == "Body text"
+        assert renamed.group.pk == source.pk
+
+    def test_rename_missing_idea_returns_none(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Rename should return None for a missing idea."""
+        assert idea_repo.rename(99999, "Renamed") is None
 
     def test_update_idea_tags(self, idea_repo: IdeaRepository) -> None:
         """Tags are replaced by update."""
@@ -723,3 +750,81 @@ class TestGroupRepository:
 
         with pytest.raises(ValueError, match="already exists"):
             group_repo.get_or_create("backend")
+
+    def test_rename_group(self, group_repo: GroupRepository) -> None:
+        """Group rename updates the stored name."""
+        group = group_repo.create("backend")
+
+        renamed = group_repo.rename(group.pk, "FrontEnd")
+
+        assert renamed is not None
+        assert renamed.name == "frontend"
+        assert group_repo.find_by_name("frontend") is not None
+
+    def test_rename_group_rejects_duplicate(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Renaming to an existing group name should fail."""
+        source = group_repo.create("source")
+        group_repo.create("target")
+
+        with pytest.raises(ValueError, match="already exists"):
+            group_repo.rename(source.pk, "target")
+
+    def test_rename_group_rejects_empty_name(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Renaming to an empty name should fail."""
+        group = group_repo.create("backend")
+
+        with pytest.raises(ValueError, match="cannot be empty"):
+            group_repo.rename(group.pk, "   ")
+
+    def test_rename_group_missing_returns_none(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Renaming a missing group should return None."""
+        assert group_repo.rename(99999, "backend") is None
+
+    def test_rename_group_translates_update_race(
+        self,
+        group_repo: GroupRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Update races should surface as duplicate-name ValueErrors."""
+        group = group_repo.create("backend")
+        conflicting = group_repo.create("frontend")
+        mocker.patch.object(
+            group_repo._db,
+            "update",
+            side_effect=RecordUpdateError("update failed"),
+        )
+        find_by_name = mocker.patch.object(
+            group_repo,
+            "find_by_name",
+            side_effect=[None, conflicting],
+        )
+
+        with pytest.raises(ValueError, match='Group "frontend" already exists'):
+            group_repo.rename(group.pk, "frontend")
+
+        assert find_by_name.call_count == 2
+
+    def test_rename_group_preserves_non_duplicate_update_errors(
+        self,
+        group_repo: GroupRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Non-duplicate update failures should not be rewritten."""
+        group = group_repo.create("backend")
+        mocker.patch.object(
+            group_repo._db,
+            "update",
+            side_effect=RecordUpdateError("disk full"),
+        )
+
+        with pytest.raises(RecordUpdateError, match="disk full"):
+            group_repo.rename(group.pk, "frontend")

@@ -93,6 +93,25 @@ def test_search_index_refreshes_after_group_move(
     ]
 
 
+def test_search_index_refreshes_after_group_rename(
+    service: IdeaService,
+) -> None:
+    """Group rename should refresh indexed group-name search text."""
+    group = service.create_group("source")
+    service.create_idea("Grouped idea", group_pk=group.pk)
+
+    assert [item.title for item in service.search_ideas("source")] == [
+        "Grouped idea",
+    ]
+
+    service.rename_group(group.pk, "target")
+
+    assert service.search_ideas("source") == []
+    assert [item.title for item in service.search_ideas("target")] == [
+        "Grouped idea",
+    ]
+
+
 def test_search_large_dataset_stays_deduplicated(
     service: IdeaService,
 ) -> None:

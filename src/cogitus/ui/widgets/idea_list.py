@@ -175,6 +175,8 @@ class IdeaListPanel(Vertical):
     def load_grouped_ideas(
         self,
         grouped_ideas: list[tuple[Group, list[Idea]]],
+        *,
+        auto_select_first: bool = True,
     ) -> None:
         """Replace the displayed grouped ideas."""
         tree = self._reset_tree()
@@ -200,9 +202,11 @@ class IdeaListPanel(Vertical):
                 ordered_pks.append(idea.pk)
         self._result_order_pks = tuple(ordered_pks)
         tree.root.expand()
-        if first_idea_node is not None:
+        if auto_select_first and first_idea_node is not None:
             tree.select_node(first_idea_node)
             tree.move_cursor(first_idea_node, animate=False)
+        else:
+            tree.move_cursor(None, animate=False)
 
     def load_grouped_search_results(
         self,
@@ -292,6 +296,19 @@ class IdeaListPanel(Vertical):
             return selected
         tree = self.query_one("#idea-list", Tree)
         node = self._idea_nodes_by_pk.get(idea_pk)
+        if node is None:
+            return False
+        tree.select_node(node)
+        tree.move_cursor(node, animate=False)
+        self.refresh_bindings()
+        return True
+
+    def select_group(self, group_pk: int) -> bool:
+        """Select a group node by primary key."""
+        if self.search_is_active():
+            return False
+        tree = self.query_one("#idea-list", Tree)
+        node = self._group_nodes_by_pk.get(group_pk)
         if node is None:
             return False
         tree.select_node(node)

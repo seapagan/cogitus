@@ -6,6 +6,7 @@
 | -------- | ---------------------------------------------- |
 | `n`      | New idea                                       |
 | `e`      | Edit selected idea                             |
+| `r`      | Rename selected idea or group                  |
 | `d`      | Delete selected idea                           |
 | `g`      | New group                                      |
 | `G`      | Delete selected group                          |
@@ -38,3 +39,11 @@
 | `Shift+Tab` | Previous field (or reverse-cycle tag suggestions)  |
 | `Enter`     | Accept highlighted tag suggestion (tags field)     |
 | `,`         | Accept tag suggestion and start next tag           |
+
+## Rename Dialog
+
+| Key      | Action |
+| -------- | ------ |
+| `Enter`  | Save   |
+| `Ctrl+s` | Save   |
+| `Esc`    | Cancel |

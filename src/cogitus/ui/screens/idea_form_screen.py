@@ -785,6 +785,88 @@ class GroupFormScreen(ModalScreen[int | None]):
         self.dismiss(None)
 
 
+class NameInputScreen(ModalScreen[str | None]):
+    """Simple modal for entering or editing a single name field."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape", "cancel", "Cancel", show=False),
+        Binding(
+            "ctrl+s",
+            "save",
+            "Save",
+            show=False,
+            priority=True,
+        ),
+    ]
+
+    def __init__(
+        self,
+        *,
+        title: str,
+        initial_value: str = "",
+        placeholder: str,
+        save_label: str = "Save [Enter/Ctrl+s]",
+    ) -> None:
+        """Initialize the modal with labels and initial input value."""
+        super().__init__()
+        self._title = title
+        self._initial_value = initial_value
+        self._placeholder = placeholder
+        self._save_label = save_label
+
+    def compose(self) -> ComposeResult:
+        """Compose the name input modal."""
+        with Vertical(id="name-input-container"):
+            yield Static(self._title, id="form-title")
+            yield Input(
+                value=self._initial_value,
+                placeholder=self._placeholder,
+                id="name-input",
+            )
+            with Horizontal(id="name-input-buttons"):
+                yield Button(
+                    self._save_label,
+                    variant="primary",
+                    id="save-name-btn",
+                )
+                yield Button(
+                    "Cancel [Esc]",
+                    variant="default",
+                    id="cancel-name-btn",
+                )
+
+    def on_mount(self) -> None:
+        """Focus the input and place the cursor at the end."""
+        name_input = self.query_one("#name-input", Input)
+        name_input.focus()
+        name_input.cursor_position = len(name_input.value)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "save-name-btn":
+            self.action_save()
+        elif event.button.id == "cancel-name-btn":
+            self.action_cancel()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Submit the modal when Enter is pressed in the name input."""
+        if event.input.id == "name-input":
+            self.action_save()
+
+    def action_save(self) -> None:
+        """Validate and return the entered name."""
+        name = self.query_one("#name-input", Input).value.strip()
+        if not name:
+            self.notify("Name is required", severity="error")
+            self.query_one("#name-input", Input).focus()
+            return
+        self.dismiss(name)
+
+    def action_cancel(self) -> None:
+        """Cancel and dismiss."""
+        self.dismiss(None)
+
+
 class GroupDeleteReassignScreen(ModalScreen[int | None]):
     """Modal dialog to choose destination group when deleting a group."""
 
@@ -869,6 +951,7 @@ class HelpScreen(ModalScreen[None]):
         "[bold]Actions[/bold]\n"
         "  n                New idea\n"
         "  e                Edit selected idea\n"
+        "  r                Rename selected item\n"
         "  d                Delete selected idea\n"
         "  g                New group\n"
         "  G                Delete selected group\n"

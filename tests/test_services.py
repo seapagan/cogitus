@@ -9,6 +9,7 @@ import pytest
 from cogitus.services.idea_service import IdeaService
 
 if TYPE_CHECKING:
+    from pytest_mock import MockerFixture
     from sqliter import SqliterDB
 
 
@@ -57,6 +58,62 @@ class TestIdeaService:
         """None is returned for a missing idea update."""
         assert service.update_idea(999, "X", "Y") is None
 
+    def test_rename_idea(self, service: IdeaService) -> None:
+        """Idea rename should only update the title."""
+        group = service.create_group("backend")
+        idea = service.create_idea(
+            "Original",
+            body="Body text",
+            group_pk=group.pk,
+        )
+
+        renamed = service.rename_idea(idea.pk, "Renamed")
+
+        assert renamed is not None
+        assert renamed.title == "Renamed"
+        assert renamed.body == "Body text"
+        assert renamed.group.pk == group.pk
+
+    def test_rename_idea_not_found(self, service: IdeaService) -> None:
+        """None is returned for a missing idea rename."""
+        assert service.rename_idea(999, "Renamed") is None
+
+    def test_rename_idea_preserves_validation_error(
+        self,
+        service: IdeaService,
+        mocker: MockerFixture,
+    ) -> None:
+        """Repository validation errors should pass through unchanged."""
+        mocker.patch.object(
+            service._idea_repo,
+            "rename",
+            side_effect=ValueError("bad title"),
+        )
+
+        with pytest.raises(ValueError, match="bad title"):
+            service.rename_idea(1, "Renamed")
+
+    def test_rename_idea_normalizes_storage_error(
+        self,
+        service: IdeaService,
+        mocker: MockerFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Unexpected rename failures should become UI-safe ValueErrors."""
+        mocker.patch.object(
+            service._idea_repo,
+            "rename",
+            side_effect=RuntimeError("disk full"),
+        )
+
+        with (
+            caplog.at_level("ERROR"),
+            pytest.raises(ValueError, match="Failed to rename idea"),
+        ):
+            service.rename_idea(1, "Renamed")
+
+        assert "Failed to rename idea pk=1" in caplog.text
+
     def test_delete_idea(self, service: IdeaService) -> None:
         """Idea is removed by delete."""
         idea = service.create_idea("To delete")
@@ -71,6 +128,21 @@ class TestIdeaService:
         fetched = service.get_idea(idea.pk)
         assert fetched is not None
         assert fetched.title == "Test"
+
+    def test_get_idea_with_relations(self, service: IdeaService) -> None:
+        """Idea relations should be available from eager-loading helper."""
+        group = service.create_group("backend")
+        idea = service.create_idea(
+            "Test",
+            tags=["python"],
+            group_pk=group.pk,
+        )
+
+        fetched = service.get_idea_with_relations(idea.pk)
+
+        assert fetched is not None
+        assert fetched.group.pk == group.pk
+        assert [tag.name for tag in fetched.tags.fetch_all()] == ["python"]
 
     def test_get_idea_not_found(self, service: IdeaService) -> None:
         """None is returned for a missing primary key."""
@@ -148,11 +220,92 @@ class TestIdeaService:
         assert "default" in names
         assert "backend" in names
 
+    def test_get_group(self, service: IdeaService) -> None:
+        """Group should be retrievable by primary key."""
+        group = service.create_group("backend")
+
+        fetched = service.get_group(group.pk)
+
+        assert fetched is not None
+        assert fetched.pk == group.pk
+
+    def test_get_group_not_found(self, service: IdeaService) -> None:
+        """Missing groups should return None."""
+        assert service.get_group(99999) is None
+
     def test_create_idea_in_selected_group(self, service: IdeaService) -> None:
         """Idea can be assigned to a selected group."""
         group = service.create_group("backend")
         idea = service.create_idea("Test", group_pk=group.pk)
         assert idea.group.pk == group.pk
+
+    def test_rename_group(self, service: IdeaService) -> None:
+        """Existing groups can be renamed."""
+        group = service.create_group("backend")
+
+        renamed = service.rename_group(group.pk, "FrontEnd")
+
+        assert renamed is not None
+        assert renamed.name == "frontend"
+
+    def test_rename_group_missing_returns_none(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Missing groups should return None when renamed."""
+        assert service.rename_group(99999, "backend") is None
+
+    def test_rename_group_preserves_validation_error(
+        self,
+        service: IdeaService,
+        mocker: MockerFixture,
+    ) -> None:
+        """Repository validation errors should pass through unchanged."""
+        group = service.create_group("backend")
+        mocker.patch.object(
+            service._group_repo,
+            "rename",
+            side_effect=ValueError("already exists"),
+        )
+
+        with pytest.raises(ValueError, match="already exists"):
+            service.rename_group(group.pk, "frontend")
+
+    def test_rename_group_normalizes_storage_error(
+        self,
+        service: IdeaService,
+        mocker: MockerFixture,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Unexpected group rename failures should become UI-safe errors."""
+        group = service.create_group("backend")
+        mocker.patch.object(
+            service._group_repo,
+            "rename",
+            side_effect=RuntimeError("disk full"),
+        )
+
+        with (
+            caplog.at_level("ERROR"),
+            pytest.raises(ValueError, match="Failed to rename group"),
+        ):
+            service.rename_group(group.pk, "frontend")
+
+        assert f"Failed to rename group pk={group.pk}" in caplog.text
+
+    def test_default_group_cannot_be_renamed(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Default group should remain protected from rename."""
+        default = next(
+            group
+            for group in service.list_groups()
+            if group.name == service.default_group_name
+        )
+
+        with pytest.raises(ValueError, match="cannot be renamed"):
+            service.rename_group(default.pk, "inbox")
 
     def test_update_idea_moves_group(self, service: IdeaService) -> None:
         """Existing idea can be moved between groups."""

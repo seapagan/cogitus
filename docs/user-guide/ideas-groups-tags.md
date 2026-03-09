@@ -10,12 +10,16 @@ An idea is the core record in Cogitus and contains:
 - Tags
 - Created/updated timestamps
 
+- Ideas can be renamed directly from the main screen with `r`.
+
 ## Groups
 
 - Ideas are displayed in the left tree by group.
 - New groups can be created with `g`.
+- A selected group can be renamed with `r`.
 - Deleting a group uses `G` (Shift+g).
 - The configured default group cannot be deleted.
+- The configured default group cannot be renamed.
 
 !!! note
     The default group name is configurable with `default_group_name`

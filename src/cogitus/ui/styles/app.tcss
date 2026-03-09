@@ -225,6 +225,10 @@ IdeaFormScreen {
     margin-bottom: 1;
 }
 
+#name-input {
+    margin-bottom: 1;
+}
+
 #move-group-select {
     margin-bottom: 1;
 }
@@ -271,6 +275,25 @@ ConfirmDialog {
 }
 
 #confirm-buttons Button {
+    min-width: 0;
+    padding: 0 1;
+    margin: 0 1;
+}
+
+#name-input-container {
+    width: 50;
+    height: auto;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#name-input-buttons {
+    height: 3;
+    align: center middle;
+}
+
+#name-input-buttons Button {
     min-width: 0;
     padding: 0 1;
     margin: 0 1;

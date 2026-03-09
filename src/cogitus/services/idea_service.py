@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from cogitus.config import normalize_default_group_name
@@ -21,6 +22,9 @@ if TYPE_CHECKING:
     from cogitus.models.idea import Idea
     from cogitus.models.tag import Tag
     from cogitus.search import SearchResult
+
+
+logger = logging.getLogger(__name__)
 
 
 class IdeaService:
@@ -114,6 +118,25 @@ class IdeaService:
             group_pk=group_pk,
         )
 
+    def rename_idea(self, pk: int, title: str) -> Idea | None:
+        """Rename an existing idea without rewriting other fields.
+
+        Args:
+            pk: Primary key of the idea to rename.
+            title: New title.
+
+        Returns:
+            The updated Idea, or None if not found.
+        """
+        try:
+            return self._idea_repo.rename(pk=pk, title=title)
+        except ValueError:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to rename idea pk=%s", pk)
+            msg = "Failed to rename idea"
+            raise ValueError(msg) from exc
+
     def delete_idea(self, pk: int) -> None:
         """Delete an idea by primary key.
 
@@ -195,9 +218,34 @@ class IdeaService:
         """List all groups alphabetically."""
         return self._group_repo.list_all()
 
+    def get_group(self, pk: int) -> Group | None:
+        """Fetch a single group by primary key."""
+        return self._group_repo.get(pk)
+
     def create_group(self, name: str) -> Group:
         """Create a new group."""
         return self._group_repo.create(name)
+
+    def rename_group(self, pk: int, name: str) -> Group | None:
+        """Rename an existing group."""
+        group = self._group_repo.get(pk)
+        if group is None:
+            return None
+        if group.name == self._default_group_name:
+            msg = "Default group cannot be renamed"
+            raise ValueError(msg)
+        try:
+            renamed = self._group_repo.rename(pk, name)
+            if renamed is not None:
+                self._idea_repo.rebuild_search_index()
+        except ValueError:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to rename group pk=%s", pk)
+            msg = "Failed to rename group"
+            raise ValueError(msg) from exc
+        else:
+            return renamed
 
     def has_ideas_in_group(self, group_pk: int) -> bool:
         """Return whether the given group currently contains ideas."""
