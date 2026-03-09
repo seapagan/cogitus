@@ -438,6 +438,21 @@ class IdeaListPanel(Vertical):
         """Focus the search input."""
         self.query_one("#search-input", Input).focus()
 
+    def is_search_input_focused(self) -> bool:
+        """Return whether the search input currently has focus."""
+        return self.app.focused is self.query_one("#search-input", Input)
+
+    def is_search_results_focused(self) -> bool:
+        """Return whether the search results list currently has focus."""
+        return self.app.focused is self.query_one(
+            "#search-results",
+            SearchResultsList,
+        )
+
+    def current_search_query(self) -> str:
+        """Return the trimmed current search query."""
+        return self.query_one("#search-input", Input).value.strip()
+
     def focus_results(self) -> bool:
         """Focus the active search-results list when it has selectable rows."""
         if not self.search_is_active():
@@ -469,10 +484,28 @@ class IdeaListPanel(Vertical):
         self.dismiss_autocomplete()
         search.focus()
 
+    def cancel_search_interaction(
+        self,
+    ) -> Literal[
+        "closed_autocomplete",
+        "focused_search",
+        "cleared_search",
+        "noop",
+    ]:
+        """Handle `Esc` within the list panel's search UI."""
+        if self.dismiss_autocomplete():
+            return "closed_autocomplete"
+        if self.is_search_results_focused() and self.search_is_active():
+            self.focus_search()
+            return "focused_search"
+        if not self.is_search_input_focused():
+            return "noop"
+        self.clear_search()
+        return "cleared_search"
+
     def search_is_active(self) -> bool:
         """Return whether the search input currently contains a query."""
-        search = self.query_one("#search-input", Input)
-        return bool(search.value.strip())
+        return bool(self.current_search_query())
 
     def autocomplete_is_visible(self) -> bool:
         """Return whether search autocomplete is currently visible."""
