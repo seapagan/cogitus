@@ -230,12 +230,11 @@ class MainScreen(Screen[None]):
                 select_group_pk=select_group_pk,
             ):
                 return
-            selected = panel.get_selected_idea()
-            if selected is not None:
-                self._set_selected_idea(selected.pk)
-                view.show_idea(selected)
-            else:
-                self._clear_selected_idea_view(view)
+            self._sync_panel_selection_preview(
+                panel,
+                view,
+                commit_selection=True,
+            )
         else:
             if not self._restore_group_selection(
                 panel,
@@ -243,7 +242,11 @@ class MainScreen(Screen[None]):
                 select_group_pk=select_group_pk,
             ):
                 return
-            self._clear_selected_idea_view(view)
+            self._show_idea_preview(
+                view,
+                None,
+                commit_selection=True,
+            )
 
     def _restore_group_selection(
         self,
@@ -260,8 +263,11 @@ class MainScreen(Screen[None]):
 
     def _clear_selected_idea_view(self, view: IdeaView) -> None:
         """Clear the selected idea and show an empty preview pane."""
-        self._set_selected_idea(None)
-        view.show_empty()
+        self._show_idea_preview(
+            view,
+            None,
+            commit_selection=True,
+        )
 
     def _refresh_search_results(
         self,
@@ -297,15 +303,11 @@ class MainScreen(Screen[None]):
     ) -> None:
         """Show the current search preview and optionally commit it."""
         view = self.query_one("#content-panel", IdeaView)
-        selected = panel.get_selected_idea()
-        if selected is not None:
-            if commit_selection:
-                self._set_selected_idea(selected.pk)
-            view.show_idea(selected)
-            return
-        if commit_selection:
-            self._set_selected_idea(None)
-        view.show_empty()
+        self._sync_panel_selection_preview(
+            panel,
+            view,
+            commit_selection=commit_selection,
+        )
 
     def on_idea_list_panel_idea_selected(
         self, event: IdeaListPanel.IdeaSelected
@@ -313,12 +315,11 @@ class MainScreen(Screen[None]):
         """Update detail view when an idea is selected."""
         view = self.query_one("#content-panel", IdeaView)
         fresh = self._service.get_idea(event.idea.pk)
-        if fresh is not None:
-            self._set_selected_idea(fresh.pk)
-            view.show_idea(fresh)
-        else:
-            self._set_selected_idea(None)
-            view.show_empty()
+        self._show_idea_preview(
+            view,
+            fresh,
+            commit_selection=True,
+        )
 
     def on_idea_list_panel_search_changed(
         self, event: IdeaListPanel.SearchChanged
@@ -343,13 +344,40 @@ class MainScreen(Screen[None]):
         panel.load_grouped_ideas(grouped_ideas)
         if self._selected_idea_pk is not None:
             panel.select_idea(self._selected_idea_pk)
-        selected = panel.get_selected_idea()
-        if selected is not None:
-            self._set_selected_idea(selected.pk)
-            view.show_idea(selected)
-        else:
-            self._set_selected_idea(None)
+        self._sync_panel_selection_preview(
+            panel,
+            view,
+            commit_selection=True,
+        )
+
+    def _sync_panel_selection_preview(
+        self,
+        panel: IdeaListPanel,
+        view: IdeaView,
+        *,
+        commit_selection: bool,
+    ) -> None:
+        """Show the panel's selected idea in the preview pane."""
+        self._show_idea_preview(
+            view,
+            panel.get_selected_idea(),
+            commit_selection=commit_selection,
+        )
+
+    def _show_idea_preview(
+        self,
+        view: IdeaView,
+        idea: Idea | None,
+        *,
+        commit_selection: bool,
+    ) -> None:
+        """Show one idea in the preview pane, or the empty state."""
+        if commit_selection:
+            self._set_selected_idea(None if idea is None else idea.pk)
+        if idea is None:
             view.show_empty()
+            return
+        view.show_idea(idea)
 
     def action_new_idea(self) -> None:
         """Open the new idea form."""
