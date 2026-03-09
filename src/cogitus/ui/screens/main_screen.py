@@ -182,13 +182,15 @@ class MainScreen(Screen[None]):
             tags=[tag.name for tag in self._service.list_tags_in_use()],
             groups=[group.name for group in self._service.list_groups()],
         )
-        search_query = panel.current_search_query()
-        if search_query:
-            self._refresh_search_results(
-                panel,
-                search_query=search_query,
-                select_pk=select_pk,
-            )
+        raw_search_query = panel.raw_search_query()
+        search_query = raw_search_query.strip()
+        if raw_search_query:
+            if search_query:
+                self._refresh_search_results(
+                    panel,
+                    search_query=search_query,
+                    select_pk=select_pk,
+                )
             return
 
         local_select_pk = select_pk

@@ -1997,6 +1997,32 @@ async def test_main_screen_refresh_reuses_selected_idea_pk_in_search_mode(
         await pilot.pause()
 
 
+@pytest.mark.asyncio
+async def test_main_screen_refresh_defers_pending_whitespace_clear(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Refresh should not leave search mode before a clear debounce lands."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+
+        search.value = "   "
+        refresh_search = mocker.patch.object(screen, "_refresh_search_results")
+        refresh_grouped = mocker.patch.object(screen, "_refresh_grouped_ideas")
+
+        screen.refresh_ideas()
+
+        refresh_search.assert_not_called()
+        refresh_grouped.assert_not_called()
+        assert panel.search_is_active() is True
+        await pilot.pause()
+
+
 def _main_screen_callback_test_context(
     mocker: MockerFixture,
 ) -> tuple[MainScreen, Any, Any, Any]:

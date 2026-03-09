@@ -246,6 +246,44 @@ async def test_idea_list_panel_search_mode_helpers_cover_selection_paths(
 
 
 @pytest.mark.asyncio
+async def test_idea_list_panel_whitespace_keeps_search_mode_until_clear(
+    service: IdeaService,
+) -> None:
+    """Whitespace-only input should keep search semantics until clear runs."""
+    idea = service.create_idea("Whitespace target", body="python helper")
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        search = panel.query_one("#search-input", Input)
+        results = panel.query_one("#search-results", SearchResultsList)
+
+        search.value = "python"
+        panel.load_search_results(
+            service.search_results("python"),
+            show_match_rows=True,
+        )
+        await pilot.pause()
+
+        search.value = "   "
+        panel.on_input_changed(Input.Changed(search, "   "))
+        await pilot.pause()
+
+        assert panel.current_search_query() == ""
+        assert panel.raw_search_query() == "   "
+        assert panel.search_is_active() is True
+        assert panel.active_results_widget() is results
+        selected = panel.get_selected_idea()
+        assert selected is not None
+        assert selected.pk == idea.pk
+
+        panel.dismiss_autocomplete()
+        panel.focus_preferred_list_widget()
+        await pilot.pause()
+        assert app.focused is results
+
+
+@pytest.mark.asyncio
 async def test_idea_list_panel_structured_only_search_uses_idea_rows(
     service: IdeaService,
 ) -> None:

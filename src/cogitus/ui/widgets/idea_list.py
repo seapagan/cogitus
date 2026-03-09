@@ -449,7 +449,11 @@ class IdeaListPanel(Vertical):
 
     def current_search_query(self) -> str:
         """Return the trimmed current search query."""
-        return self.query_one("#search-input", Input).value.strip()
+        return self.raw_search_query().strip()
+
+    def raw_search_query(self) -> str:
+        """Return the raw current search input value."""
+        return self.query_one("#search-input", Input).value
 
     def focus_results(self) -> bool:
         """Focus the active search-results list when it has selectable rows."""
@@ -503,7 +507,7 @@ class IdeaListPanel(Vertical):
 
     def search_is_active(self) -> bool:
         """Return whether the search input currently contains a query."""
-        return bool(self.current_search_query())
+        return bool(self.raw_search_query())
 
     def autocomplete_is_visible(self) -> bool:
         """Return whether search autocomplete is currently visible."""
