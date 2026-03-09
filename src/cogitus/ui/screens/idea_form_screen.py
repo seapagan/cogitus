@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Literal
 
+from textual import on
 from textual.binding import Binding, BindingType
 from textual.containers import (
     Container,
@@ -599,12 +600,15 @@ class IdeaFormScreen(ModalScreen[int | None]):
                 return group.pk
         return groups[0].pk
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses."""
-        if event.button.id == "save-btn":
-            self.action_save()
-        elif event.button.id == "cancel-btn":
-            self.action_cancel()
+    @on(Button.Pressed, "#save-btn")
+    def _handle_save_button(self) -> None:
+        """Save the idea when the save button is pressed."""
+        self.action_save()
+
+    @on(Button.Pressed, "#cancel-btn")
+    def _handle_cancel_button(self) -> None:
+        """Cancel the form when the cancel button is pressed."""
+        self.action_cancel()
 
     def action_save(self) -> None:
         """Save the idea."""
@@ -690,12 +694,15 @@ class ConfirmDialog(ModalScreen[bool]):
                     id="confirm-no-btn",
                 )
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses."""
-        if event.button.id == "confirm-yes-btn":
-            self.action_confirm()
-        else:
-            self.action_cancel()
+    @on(Button.Pressed, "#confirm-yes-btn")
+    def _handle_confirm_button(self) -> None:
+        """Confirm the dialog when the yes button is pressed."""
+        self.action_confirm()
+
+    @on(Button.Pressed, "#confirm-no-btn")
+    def _handle_cancel_button(self) -> None:
+        """Cancel the dialog when the no button is pressed."""
+        self.action_cancel()
 
     def action_confirm(self) -> None:
         """Confirm the action."""
@@ -745,12 +752,15 @@ class GroupFormScreen(ModalScreen[int | None]):
                     id="cancel-group-btn",
                 )
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses."""
-        if event.button.id == "save-group-btn":
-            self.action_save()
-        elif event.button.id == "cancel-group-btn":
-            self.action_cancel()
+    @on(Button.Pressed, "#save-group-btn")
+    def _handle_save_button(self) -> None:
+        """Create the group when the save button is pressed."""
+        self.action_save()
+
+    @on(Button.Pressed, "#cancel-group-btn")
+    def _handle_cancel_button(self) -> None:
+        """Cancel the group form when the cancel button is pressed."""
+        self.action_cancel()
 
     def action_save(self) -> None:
         """Create the group and close."""
@@ -826,17 +836,20 @@ class NameInputScreen(ModalScreen[str | None]):
         name_input.focus()
         name_input.cursor_position = len(name_input.value)
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses."""
-        if event.button.id == "save-name-btn":
-            self.action_save()
-        elif event.button.id == "cancel-name-btn":
-            self.action_cancel()
+    @on(Button.Pressed, "#save-name-btn")
+    def _handle_save_button(self) -> None:
+        """Save the entered name when the save button is pressed."""
+        self.action_save()
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
+    @on(Button.Pressed, "#cancel-name-btn")
+    def _handle_cancel_button(self) -> None:
+        """Cancel the name input when the cancel button is pressed."""
+        self.action_cancel()
+
+    @on(Input.Submitted, "#name-input")
+    def _handle_input_submitted(self) -> None:
         """Submit the modal when Enter is pressed in the name input."""
-        if event.input.id == "name-input":
-            self.action_save()
+        self.action_save()
 
     def action_save(self) -> None:
         """Validate and return the entered name."""
@@ -894,12 +907,15 @@ class GroupDeleteReassignScreen(ModalScreen[int | None]):
                     id="cancel-move-btn",
                 )
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses."""
-        if event.button.id == "move-delete-btn":
-            self.action_save()
-        else:
-            self.action_cancel()
+    @on(Button.Pressed, "#move-delete-btn")
+    def _handle_save_button(self) -> None:
+        """Confirm reassignment when the destructive button is pressed."""
+        self.action_save()
+
+    @on(Button.Pressed, "#cancel-move-btn")
+    def _handle_cancel_button(self) -> None:
+        """Cancel the reassignment dialog when cancel is pressed."""
+        self.action_cancel()
 
     def action_save(self) -> None:
         """Return selected destination group pk."""

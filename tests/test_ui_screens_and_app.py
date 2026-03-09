@@ -1220,12 +1220,8 @@ async def test_name_input_screen_button_routing(
         save_action = mocker.patch.object(screen, "action_save")
         cancel_action = mocker.patch.object(screen, "action_cancel")
 
-        screen.on_button_pressed(
-            Button.Pressed(screen.query_one("#save-name-btn", Button))
-        )
-        screen.on_button_pressed(
-            Button.Pressed(screen.query_one("#cancel-name-btn", Button))
-        )
+        screen._handle_save_button()
+        screen._handle_cancel_button()
 
         save_action.assert_called_once_with()
         cancel_action.assert_called_once_with()
@@ -1332,15 +1328,11 @@ async def test_group_form_and_reassign_validation_branches(
         group_form.action_save()
         dismiss.assert_called_once()
 
-        # on_button_pressed routes both paths
+        # Selector-based button handlers route both paths.
         save_action = mocker.patch.object(group_form, "action_save")
         cancel_action = mocker.patch.object(group_form, "action_cancel")
-        group_form.on_button_pressed(
-            Button.Pressed(group_form.query_one("#save-group-btn", Button))
-        )
-        group_form.on_button_pressed(
-            Button.Pressed(group_form.query_one("#cancel-group-btn", Button))
-        )
+        group_form._handle_save_button()
+        group_form._handle_cancel_button()
         save_action.assert_called_once()
         cancel_action.assert_called_once()
         await pilot.pause()
@@ -1367,15 +1359,11 @@ async def test_group_form_and_reassign_validation_branches(
         reassign.action_save()
         dismiss.assert_called_once_with(1)
 
-        # on_button_pressed routes save/cancel
+        # Selector-based button handlers route save/cancel.
         save_action = mocker.patch.object(reassign, "action_save")
         cancel_action = mocker.patch.object(reassign, "action_cancel")
-        reassign.on_button_pressed(
-            Button.Pressed(reassign.query_one("#move-delete-btn", Button))
-        )
-        reassign.on_button_pressed(
-            Button.Pressed(reassign.query_one("#cancel-move-btn", Button))
-        )
+        reassign._handle_save_button()
+        reassign._handle_cancel_button()
         save_action.assert_called_once()
         cancel_action.assert_called_once()
         await pilot.pause()
