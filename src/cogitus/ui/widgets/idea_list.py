@@ -13,6 +13,15 @@ from textual.message import Message
 from textual.reactive import reactive
 from textual.widgets import Input, OptionList, Tree
 
+from cogitus.ui.widgets.autocomplete import (
+    _AutocompleteState,
+    apply_highlighted_autocomplete,
+    autocomplete_is_visible,
+    cycle_autocomplete,
+    dismiss_autocomplete,
+    should_keep_autocomplete_open,
+    show_autocomplete,
+)
 from cogitus.ui.widgets.search_results import SearchResultsList
 
 if TYPE_CHECKING:
@@ -38,15 +47,6 @@ class IdeaTreeNodeData:
     kind: Literal["root", "group", "idea"]
     group_pk: int | None = None
     idea_pk: int | None = None
-
-
-@dataclass(frozen=True)
-class _AutocompleteState:
-    """Resolved autocomplete candidates and replacement target."""
-
-    candidates: tuple[str, ...]
-    replace_start: int
-    replace_end: int
 
 
 @dataclass(frozen=True)
@@ -370,10 +370,11 @@ class IdeaListPanel(Vertical):
         """Dismiss autocomplete unless focus moved to search/options list."""
         search = self.query_one("#search-input", Input)
         autocomplete = self.query_one("#search-autocomplete", OptionList)
-        focused = self.app.focused
-        if focused in {search, autocomplete}:
-            return
-        if focused is not None and autocomplete in focused.ancestors:
+        if should_keep_autocomplete_open(
+            focused=self.app.focused,
+            input_widget=search,
+            autocomplete=autocomplete,
+        ):
             return
         self.dismiss_autocomplete()
 
@@ -599,17 +600,15 @@ class IdeaListPanel(Vertical):
     def dismiss_autocomplete(self) -> bool:
         """Close autocomplete popup if it is currently visible."""
         autocomplete = self.query_one("#search-autocomplete", OptionList)
-        if not self._autocomplete_is_visible():
+        if not dismiss_autocomplete(autocomplete):
             return False
-        autocomplete.add_class("-hidden")
-        autocomplete.clear_options()
         self._autocomplete_state = None
         return True
 
     def _autocomplete_is_visible(self) -> bool:
         """Return whether autocomplete popup is currently visible."""
         autocomplete = self.query_one("#search-autocomplete", OptionList)
-        return not autocomplete.has_class("-hidden")
+        return autocomplete_is_visible(autocomplete)
 
     def _sync_autocomplete(self, *, allow_empty_operator: bool = False) -> None:
         """Recompute autocomplete state from current search/cursor context."""
@@ -626,43 +625,34 @@ class IdeaListPanel(Vertical):
             return
         self._autocomplete_state = state
         autocomplete = self.query_one("#search-autocomplete", OptionList)
-        autocomplete.set_options(state.candidates)
-        autocomplete.highlighted = 0
-        autocomplete.remove_class("-hidden")
+        show_autocomplete(autocomplete, state)
 
     def _cycle_autocomplete(self, direction: Literal[-1, 1]) -> None:
         """Move autocomplete highlight forward or backward with wrapping."""
         autocomplete = self.query_one("#search-autocomplete", OptionList)
-        count = autocomplete.option_count
-        if count == 0:
-            return
-        highlighted = autocomplete.highlighted
-        if highlighted is None:
-            autocomplete.highlighted = 0
-            return
-        autocomplete.highlighted = (highlighted + direction) % count
+        cycle_autocomplete(autocomplete, direction)
 
     def _apply_highlighted_autocomplete(self) -> None:
         """Apply the currently highlighted autocomplete candidate."""
         state = self._autocomplete_state
-        if state is None:
-            return
         autocomplete = self.query_one("#search-autocomplete", OptionList)
         highlighted = autocomplete.highlighted
-        if highlighted is None:
+        if state is None or highlighted is None:
             return
         if highlighted >= len(state.candidates):
             return
-        suggestion = state.candidates[highlighted]
-
         search = self.query_one("#search-input", Input)
-        before = search.value[: state.replace_start]
-        after = search.value[state.replace_end :]
+        apply_highlighted_autocomplete(
+            state=state,
+            autocomplete=autocomplete,
+            input_widget=search,
+            before_input_change=self._suspend_autocomplete_sync_once,
+        )
+
+    def _suspend_autocomplete_sync_once(self) -> None:
+        """Suppress the next programmatic Input.Changed event."""
         # Matches on_input_changed assumption: one sync Input.Changed event.
         self._suspend_autocomplete_sync = True
-        search.value = f"{before}{suggestion}{after}"
-        search.cursor_position = state.replace_start + len(suggestion)
-        self.dismiss_autocomplete()
 
     def _sync_search_state_classes(self) -> None:
         """Apply active-search styling classes to input and tree."""

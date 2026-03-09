@@ -12,10 +12,10 @@ from textual.widgets import Input, Markdown, OptionList, Static, Tree
 from textual.widgets.option_list import Option
 
 from cogitus.search import SearchMatchFragment, SearchResult
+from cogitus.ui.widgets.autocomplete import _AutocompleteState
 from cogitus.ui.widgets.idea_list import (
     IdeaListPanel,
     IdeaTreeNodeData,
-    _AutocompleteState,
     _format_timestamp,
     _resolve_autocomplete_state,
     _token_bounds,

@@ -16,6 +16,15 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, OptionList, Select, Static
 
 from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
+from cogitus.ui.widgets.autocomplete import (
+    _AutocompleteState,
+    apply_highlighted_autocomplete,
+    autocomplete_is_visible,
+    cycle_autocomplete,
+    dismiss_autocomplete,
+    should_keep_autocomplete_open,
+    show_autocomplete,
+)
 from cogitus.ui.widgets.text_area import CogitusTextArea
 
 if TYPE_CHECKING:
@@ -25,15 +34,6 @@ if TYPE_CHECKING:
 
     from cogitus.models.idea import Idea
     from cogitus.services.idea_service import IdeaService
-
-
-@dataclass(frozen=True)
-class _TagAutocompleteState:
-    """Resolved tag candidates and replacement range for tags input."""
-
-    candidates: tuple[str, ...]
-    replace_start: int
-    replace_end: int
 
 
 @dataclass(frozen=True)
@@ -106,7 +106,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         self._initial_group_pk = initial_group_pk
         self._edit_body_cursor_mode = edit_body_cursor_mode
         self._tag_usage_by_name: tuple[tuple[str, int], ...] = ()
-        self._tag_autocomplete_state: _TagAutocompleteState | None = None
+        self._tag_autocomplete_state: _AutocompleteState | None = None
         self._suspend_tag_autocomplete_sync = False
         self._initial_form_state = self._build_initial_form_state(idea)
         self._focus_after_cancel_reject: Widget | None = None
@@ -209,10 +209,11 @@ class IdeaFormScreen(ModalScreen[int | None]):
         """Dismiss suggestions unless focus moved to input/autocomplete."""
         tags_input = self.query_one("#tags-input", Input)
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
-        focused = self.app.focused
-        if focused in {tags_input, autocomplete}:
-            return
-        if focused is not None and autocomplete in focused.ancestors:
+        if should_keep_autocomplete_open(
+            focused=self.app.focused,
+            input_widget=tags_input,
+            autocomplete=autocomplete,
+        ):
             return
         self.dismiss_tag_autocomplete()
 
@@ -302,17 +303,15 @@ class IdeaFormScreen(ModalScreen[int | None]):
     def dismiss_tag_autocomplete(self) -> bool:
         """Hide tags autocomplete popup if currently visible."""
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
-        if not self._tag_autocomplete_is_visible():
+        if not dismiss_autocomplete(autocomplete):
             return False
-        autocomplete.add_class("-hidden")
-        autocomplete.clear_options()
         self._tag_autocomplete_state = None
         return True
 
     def _tag_autocomplete_is_visible(self) -> bool:
         """Return whether tags autocomplete is visible."""
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
-        return not autocomplete.has_class("-hidden")
+        return autocomplete_is_visible(autocomplete)
 
     def _sync_tag_autocomplete(self) -> None:
         """Recompute tags autocomplete state for current token/cursor."""
@@ -329,16 +328,14 @@ class IdeaFormScreen(ModalScreen[int | None]):
             return
         self._tag_autocomplete_state = state
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
-        autocomplete.set_options(state.candidates)
-        autocomplete.highlighted = 0
-        autocomplete.remove_class("-hidden")
+        show_autocomplete(autocomplete, state)
 
     def _resolve_tag_autocomplete_state(
         self,
         value: str,
         *,
         cursor_position: int,
-    ) -> _TagAutocompleteState | None:
+    ) -> _AutocompleteState | None:
         """Resolve candidates and replacement range for current tag token."""
         token_start, token_end = self._tag_token_bounds(value, cursor_position)
         token = value[token_start:token_end]
@@ -354,7 +351,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         replace_start = token_start + left_spaces
         replace_end = token_end - right_spaces
         replace_end = max(replace_end, replace_start)
-        return _TagAutocompleteState(
+        return _AutocompleteState(
             candidates=candidates,
             replace_start=replace_start,
             replace_end=replace_end,
@@ -395,36 +392,24 @@ class IdeaFormScreen(ModalScreen[int | None]):
     def _cycle_tag_autocomplete(self, direction: Literal[-1, 1]) -> None:
         """Move highlighted tag candidate with wrap-around."""
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
-        count = autocomplete.option_count
-        if count == 0:
-            return
-        highlighted = autocomplete.highlighted
-        if highlighted is None:
-            autocomplete.highlighted = 0
-            return
-        autocomplete.highlighted = (highlighted + direction) % count
+        cycle_autocomplete(autocomplete, direction)
 
     def _apply_highlighted_tag_autocomplete(self) -> bool:
         """Apply highlighted candidate to current tag token."""
-        state = self._tag_autocomplete_state
-        if state is None:
-            return False
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
-        highlighted = autocomplete.highlighted
-        if highlighted is None or highlighted >= len(state.candidates):
-            return False
-        suggestion = state.candidates[highlighted]
-
         tags_input = self.query_one("#tags-input", Input)
-        before = tags_input.value[: state.replace_start]
-        after = tags_input.value[state.replace_end :]
+        return apply_highlighted_autocomplete(
+            state=self._tag_autocomplete_state,
+            autocomplete=autocomplete,
+            input_widget=tags_input,
+            before_input_change=self._suspend_tag_autocomplete_sync_once,
+        )
+
+    def _suspend_tag_autocomplete_sync_once(self) -> None:
+        """Suppress the next programmatic Input.Changed event."""
         # Textual 7.5 emits Input.Changed synchronously for value assignment.
         # If this becomes async, this single-shot suppression may need redesign.
         self._suspend_tag_autocomplete_sync = True
-        tags_input.value = f"{before}{suggestion}{after}"
-        tags_input.cursor_position = state.replace_start + len(suggestion)
-        self.dismiss_tag_autocomplete()
-        return True
 
     def _initial_edit_body_cursor_index(self, body: CogitusTextArea) -> int:
         """Return initial cursor index for edit mode body."""
