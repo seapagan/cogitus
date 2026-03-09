@@ -10,7 +10,6 @@ from rich.text import Text
 from textual.binding import Binding, BindingType
 from textual.containers import Vertical
 from textual.message import Message
-from textual.reactive import reactive
 from textual.widgets import Input, OptionList, Tree
 
 from cogitus.ui.widgets.autocomplete import (
@@ -83,7 +82,6 @@ def _format_timestamp(unix_ts: int) -> str:
 class IdeaListPanel(Vertical):
     """Left panel with search input and grouped idea tree."""
 
-    search_query: reactive[str] = reactive("", layout=True)
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding(
             "down",

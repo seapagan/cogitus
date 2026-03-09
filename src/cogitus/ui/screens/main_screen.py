@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from textual.binding import ActiveBinding, Binding, BindingType
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Markdown
+from textual.widgets import Footer, Header
 
 from cogitus.config import (
     DEFAULT_EDIT_BODY_CURSOR_MODE,
@@ -591,16 +591,7 @@ class MainScreen(Screen[None]):
             return selected_text
 
         view = self.query_one("#content-panel", IdeaView)
-        body = view.query_one("#idea-view-body", Markdown)
-        selection = body.text_selection
-        if selection is None:
-            return None
-
-        selected = body.get_selection(selection)
-        if selected is None:
-            return None
-        widget_text, _ = selected
-        return widget_text or None
+        return view.selected_body_text()
 
     def _on_delete_confirm(
         self,
