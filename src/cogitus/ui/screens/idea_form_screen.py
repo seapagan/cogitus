@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Literal
 
+from textual import on
 from textual.binding import Binding, BindingType
 from textual.containers import (
     Container,
@@ -16,6 +17,15 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, OptionList, Select, Static
 
 from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
+from cogitus.ui.widgets.autocomplete import (
+    _AutocompleteState,
+    apply_highlighted_autocomplete,
+    autocomplete_is_visible,
+    cycle_autocomplete,
+    dismiss_autocomplete,
+    should_keep_autocomplete_open,
+    show_autocomplete,
+)
 from cogitus.ui.widgets.text_area import CogitusTextArea
 
 if TYPE_CHECKING:
@@ -25,15 +35,6 @@ if TYPE_CHECKING:
 
     from cogitus.models.idea import Idea
     from cogitus.services.idea_service import IdeaService
-
-
-@dataclass(frozen=True)
-class _TagAutocompleteState:
-    """Resolved tag candidates and replacement range for tags input."""
-
-    candidates: tuple[str, ...]
-    replace_start: int
-    replace_end: int
 
 
 @dataclass(frozen=True)
@@ -106,7 +107,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         self._initial_group_pk = initial_group_pk
         self._edit_body_cursor_mode = edit_body_cursor_mode
         self._tag_usage_by_name: tuple[tuple[str, int], ...] = ()
-        self._tag_autocomplete_state: _TagAutocompleteState | None = None
+        self._tag_autocomplete_state: _AutocompleteState | None = None
         self._suspend_tag_autocomplete_sync = False
         self._initial_form_state = self._build_initial_form_state(idea)
         self._focus_after_cancel_reject: Widget | None = None
@@ -209,10 +210,11 @@ class IdeaFormScreen(ModalScreen[int | None]):
         """Dismiss suggestions unless focus moved to input/autocomplete."""
         tags_input = self.query_one("#tags-input", Input)
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
-        focused = self.app.focused
-        if focused in {tags_input, autocomplete}:
-            return
-        if focused is not None and autocomplete in focused.ancestors:
+        if should_keep_autocomplete_open(
+            focused=self.app.focused,
+            input_widget=tags_input,
+            autocomplete=autocomplete,
+        ):
             return
         self.dismiss_tag_autocomplete()
 
@@ -302,17 +304,15 @@ class IdeaFormScreen(ModalScreen[int | None]):
     def dismiss_tag_autocomplete(self) -> bool:
         """Hide tags autocomplete popup if currently visible."""
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
-        if not self._tag_autocomplete_is_visible():
+        if not dismiss_autocomplete(autocomplete):
             return False
-        autocomplete.add_class("-hidden")
-        autocomplete.clear_options()
         self._tag_autocomplete_state = None
         return True
 
     def _tag_autocomplete_is_visible(self) -> bool:
         """Return whether tags autocomplete is visible."""
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
-        return not autocomplete.has_class("-hidden")
+        return autocomplete_is_visible(autocomplete)
 
     def _sync_tag_autocomplete(self) -> None:
         """Recompute tags autocomplete state for current token/cursor."""
@@ -329,16 +329,14 @@ class IdeaFormScreen(ModalScreen[int | None]):
             return
         self._tag_autocomplete_state = state
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
-        autocomplete.set_options(state.candidates)
-        autocomplete.highlighted = 0
-        autocomplete.remove_class("-hidden")
+        show_autocomplete(autocomplete, state)
 
     def _resolve_tag_autocomplete_state(
         self,
         value: str,
         *,
         cursor_position: int,
-    ) -> _TagAutocompleteState | None:
+    ) -> _AutocompleteState | None:
         """Resolve candidates and replacement range for current tag token."""
         token_start, token_end = self._tag_token_bounds(value, cursor_position)
         token = value[token_start:token_end]
@@ -354,7 +352,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         replace_start = token_start + left_spaces
         replace_end = token_end - right_spaces
         replace_end = max(replace_end, replace_start)
-        return _TagAutocompleteState(
+        return _AutocompleteState(
             candidates=candidates,
             replace_start=replace_start,
             replace_end=replace_end,
@@ -395,36 +393,24 @@ class IdeaFormScreen(ModalScreen[int | None]):
     def _cycle_tag_autocomplete(self, direction: Literal[-1, 1]) -> None:
         """Move highlighted tag candidate with wrap-around."""
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
-        count = autocomplete.option_count
-        if count == 0:
-            return
-        highlighted = autocomplete.highlighted
-        if highlighted is None:
-            autocomplete.highlighted = 0
-            return
-        autocomplete.highlighted = (highlighted + direction) % count
+        cycle_autocomplete(autocomplete, direction)
 
     def _apply_highlighted_tag_autocomplete(self) -> bool:
         """Apply highlighted candidate to current tag token."""
-        state = self._tag_autocomplete_state
-        if state is None:
-            return False
         autocomplete = self.query_one("#tags-autocomplete", OptionList)
-        highlighted = autocomplete.highlighted
-        if highlighted is None or highlighted >= len(state.candidates):
-            return False
-        suggestion = state.candidates[highlighted]
-
         tags_input = self.query_one("#tags-input", Input)
-        before = tags_input.value[: state.replace_start]
-        after = tags_input.value[state.replace_end :]
+        return apply_highlighted_autocomplete(
+            state=self._tag_autocomplete_state,
+            autocomplete=autocomplete,
+            input_widget=tags_input,
+            before_input_change=self._suspend_tag_autocomplete_sync_once,
+        )
+
+    def _suspend_tag_autocomplete_sync_once(self) -> None:
+        """Suppress the next programmatic Input.Changed event."""
         # Textual 7.5 emits Input.Changed synchronously for value assignment.
         # If this becomes async, this single-shot suppression may need redesign.
         self._suspend_tag_autocomplete_sync = True
-        tags_input.value = f"{before}{suggestion}{after}"
-        tags_input.cursor_position = state.replace_start + len(suggestion)
-        self.dismiss_tag_autocomplete()
-        return True
 
     def _initial_edit_body_cursor_index(self, body: CogitusTextArea) -> int:
         """Return initial cursor index for edit mode body."""
@@ -614,12 +600,15 @@ class IdeaFormScreen(ModalScreen[int | None]):
                 return group.pk
         return groups[0].pk
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses."""
-        if event.button.id == "save-btn":
-            self.action_save()
-        elif event.button.id == "cancel-btn":
-            self.action_cancel()
+    @on(Button.Pressed, "#save-btn")
+    def _handle_save_button(self) -> None:
+        """Save the idea when the save button is pressed."""
+        self.action_save()
+
+    @on(Button.Pressed, "#cancel-btn")
+    def _handle_cancel_button(self) -> None:
+        """Cancel the form when the cancel button is pressed."""
+        self.action_cancel()
 
     def action_save(self) -> None:
         """Save the idea."""
@@ -705,12 +694,15 @@ class ConfirmDialog(ModalScreen[bool]):
                     id="confirm-no-btn",
                 )
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses."""
-        if event.button.id == "confirm-yes-btn":
-            self.action_confirm()
-        else:
-            self.action_cancel()
+    @on(Button.Pressed, "#confirm-yes-btn")
+    def _handle_confirm_button(self) -> None:
+        """Confirm the dialog when the yes button is pressed."""
+        self.action_confirm()
+
+    @on(Button.Pressed, "#confirm-no-btn")
+    def _handle_cancel_button(self) -> None:
+        """Cancel the dialog when the no button is pressed."""
+        self.action_cancel()
 
     def action_confirm(self) -> None:
         """Confirm the action."""
@@ -760,12 +752,15 @@ class GroupFormScreen(ModalScreen[int | None]):
                     id="cancel-group-btn",
                 )
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses."""
-        if event.button.id == "save-group-btn":
-            self.action_save()
-        elif event.button.id == "cancel-group-btn":
-            self.action_cancel()
+    @on(Button.Pressed, "#save-group-btn")
+    def _handle_save_button(self) -> None:
+        """Create the group when the save button is pressed."""
+        self.action_save()
+
+    @on(Button.Pressed, "#cancel-group-btn")
+    def _handle_cancel_button(self) -> None:
+        """Cancel the group form when the cancel button is pressed."""
+        self.action_cancel()
 
     def action_save(self) -> None:
         """Create the group and close."""
@@ -841,17 +836,20 @@ class NameInputScreen(ModalScreen[str | None]):
         name_input.focus()
         name_input.cursor_position = len(name_input.value)
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses."""
-        if event.button.id == "save-name-btn":
-            self.action_save()
-        elif event.button.id == "cancel-name-btn":
-            self.action_cancel()
+    @on(Button.Pressed, "#save-name-btn")
+    def _handle_save_button(self) -> None:
+        """Save the entered name when the save button is pressed."""
+        self.action_save()
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
+    @on(Button.Pressed, "#cancel-name-btn")
+    def _handle_cancel_button(self) -> None:
+        """Cancel the name input when the cancel button is pressed."""
+        self.action_cancel()
+
+    @on(Input.Submitted, "#name-input")
+    def _handle_input_submitted(self) -> None:
         """Submit the modal when Enter is pressed in the name input."""
-        if event.input.id == "name-input":
-            self.action_save()
+        self.action_save()
 
     def action_save(self) -> None:
         """Validate and return the entered name."""
@@ -909,12 +907,15 @@ class GroupDeleteReassignScreen(ModalScreen[int | None]):
                     id="cancel-move-btn",
                 )
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses."""
-        if event.button.id == "move-delete-btn":
-            self.action_save()
-        else:
-            self.action_cancel()
+    @on(Button.Pressed, "#move-delete-btn")
+    def _handle_save_button(self) -> None:
+        """Confirm reassignment when the destructive button is pressed."""
+        self.action_save()
+
+    @on(Button.Pressed, "#cancel-move-btn")
+    def _handle_cancel_button(self) -> None:
+        """Cancel the reassignment dialog when cancel is pressed."""
+        self.action_cancel()
 
     def action_save(self) -> None:
         """Return selected destination group pk."""

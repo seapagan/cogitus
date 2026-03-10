@@ -82,17 +82,7 @@ class CogitusApp(App[None]):
         )
         last_viewed = self._settings.last_viewed_idea_pk
         self._last_viewed_idea_pk = last_viewed if last_viewed > 0 else None
-
-        if db is not None:
-            self._db = db
-            GroupRepository(self._db).get_or_create(self._default_group_name)
-        elif db_path is not None:
-            self._db = get_db(
-                db_path,
-                default_group_name=self._default_group_name,
-            )
-        else:
-            self._db = get_db(default_group_name=self._default_group_name)
+        self._db = self._build_db(db_path=db_path, db=db)
         self._service = IdeaService(
             self._db,
             default_group_name=self._default_group_name,
@@ -100,15 +90,38 @@ class CogitusApp(App[None]):
 
     def on_mount(self) -> None:
         """Push the main screen on mount."""
-        self.push_screen(
-            MainScreen(
-                self._service,
-                initial_select_pk=self._last_viewed_idea_pk,
-                on_selected_idea_changed=self._on_selected_idea_changed,
-                edit_body_cursor_mode=self._edit_body_cursor_mode,
-                new_idea_group_mode=self._new_idea_group_mode,
+        self.push_screen(self._build_main_screen())
+        self._notify_invalid_config()
+
+    def _build_db(
+        self,
+        *,
+        db_path: str | None,
+        db: SqliterDB | None,
+    ) -> SqliterDB:
+        """Return the configured database instance."""
+        if db is not None:
+            GroupRepository(db).get_or_create(self._default_group_name)
+            return db
+        if db_path is not None:
+            return get_db(
+                db_path,
+                default_group_name=self._default_group_name,
             )
+        return get_db(default_group_name=self._default_group_name)
+
+    def _build_main_screen(self) -> MainScreen:
+        """Build the main application screen."""
+        return MainScreen(
+            self._service,
+            initial_select_pk=self._last_viewed_idea_pk,
+            on_selected_idea_changed=self._on_selected_idea_changed,
+            edit_body_cursor_mode=self._edit_body_cursor_mode,
+            new_idea_group_mode=self._new_idea_group_mode,
         )
+
+    def _notify_invalid_config(self) -> None:
+        """Warn when persisted config values are invalid."""
         if self._invalid_new_idea_group_mode:
             valid_values = ", ".join(
                 f"'{value}'" for value in VALID_NEW_IDEA_GROUP_MODES
@@ -121,6 +134,7 @@ class CogitusApp(App[None]):
                 f"Valid values: {valid_values}.",
                 severity="warning",
             )
+
         if self._invalid_default_group_name:
             self.notify(
                 "Invalid config "

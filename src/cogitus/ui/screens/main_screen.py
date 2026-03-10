@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from textual.binding import ActiveBinding, Binding, BindingType
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Input, Markdown
+from textual.widgets import Footer, Header
 
 from cogitus.config import (
     DEFAULT_EDIT_BODY_CURSOR_MODE,
@@ -27,7 +27,6 @@ from cogitus.ui.screens.idea_form_screen import (
 )
 from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
-from cogitus.ui.widgets.search_results import SearchResultsList
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -183,13 +182,15 @@ class MainScreen(Screen[None]):
             tags=[tag.name for tag in self._service.list_tags_in_use()],
             groups=[group.name for group in self._service.list_groups()],
         )
-        search_query = panel.query_one("#search-input", Input).value.strip()
-        if search_query:
-            self._refresh_search_results(
-                panel,
-                search_query=search_query,
-                select_pk=select_pk,
-            )
+        raw_search_query = panel.raw_search_query()
+        search_query = raw_search_query.strip()
+        if raw_search_query:
+            if search_query:
+                self._refresh_search_results(
+                    panel,
+                    search_query=search_query,
+                    select_pk=select_pk,
+                )
             return
 
         local_select_pk = select_pk
@@ -231,12 +232,11 @@ class MainScreen(Screen[None]):
                 select_group_pk=select_group_pk,
             ):
                 return
-            selected = panel.get_selected_idea()
-            if selected is not None:
-                self._set_selected_idea(selected.pk)
-                view.show_idea(selected)
-            else:
-                self._clear_selected_idea_view(view)
+            self._sync_panel_selection_preview(
+                panel,
+                view,
+                commit_selection=True,
+            )
         else:
             if not self._restore_group_selection(
                 panel,
@@ -244,7 +244,11 @@ class MainScreen(Screen[None]):
                 select_group_pk=select_group_pk,
             ):
                 return
-            self._clear_selected_idea_view(view)
+            self._show_idea_preview(
+                view,
+                None,
+                commit_selection=True,
+            )
 
     def _restore_group_selection(
         self,
@@ -261,8 +265,11 @@ class MainScreen(Screen[None]):
 
     def _clear_selected_idea_view(self, view: IdeaView) -> None:
         """Clear the selected idea and show an empty preview pane."""
-        self._set_selected_idea(None)
-        view.show_empty()
+        self._show_idea_preview(
+            view,
+            None,
+            commit_selection=True,
+        )
 
     def _refresh_search_results(
         self,
@@ -286,9 +293,7 @@ class MainScreen(Screen[None]):
         self._show_search_selection_preview(
             panel,
             commit_selection=(
-                matched_select_pk
-                or self.app.focused
-                is panel.query_one("#search-results", SearchResultsList)
+                matched_select_pk or panel.is_search_results_focused()
             ),
         )
 
@@ -300,15 +305,11 @@ class MainScreen(Screen[None]):
     ) -> None:
         """Show the current search preview and optionally commit it."""
         view = self.query_one("#content-panel", IdeaView)
-        selected = panel.get_selected_idea()
-        if selected is not None:
-            if commit_selection:
-                self._set_selected_idea(selected.pk)
-            view.show_idea(selected)
-            return
-        if commit_selection:
-            self._set_selected_idea(None)
-        view.show_empty()
+        self._sync_panel_selection_preview(
+            panel,
+            view,
+            commit_selection=commit_selection,
+        )
 
     def on_idea_list_panel_idea_selected(
         self, event: IdeaListPanel.IdeaSelected
@@ -316,12 +317,11 @@ class MainScreen(Screen[None]):
         """Update detail view when an idea is selected."""
         view = self.query_one("#content-panel", IdeaView)
         fresh = self._service.get_idea(event.idea.pk)
-        if fresh is not None:
-            self._set_selected_idea(fresh.pk)
-            view.show_idea(fresh)
-        else:
-            self._set_selected_idea(None)
-            view.show_empty()
+        self._show_idea_preview(
+            view,
+            fresh,
+            commit_selection=True,
+        )
 
     def on_idea_list_panel_search_changed(
         self, event: IdeaListPanel.SearchChanged
@@ -346,13 +346,40 @@ class MainScreen(Screen[None]):
         panel.load_grouped_ideas(grouped_ideas)
         if self._selected_idea_pk is not None:
             panel.select_idea(self._selected_idea_pk)
-        selected = panel.get_selected_idea()
-        if selected is not None:
-            self._set_selected_idea(selected.pk)
-            view.show_idea(selected)
-        else:
-            self._set_selected_idea(None)
+        self._sync_panel_selection_preview(
+            panel,
+            view,
+            commit_selection=True,
+        )
+
+    def _sync_panel_selection_preview(
+        self,
+        panel: IdeaListPanel,
+        view: IdeaView,
+        *,
+        commit_selection: bool,
+    ) -> None:
+        """Show the panel's selected idea in the preview pane."""
+        self._show_idea_preview(
+            view,
+            panel.get_selected_idea(),
+            commit_selection=commit_selection,
+        )
+
+    def _show_idea_preview(
+        self,
+        view: IdeaView,
+        idea: Idea | None,
+        *,
+        commit_selection: bool,
+    ) -> None:
+        """Show one idea in the preview pane, or the empty state."""
+        if commit_selection:
+            self._set_selected_idea(None if idea is None else idea.pk)
+        if idea is None:
             view.show_empty()
+            return
+        view.show_idea(idea)
 
     def action_new_idea(self) -> None:
         """Open the new idea form."""
@@ -566,16 +593,7 @@ class MainScreen(Screen[None]):
             return selected_text
 
         view = self.query_one("#content-panel", IdeaView)
-        body = view.query_one("#idea-view-body", Markdown)
-        selection = body.text_selection
-        if selection is None:
-            return None
-
-        selected = body.get_selection(selection)
-        if selected is None:
-            return None
-        widget_text, _ = selected
-        return widget_text or None
+        return view.selected_body_text()
 
     def _on_delete_confirm(
         self,
@@ -676,26 +694,16 @@ class MainScreen(Screen[None]):
     def action_focus_search(self) -> None:
         """Focus the search input."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        search = panel.query_one("#search-input", Input)
-        if self.app.focused is not search:
+        if not panel.is_search_input_focused():
             self._focus_before_search = self._active_pane
-        search.focus()
+        panel.focus_search()
 
     def action_cancel_search(self) -> None:
         """Clear search and return focus to the previous panel."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        if panel.dismiss_autocomplete():
+        cancel_result = panel.cancel_search_interaction()
+        if cancel_result != "cleared_search":
             return
-        search = panel.query_one("#search-input", Input)
-        results = panel.query_one("#search-results", SearchResultsList)
-        if self.app.focused is results and panel.search_is_active():
-            search.focus()
-            return
-
-        if self.app.focused is not search:
-            return
-
-        search.value = ""
         if self._focus_before_search == "content":
             self.query_one("#content-panel", IdeaView).focus_content()
             self._active_pane = "content"
@@ -710,7 +718,7 @@ class MainScreen(Screen[None]):
     def action_toggle_focus(self) -> None:
         """Toggle focus between list and content panes."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        if self.app.focused is panel.query_one("#search-input", Input):
+        if panel.is_search_input_focused():
             return
         if panel.has_focus_within:
             content = self.query_one("#content-panel", IdeaView)
@@ -744,30 +752,27 @@ class MainScreen(Screen[None]):
     ) -> bool | None:
         """Show search-mode footer hints only when they are relevant."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        search = panel.query_one("#search-input", Input)
-        results = panel.query_one("#search-results", SearchResultsList)
 
         if panel.search_is_active():
             if (
-                self.app.focused in {search, results}
-                and action in self._SEARCH_MODE_DISABLED_ACTIONS
-            ):
+                panel.is_search_input_focused()
+                or panel.is_search_results_focused()
+            ) and action in self._SEARCH_MODE_DISABLED_ACTIONS:
                 return False
-            if (
-                self.app.focused is search
-                and action in self._SEARCH_INPUT_DISABLED_ACTIONS
+            if panel.is_search_input_focused() and action in (
+                self._SEARCH_INPUT_DISABLED_ACTIONS
             ):
                 return False
 
         if action == "footer_search_results":
             return (
-                self.app.focused is search
+                panel.is_search_input_focused()
                 and panel.search_is_active()
                 and not panel.autocomplete_is_visible()
                 and bool(panel.get_selected_idea())
             )
         if action == "footer_exit_search":
-            return self.app.focused is search
+            return panel.is_search_input_focused()
         if action == "rename_selected":
             return self._can_rename_selection()
         return super().check_action(action, parameters)
@@ -775,9 +780,8 @@ class MainScreen(Screen[None]):
     def _can_rename_selection(self) -> bool:
         """Return whether the current focus/selection supports rename."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        search = panel.query_one("#search-input", Input)
 
-        if self.app.focused is search:
+        if panel.is_search_input_focused():
             return False
         group_pk = panel.get_selected_group_pk()
         if group_pk is not None:
@@ -793,29 +797,27 @@ class MainScreen(Screen[None]):
         """Return bindings with search-mode footer filtering."""
         bindings = super().active_bindings
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        search = panel.query_one("#search-input", Input)
-        results = panel.query_one("#search-results", SearchResultsList)
 
-        if self.app.focused is search or panel.search_is_active():
+        if panel.is_search_input_focused() or panel.search_is_active():
             bindings = {
                 key: binding
                 for key, binding in bindings.items()
                 if binding.binding.action != "toggle_focus"
             }
 
-        if self.app.focused is search and not panel.search_is_active():
+        if panel.is_search_input_focused() and not panel.search_is_active():
             bindings = {
                 key: binding
                 for key, binding in bindings.items()
                 if binding.binding.action == "footer_exit_search"
             }
-        elif self.app.focused is search and panel.search_is_active():
+        elif panel.is_search_input_focused() and panel.search_is_active():
             bindings = {
                 key: binding
                 for key, binding in bindings.items()
                 if binding.binding.action in self._SEARCH_INPUT_FOOTER_ACTIONS
             }
-        elif self.app.focused is results and panel.search_is_active():
+        elif panel.is_search_results_focused() and panel.search_is_active():
             bindings = {
                 key: binding
                 for key, binding in bindings.items()
@@ -824,7 +826,7 @@ class MainScreen(Screen[None]):
 
         up_binding = bindings.get("up")
         if (
-            self.app.focused is results
+            panel.is_search_results_focused()
             and panel.search_is_active()
             and up_binding is not None
             and up_binding.binding.action == "footer_previous_result"

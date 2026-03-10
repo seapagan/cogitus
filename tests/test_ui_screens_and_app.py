@@ -1220,12 +1220,8 @@ async def test_name_input_screen_button_routing(
         save_action = mocker.patch.object(screen, "action_save")
         cancel_action = mocker.patch.object(screen, "action_cancel")
 
-        screen.on_button_pressed(
-            Button.Pressed(screen.query_one("#save-name-btn", Button))
-        )
-        screen.on_button_pressed(
-            Button.Pressed(screen.query_one("#cancel-name-btn", Button))
-        )
+        await pilot.click("#save-name-btn")
+        await pilot.click("#cancel-name-btn")
 
         save_action.assert_called_once_with()
         cancel_action.assert_called_once_with()
@@ -1332,15 +1328,11 @@ async def test_group_form_and_reassign_validation_branches(
         group_form.action_save()
         dismiss.assert_called_once()
 
-        # on_button_pressed routes both paths
+        # Routed button clicks cover both selector-based paths.
         save_action = mocker.patch.object(group_form, "action_save")
         cancel_action = mocker.patch.object(group_form, "action_cancel")
-        group_form.on_button_pressed(
-            Button.Pressed(group_form.query_one("#save-group-btn", Button))
-        )
-        group_form.on_button_pressed(
-            Button.Pressed(group_form.query_one("#cancel-group-btn", Button))
-        )
+        await pilot.click("#save-group-btn")
+        await pilot.click("#cancel-group-btn")
         save_action.assert_called_once()
         cancel_action.assert_called_once()
         await pilot.pause()
@@ -1367,15 +1359,11 @@ async def test_group_form_and_reassign_validation_branches(
         reassign.action_save()
         dismiss.assert_called_once_with(1)
 
-        # on_button_pressed routes save/cancel
+        # Routed button clicks cover save/cancel dispatch.
         save_action = mocker.patch.object(reassign, "action_save")
         cancel_action = mocker.patch.object(reassign, "action_cancel")
-        reassign.on_button_pressed(
-            Button.Pressed(reassign.query_one("#move-delete-btn", Button))
-        )
-        reassign.on_button_pressed(
-            Button.Pressed(reassign.query_one("#cancel-move-btn", Button))
-        )
+        await pilot.click("#move-delete-btn")
+        await pilot.click("#cancel-move-btn")
         save_action.assert_called_once()
         cancel_action.assert_called_once()
         await pilot.pause()
@@ -2006,6 +1994,32 @@ async def test_main_screen_refresh_reuses_selected_idea_pk_in_search_mode(
         refresh_search.assert_called_once()
         assert refresh_search.call_args.kwargs["search_query"] == "First"
         assert refresh_search.call_args.kwargs["select_pk"] is None
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_refresh_defers_pending_whitespace_clear(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Refresh should not leave search mode before a clear debounce lands."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+
+        search.value = "   "
+        refresh_search = mocker.patch.object(screen, "_refresh_search_results")
+        refresh_grouped = mocker.patch.object(screen, "_refresh_grouped_ideas")
+
+        screen.refresh_ideas()
+
+        refresh_search.assert_not_called()
+        refresh_grouped.assert_not_called()
+        assert panel.search_is_active() is True
         await pilot.pause()
 
 
