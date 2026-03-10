@@ -15,9 +15,6 @@ Ideas to add to Cogitus
   node (`Ideas`) be locked so it cant be manually collapsed?
 - add a tag management dialog with usage counts, rename/edit support, and
   explicit stale-tag pruning (selected/all stale with confirmation).
-- extract shared autocomplete lifecycle logic currently duplicated across
-  `IdeaListPanel` and `IdeaFormScreen` into a common helper/mixin to reduce
-  divergence risk.
 
 ## CLI
 
