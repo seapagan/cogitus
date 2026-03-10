@@ -5,10 +5,11 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/seapagan/cogitus/tree/HEAD)
+## [0.6.0](https://github.com/seapagan/cogitus/releases/tag/0.6.0) (March 10, 2026)
 
 **New Features**
 
+- Add contextual rename for ideas and groups ([#35](https://github.com/seapagan/cogitus/pull/35)) by [seapagan](https://github.com/seapagan)
 - Add dedicated search results mode ([#28](https://github.com/seapagan/cogitus/pull/28)) by [seapagan](https://github.com/seapagan)
 - Overhaul search with fts5 and keyboard navigation ([#27](https://github.com/seapagan/cogitus/pull/27)) by [seapagan](https://github.com/seapagan)
 - Add autocomplete flows for search and tag inputs ([#26](https://github.com/seapagan/cogitus/pull/26)) by [seapagan](https://github.com/seapagan)
@@ -21,11 +22,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Fix idea form tag autocomplete visibility ([#30](https://github.com/seapagan/cogitus/pull/30)) by [seapagan](https://github.com/seapagan)
 - Fix search selection state handling ([#29](https://github.com/seapagan/cogitus/pull/29)) by [seapagan](https://github.com/seapagan)
 
+**Refactoring**
+
+- Simplify textual ui interaction helpers ([#36](https://github.com/seapagan/cogitus/pull/36)) by [seapagan](https://github.com/seapagan)
+
 **Dependency Updates**
 
 - Upgrade textual to 8.x ([#33](https://github.com/seapagan/cogitus/pull/33)) by [seapagan](https://github.com/seapagan)
 
-[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.5.0...HEAD) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.5.0...HEAD.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.5.0...HEAD.patch)
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.5.0...0.6.0) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.5.0...0.6.0.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.5.0...0.6.0.patch)
 
 ## [0.5.0](https://github.com/seapagan/cogitus/releases/tag/0.5.0) (February 15, 2026)
 
