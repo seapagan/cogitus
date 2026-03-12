@@ -6,31 +6,41 @@ from typing import TYPE_CHECKING, cast
 
 from sqliter.exceptions import RecordInsertionError
 
+from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
 
 if TYPE_CHECKING:
+    from typing import Protocol
+
     from sqliter import SqliterDB
     from sqliter.query.query import FilterValue
 
-_IDEAS_TAGS_TABLE = "ideas_tags"
-_IDEAS_TAGS_TAG_PK_COL = "tags_pk"
-_IDEAS_TAGS_IDEA_PK_COL = "ideas_pk"
-# Static SQL built from trusted module constants (no user input).
-_LIST_IN_USE_SQL = (
-    f"SELECT DISTINCT {_IDEAS_TAGS_TAG_PK_COL} FROM {_IDEAS_TAGS_TABLE};"  # noqa: S608
-)
-_LIST_WITH_USAGE_SQL = (
-    "SELECT tags.pk AS pk, "  # noqa: S608
-    "tags.name AS name, "
-    "tags.created_at AS created_at, "
-    "tags.updated_at AS updated_at, "
-    f"COUNT({_IDEAS_TAGS_TABLE}.{_IDEAS_TAGS_IDEA_PK_COL}) AS usage "
-    "FROM tags "
-    f"LEFT JOIN {_IDEAS_TAGS_TABLE} ON "
-    f"{_IDEAS_TAGS_TABLE}.{_IDEAS_TAGS_TAG_PK_COL} = tags.pk "
-    "GROUP BY tags.pk, tags.name, tags.created_at, tags.updated_at "
-    "ORDER BY tags.name;"
-)
+    class M2MSQLMetadata(Protocol):
+        """Typing surface used from sqliter's public M2M SQL metadata."""
+
+        junction_table: str
+        from_column: str
+        to_column: str
+        source_table: str
+        target_table: str
+        symmetrical: bool
+
+    class SupportsM2MSQLMetadata(Protocol):
+        """Descriptor protocol exposing SQL metadata for an M2M relation."""
+
+        @property
+        def sql_metadata(self) -> M2MSQLMetadata | None:
+            """Return SQL metadata for the relationship, if available."""
+
+
+def _idea_tags_sql_metadata() -> M2MSQLMetadata:
+    """Return resolved SQL metadata for the Idea.tags relationship."""
+    descriptor = cast("SupportsM2MSQLMetadata", Idea.tags)
+    metadata = descriptor.sql_metadata
+    if metadata is None:
+        msg = "Idea.tags SQL metadata is unavailable."
+        raise RuntimeError(msg)
+    return metadata
 
 
 class TagRepository:
@@ -43,6 +53,7 @@ class TagRepository:
             db: The SqliterDB instance.
         """
         self._db = db
+        self._idea_tags_metadata = _idea_tags_sql_metadata()
 
     def get_or_create(self, name: str) -> Tag:
         """Find an existing tag by name or create a new one.
@@ -95,7 +106,14 @@ class TagRepository:
         Returns:
             List of linked tags ordered alphabetically.
         """
-        rows = self._db.connect().execute(_LIST_IN_USE_SQL)
+        # SQL is assembled from trusted relationship metadata, not user input.
+        query = (
+            "SELECT DISTINCT "  # noqa: S608
+            f'"{self._idea_tags_metadata.to_column}" '
+            "FROM "
+            f'"{self._idea_tags_metadata.junction_table}";'
+        )
+        rows = self._db.connect().execute(query)
         tag_pks: list[int] = [int(row[0]) for row in rows.fetchall()]
         if not tag_pks:
             return []
@@ -114,7 +132,20 @@ class TagRepository:
         Returns:
             List of (tag, usage_count) tuples ordered by tag name.
         """
-        cursor = self._db.connect().execute(_LIST_WITH_USAGE_SQL)
+        # SQL is assembled from trusted relationship metadata, not user input.
+        query = (
+            "SELECT t.pk AS pk, "  # noqa: S608
+            "t.name AS name, "
+            "t.created_at AS created_at, "
+            "t.updated_at AS updated_at, "
+            f'COUNT(j."{self._idea_tags_metadata.from_column}") AS usage '
+            f'FROM "{self._idea_tags_metadata.target_table}" AS t '
+            f'LEFT JOIN "{self._idea_tags_metadata.junction_table}" AS j '
+            f'ON j."{self._idea_tags_metadata.to_column}" = t.pk '
+            "GROUP BY t.pk, t.name, t.created_at, t.updated_at "
+            "ORDER BY t.name;"
+        )
+        cursor = self._db.connect().execute(query)
         column_names = tuple(
             description[0] for description in cursor.description or ()
         )

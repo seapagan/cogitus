@@ -93,6 +93,38 @@ class TestTagRepository:
         assert found.pk == existing.pk
         assert find_mock.call_count == 2
 
+    def test_list_in_use(
+        self,
+        tag_repo: TagRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Only tags linked to ideas are returned."""
+        tag_repo.get_or_create("unused")
+        idea_repo.create("First idea", tag_names=["python", "testing"])
+        idea_repo.create("Second idea", tag_names=["python"])
+
+        tags = tag_repo.list_in_use()
+
+        assert [tag.name for tag in tags] == ["python", "testing"]
+
+    def test_list_with_usage(
+        self,
+        tag_repo: TagRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """All tags are returned with idea usage counts."""
+        tag_repo.get_or_create("unused")
+        idea_repo.create("First idea", tag_names=["python", "testing"])
+        idea_repo.create("Second idea", tag_names=["python"])
+
+        tags_with_usage = tag_repo.list_with_usage()
+
+        assert [(tag.name, usage) for tag, usage in tags_with_usage] == [
+            ("python", 2),
+            ("testing", 1),
+            ("unused", 0),
+        ]
+
 
 class TestIdeaRepository:
     """Tests for IdeaRepository."""
