@@ -285,7 +285,7 @@ dev = [
 requires-dist = [
     { name = "pyperclip", specifier = ">=1.11.0" },
     { name = "simple-toml-settings", specifier = ">=0.10.0" },
-    { name = "sqliter-py", specifier = ">=0.18.1" },
+    { name = "sqliter-py", specifier = ">=0.20.0" },
     { name = "textual", specifier = ">=8,<9" },
     { name = "typer", specifier = ">=0.21.1" },
 ]
@@ -1693,14 +1693,14 @@ wheels = [
 
 [[package]]
 name = "sqliter-py"
-version = "0.19.0"
+version = "0.20.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/06/59/2b83889fcf90d28beba1f149ada653083f104ecc7be4b4c46ecf4462fb52/sqliter_py-0.19.0.tar.gz", hash = "sha256:6c2a56eed4fe2dff498112ea1dc149d80942ac7f14164ac15f48761753de166c", size = 81676, upload-time = "2026-02-14T16:55:08.344Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b2/33/c3d0fa16a0f9ec5d2744bc569487c1a101dfda3a3c7749a0103adce1daaf/sqliter_py-0.20.0.tar.gz", hash = "sha256:c68d4a9302e1d98a918a91e0ebf1bea6f968cdfdb143c935de49451d39b6ab0f", size = 89779, upload-time = "2026-03-11T20:11:51.974Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ec/79/b2b64e7c81df64815b75dc4f68c5801a1b2614bfc638b6e47a76d7071dab/sqliter_py-0.19.0-py3-none-any.whl", hash = "sha256:0047aa9153e5ae623ee7c9b80e4f260735b7ddde599d1d931cff7be380a46538", size = 103307, upload-time = "2026-02-14T16:55:06.26Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/bd/9f4a103bf967c98d9c2d4771d2e2e179a65b0ad66960265266d8ee9283cd/sqliter_py-0.20.0-py3-none-any.whl", hash = "sha256:282867e15b60bd1cc9e15872ded250ceeba63de15448c4b9019a5e5804f9974c", size = 111639, upload-time = "2026-03-11T20:11:50.599Z" },
 ]
 
 [[package]]

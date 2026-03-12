@@ -27,7 +27,7 @@ classifiers = [
 dependencies = [
     "pyperclip>=1.11.0",
     "simple-toml-settings>=0.10.0",
-    "sqliter-py>=0.18.1",
+    "sqliter-py>=0.20.0",
     "textual>=8,<9",
     "typer>=0.21.1",
 ]
