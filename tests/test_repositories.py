@@ -34,6 +34,36 @@ def _seed_tag_usage_data(
     idea_repo.create("Second idea", tag_names=["python"])
 
 
+class _FakeTagUsageQuery:
+    """Minimal query stub for list_with_usage() projection tests."""
+
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        """Store the rows returned by fetch_dicts()."""
+        self._rows = rows
+
+    def with_count(
+        self,
+        path: str,
+        alias: str = "count",
+    ) -> _FakeTagUsageQuery:
+        """Return self after verifying the expected aggregation call."""
+        assert path == "ideas"
+        assert alias == "usage"
+        return self
+
+    def order(
+        self,
+        order_by_field: str | None = None,
+    ) -> _FakeTagUsageQuery:
+        """Return self after verifying ordering."""
+        assert order_by_field == "name"
+        return self
+
+    def fetch_dicts(self) -> list[dict[str, object]]:
+        """Return the configured projection rows."""
+        return self._rows
+
+
 class TestTagRepository:
     """Tests for TagRepository."""
 
@@ -143,6 +173,56 @@ class TestTagRepository:
             ("testing", 1),
             ("unused", 0),
         ]
+
+    def test_list_with_usage_raises_for_invalid_usage_projection(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Unexpected non-int usage values should fail clearly."""
+        mocker.patch.object(
+            tag_repo._db,
+            "select",
+            return_value=_FakeTagUsageQuery(
+                [
+                    {
+                        "pk": 1,
+                        "name": "python",
+                        "created_at": 1,
+                        "updated_at": 1,
+                        "usage": None,
+                    }
+                ]
+            ),
+        )
+
+        with pytest.raises(TypeError, match="Expected int or str for usage"):
+            tag_repo.list_with_usage()
+
+    def test_list_with_usage_raises_for_invalid_name_projection(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Unexpected non-string names should fail clearly."""
+        mocker.patch.object(
+            tag_repo._db,
+            "select",
+            return_value=_FakeTagUsageQuery(
+                [
+                    {
+                        "pk": 1,
+                        "name": None,
+                        "created_at": 1,
+                        "updated_at": 1,
+                        "usage": 2,
+                    }
+                ]
+            ),
+        )
+
+        with pytest.raises(TypeError, match="Expected str for name"):
+            tag_repo.list_with_usage()
 
     def test_metadata_helper_raises_when_descriptor_metadata_missing(
         self,

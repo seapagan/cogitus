@@ -183,11 +183,21 @@ class TagRepository:
 
         def mapped_int(row: dict[str, object], key: str) -> int:
             """Extract an integer-compatible mapped value."""
-            return int(cast("int | str", row[key]))
+            value = row[key]
+            if isinstance(value, bool) or not isinstance(value, (int, str)):
+                msg = (
+                    f"Expected int or str for {key}, got {type(value).__name__}"
+                )
+                raise TypeError(msg)
+            return int(value)
 
         def mapped_str(row: dict[str, object], key: str) -> str:
             """Extract a string-compatible mapped value."""
-            return str(cast("str | int", row[key]))
+            value = row[key]
+            if not isinstance(value, str):
+                msg = f"Expected str for {key}, got {type(value).__name__}"
+                raise TypeError(msg)
+            return value
 
         return [
             (
