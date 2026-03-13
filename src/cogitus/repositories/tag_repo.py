@@ -107,11 +107,12 @@ class TagRepository:
             List of linked tags ordered alphabetically.
         """
         # SQL is assembled from trusted relationship metadata, not user input.
+        meta = self._idea_tags_metadata
         query = (
             "SELECT DISTINCT "  # noqa: S608
-            f'"{self._idea_tags_metadata.to_column}" '
+            f'"{meta.to_column}" '
             "FROM "
-            f'"{self._idea_tags_metadata.junction_table}";'
+            f'"{meta.junction_table}";'
         )
         rows = self._db.connect().execute(query)
         tag_pks: list[int] = [int(row[0]) for row in rows.fetchall()]
@@ -133,15 +134,16 @@ class TagRepository:
             List of (tag, usage_count) tuples ordered by tag name.
         """
         # SQL is assembled from trusted relationship metadata, not user input.
+        meta = self._idea_tags_metadata
         query = (
             "SELECT t.pk AS pk, "  # noqa: S608
             "t.name AS name, "
             "t.created_at AS created_at, "
             "t.updated_at AS updated_at, "
-            f'COUNT(j."{self._idea_tags_metadata.from_column}") AS usage '
-            f'FROM "{self._idea_tags_metadata.target_table}" AS t '
-            f'LEFT JOIN "{self._idea_tags_metadata.junction_table}" AS j '
-            f'ON j."{self._idea_tags_metadata.to_column}" = t.pk '
+            f'COUNT(j."{meta.from_column}") AS usage '
+            f'FROM "{meta.target_table}" AS t '
+            f'LEFT JOIN "{meta.junction_table}" AS j '
+            f'ON j."{meta.to_column}" = t.pk '
             "GROUP BY t.pk, t.name, t.created_at, t.updated_at "
             "ORDER BY t.name;"
         )
