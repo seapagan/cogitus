@@ -39,17 +39,12 @@ if TYPE_CHECKING:
             self,
             path: str,
             alias: str = "count",
-            *,
-            distinct: bool = False,
         ) -> SupportsTagUsageCountQuery:
             """Add a relationship count projection."""
 
         def order(
             self,
             order_by_field: str | None = None,
-            *,
-            direction: str | None = None,
-            reverse: bool = False,
         ) -> SupportsTagUsageCountQuery:
             """Apply ordering to the query."""
 

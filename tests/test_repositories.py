@@ -137,6 +137,7 @@ class TestTagRepository:
         tags_with_usage = tag_repo.list_with_usage()
 
         assert all(isinstance(tag, Tag) for tag, _usage in tags_with_usage)
+        assert all(tag.pk > 0 for tag, _usage in tags_with_usage)
         assert [(tag.name, usage) for tag, usage in tags_with_usage] == [
             ("python", 2),
             ("testing", 1),
