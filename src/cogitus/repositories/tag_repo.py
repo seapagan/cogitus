@@ -32,6 +32,30 @@ if TYPE_CHECKING:
         def sql_metadata(self) -> M2MSQLMetadata | None:
             """Return SQL metadata for the relationship, if available."""
 
+    class SupportsTagUsageCountQuery(Protocol):
+        """QueryBuilder surface used by list_with_usage()."""
+
+        def with_count(
+            self,
+            path: str,
+            alias: str = "count",
+            *,
+            distinct: bool = False,
+        ) -> SupportsTagUsageCountQuery:
+            """Add a relationship count projection."""
+
+        def order(
+            self,
+            order_by_field: str | None = None,
+            *,
+            direction: str | None = None,
+            reverse: bool = False,
+        ) -> SupportsTagUsageCountQuery:
+            """Apply ordering to the query."""
+
+        def fetch_dicts(self) -> list[dict[str, object]]:
+            """Fetch projection query results as dictionaries."""
+
 
 def _idea_tags_sql_metadata() -> M2MSQLMetadata:
     """Return resolved SQL metadata for the Idea.tags relationship."""
@@ -133,46 +157,31 @@ class TagRepository:
         Returns:
             List of (tag, usage_count) tuples ordered by tag name.
         """
-        # SQL is assembled from trusted relationship metadata, not user input.
-        meta = self._idea_tags_metadata
-        query = (
-            "SELECT t.pk AS pk, "  # noqa: S608
-            "t.name AS name, "
-            "t.created_at AS created_at, "
-            "t.updated_at AS updated_at, "
-            f'COUNT(j."{meta.from_column}") AS usage '
-            f'FROM "{meta.target_table}" AS t '
-            f'LEFT JOIN "{meta.junction_table}" AS j '
-            f'ON j."{meta.to_column}" = t.pk '
-            "GROUP BY t.pk, t.name, t.created_at, t.updated_at "
-            "ORDER BY t.name;"
+        query = cast(
+            "SupportsTagUsageCountQuery",
+            self._db.select(Tag),
         )
-        cursor = self._db.connect().execute(query)
-        column_names = tuple(
-            description[0] for description in cursor.description or ()
+        rows = (
+            query.with_count("ideas", alias="usage").order("name").fetch_dicts()
         )
 
-        def row_to_mapping(row: tuple[object, ...]) -> dict[str, object]:
-            """Map sqlite row values by selected column name."""
-            return dict(zip(column_names, row, strict=False))
-
-        def mapped_int(mapping: dict[str, object], key: str) -> int:
+        def mapped_int(row: dict[str, object], key: str) -> int:
             """Extract an integer-compatible mapped value."""
-            return int(cast("int | str", mapping[key]))
+            return int(cast("int | str", row[key]))
 
-        def mapped_str(mapping: dict[str, object], key: str) -> str:
+        def mapped_str(row: dict[str, object], key: str) -> str:
             """Extract a string-compatible mapped value."""
-            return str(cast("str | int", mapping[key]))
+            return str(cast("str | int", row[key]))
 
         return [
             (
                 Tag(
-                    pk=mapped_int(mapped, "pk"),
-                    name=mapped_str(mapped, "name"),
-                    created_at=mapped_int(mapped, "created_at"),
-                    updated_at=mapped_int(mapped, "updated_at"),
+                    pk=mapped_int(row, "pk"),
+                    name=mapped_str(row, "name"),
+                    created_at=mapped_int(row, "created_at"),
+                    updated_at=mapped_int(row, "updated_at"),
                 ),
-                mapped_int(mapped, "usage"),
+                mapped_int(row, "usage"),
             )
-            for mapped in (row_to_mapping(row) for row in cursor.fetchall())
+            for row in rows
         ]

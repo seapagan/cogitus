@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from sqliter.exceptions import RecordInsertionError, RecordUpdateError
 
-from cogitus.models import Idea
+from cogitus.models import Idea, Tag
 from cogitus.repositories import tag_repo as tag_repo_module
 from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.search import SearchFilter, parse_search_query
@@ -136,6 +136,7 @@ class TestTagRepository:
 
         tags_with_usage = tag_repo.list_with_usage()
 
+        assert all(isinstance(tag, Tag) for tag, _usage in tags_with_usage)
         assert [(tag.name, usage) for tag, usage in tags_with_usage] == [
             ("python", 2),
             ("testing", 1),
