@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import pytest
 from sqliter.exceptions import RecordInsertionError, RecordUpdateError
 
 from cogitus.models import Idea
+from cogitus.repositories import tag_repo as tag_repo_module
 from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.search import SearchFilter, parse_search_query
 from cogitus.search.result import SearchMatchFragment
@@ -20,6 +22,16 @@ if TYPE_CHECKING:
         IdeaCursorStateRepository,
     )
     from cogitus.repositories.tag_repo import TagRepository
+
+
+def _seed_tag_usage_data(
+    tag_repo: TagRepository,
+    idea_repo: IdeaRepository,
+) -> None:
+    """Seed tags and ideas for tag usage repository tests."""
+    tag_repo.get_or_create("unused")
+    idea_repo.create("First idea", tag_names=["python", "testing"])
+    idea_repo.create("Second idea", tag_names=["python"])
 
 
 class TestTagRepository:
@@ -92,6 +104,60 @@ class TestTagRepository:
 
         assert found.pk == existing.pk
         assert find_mock.call_count == 2
+
+    def test_list_in_use(
+        self,
+        tag_repo: TagRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Only tags linked to ideas are returned."""
+        _seed_tag_usage_data(tag_repo, idea_repo)
+
+        tags = tag_repo.list_in_use()
+
+        assert [tag.name for tag in tags] == ["python", "testing"]
+
+    def test_list_in_use_returns_empty_when_no_links(
+        self,
+        tag_repo: TagRepository,
+    ) -> None:
+        """No linked tags should produce an empty list."""
+        tag_repo.get_or_create("unused")
+
+        assert tag_repo.list_in_use() == []
+
+    def test_list_with_usage(
+        self,
+        tag_repo: TagRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """All tags are returned with idea usage counts."""
+        _seed_tag_usage_data(tag_repo, idea_repo)
+
+        tags_with_usage = tag_repo.list_with_usage()
+
+        assert [(tag.name, usage) for tag, usage in tags_with_usage] == [
+            ("python", 2),
+            ("testing", 1),
+            ("unused", 0),
+        ]
+
+    def test_metadata_helper_raises_when_descriptor_metadata_missing(
+        self,
+        mocker: MockerFixture,
+    ) -> None:
+        """Metadata helper should fail clearly when sql_metadata is missing."""
+        mocker.patch.object(
+            tag_repo_module,
+            "Idea",
+            SimpleNamespace(tags=SimpleNamespace(sql_metadata=None)),
+        )
+
+        with pytest.raises(
+            RuntimeError,
+            match=r"Idea\.tags SQL metadata is unavailable",
+        ):
+            tag_repo_module._idea_tags_sql_metadata()
 
 
 class TestIdeaRepository:

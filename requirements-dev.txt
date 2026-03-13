@@ -190,7 +190,7 @@ simple-toml-settings==0.10.0
     #   github-changelog-md
 six==1.17.0
     # via python-dateutil
-sqliter-py==0.19.0
+sqliter-py==0.20.0
     # via cogitus
 termcolor==3.3.0
     # via pytest-sugar
