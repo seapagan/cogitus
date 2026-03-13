@@ -32,6 +32,11 @@ if TYPE_CHECKING:
         def sql_metadata(self) -> M2MSQLMetadata | None:
             """Return SQL metadata for the relationship, if available."""
 
+    class SupportsM2MRelatedName(Protocol):
+        """Descriptor protocol exposing the configured reverse name."""
+
+        related_name: str | None
+
     class SupportsTagUsageCountQuery(Protocol):
         """QueryBuilder surface used by list_with_usage()."""
 
@@ -62,6 +67,16 @@ def _idea_tags_sql_metadata() -> M2MSQLMetadata:
     return metadata
 
 
+def _idea_tags_related_name() -> str:
+    """Return the reverse relation name for Idea.tags."""
+    descriptor = cast("SupportsM2MRelatedName", Idea.tags)
+    related_name = descriptor.related_name
+    if related_name is None:
+        msg = "Idea.tags related_name is unavailable."
+        raise RuntimeError(msg)
+    return related_name
+
+
 class TagRepository:
     """Handles Tag persistence through sqliter-py."""
 
@@ -73,6 +88,7 @@ class TagRepository:
         """
         self._db = db
         self._idea_tags_metadata = _idea_tags_sql_metadata()
+        self._idea_tags_related_name = _idea_tags_related_name()
 
     def get_or_create(self, name: str) -> Tag:
         """Find an existing tag by name or create a new one.
@@ -157,7 +173,12 @@ class TagRepository:
             self._db.select(Tag),
         )
         rows = (
-            query.with_count("ideas", alias="usage").order("name").fetch_dicts()
+            query.with_count(
+                self._idea_tags_related_name,
+                alias="usage",
+            )
+            .order("name")
+            .fetch_dicts()
         )
 
         def mapped_int(row: dict[str, object], key: str) -> int:

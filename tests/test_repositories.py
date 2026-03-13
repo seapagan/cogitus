@@ -161,6 +161,23 @@ class TestTagRepository:
         ):
             tag_repo_module._idea_tags_sql_metadata()
 
+    def test_related_name_helper_raises_when_descriptor_name_missing(
+        self,
+        mocker: MockerFixture,
+    ) -> None:
+        """Related-name helper should fail clearly when unavailable."""
+        mocker.patch.object(
+            tag_repo_module,
+            "Idea",
+            SimpleNamespace(tags=SimpleNamespace(related_name=None)),
+        )
+
+        with pytest.raises(
+            RuntimeError,
+            match=r"Idea\.tags related_name is unavailable",
+        ):
+            tag_repo_module._idea_tags_related_name()
+
 
 class TestIdeaRepository:
     """Tests for IdeaRepository."""
