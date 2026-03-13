@@ -24,6 +24,16 @@ if TYPE_CHECKING:
     from cogitus.repositories.tag_repo import TagRepository
 
 
+def _seed_tag_usage_data(
+    tag_repo: TagRepository,
+    idea_repo: IdeaRepository,
+) -> None:
+    """Seed tags and ideas for tag usage repository tests."""
+    tag_repo.get_or_create("unused")
+    idea_repo.create("First idea", tag_names=["python", "testing"])
+    idea_repo.create("Second idea", tag_names=["python"])
+
+
 class TestTagRepository:
     """Tests for TagRepository."""
 
@@ -101,9 +111,7 @@ class TestTagRepository:
         idea_repo: IdeaRepository,
     ) -> None:
         """Only tags linked to ideas are returned."""
-        tag_repo.get_or_create("unused")
-        idea_repo.create("First idea", tag_names=["python", "testing"])
-        idea_repo.create("Second idea", tag_names=["python"])
+        _seed_tag_usage_data(tag_repo, idea_repo)
 
         tags = tag_repo.list_in_use()
 
@@ -124,9 +132,7 @@ class TestTagRepository:
         idea_repo: IdeaRepository,
     ) -> None:
         """All tags are returned with idea usage counts."""
-        tag_repo.get_or_create("unused")
-        idea_repo.create("First idea", tag_names=["python", "testing"])
-        idea_repo.create("Second idea", tag_names=["python"])
+        _seed_tag_usage_data(tag_repo, idea_repo)
 
         tags_with_usage = tag_repo.list_with_usage()
 
