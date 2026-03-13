@@ -224,6 +224,54 @@ class TestTagRepository:
         with pytest.raises(TypeError, match="Expected str for name"):
             tag_repo.list_with_usage()
 
+    def test_list_with_usage_raises_for_missing_usage_projection(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Missing usage fields should fail clearly."""
+        mocker.patch.object(
+            tag_repo._db,
+            "select",
+            return_value=_FakeTagUsageQuery(
+                [
+                    {
+                        "pk": 1,
+                        "name": "python",
+                        "created_at": 1,
+                        "updated_at": 1,
+                    }
+                ]
+            ),
+        )
+
+        with pytest.raises(KeyError, match="Missing projected field: usage"):
+            tag_repo.list_with_usage()
+
+    def test_list_with_usage_raises_for_missing_name_projection(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Missing name fields should fail clearly."""
+        mocker.patch.object(
+            tag_repo._db,
+            "select",
+            return_value=_FakeTagUsageQuery(
+                [
+                    {
+                        "pk": 1,
+                        "created_at": 1,
+                        "updated_at": 1,
+                        "usage": 2,
+                    }
+                ]
+            ),
+        )
+
+        with pytest.raises(KeyError, match="Missing projected field: name"):
+            tag_repo.list_with_usage()
+
     def test_metadata_helper_raises_when_descriptor_metadata_missing(
         self,
         mocker: MockerFixture,

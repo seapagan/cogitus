@@ -183,6 +183,9 @@ class TagRepository:
 
         def mapped_int(row: dict[str, object], key: str) -> int:
             """Extract an integer-compatible mapped value."""
+            if key not in row:
+                msg = f"Missing projected field: {key}"
+                raise KeyError(msg)
             value = row[key]
             if isinstance(value, bool) or not isinstance(value, (int, str)):
                 msg = (
@@ -193,6 +196,9 @@ class TagRepository:
 
         def mapped_str(row: dict[str, object], key: str) -> str:
             """Extract a string-compatible mapped value."""
+            if key not in row:
+                msg = f"Missing projected field: {key}"
+                raise KeyError(msg)
             value = row[key]
             if not isinstance(value, str):
                 msg = f"Expected str for {key}, got {type(value).__name__}"
