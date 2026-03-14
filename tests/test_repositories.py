@@ -47,7 +47,7 @@ class _FakeTagUsageQuery:
         alias: str = "count",
     ) -> _FakeTagUsageQuery:
         """Return self after verifying the expected aggregation call."""
-        assert path == "ideas"
+        assert path == Idea.tags.related_name
         assert alias == "usage"
         return self
 
