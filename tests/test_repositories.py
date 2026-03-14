@@ -199,6 +199,34 @@ class TestTagRepository:
         with pytest.raises(TypeError, match="Expected int or str for usage"):
             tag_repo.list_with_usage()
 
+    def test_list_with_usage_raises_for_non_numeric_usage_projection(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Non-numeric string usage values should fail clearly."""
+        mocker.patch.object(
+            tag_repo._db,
+            "select",
+            return_value=_FakeTagUsageQuery(
+                [
+                    {
+                        "pk": 1,
+                        "name": "python",
+                        "created_at": 1,
+                        "updated_at": 1,
+                        "usage": "abc",
+                    }
+                ]
+            ),
+        )
+
+        with pytest.raises(
+            TypeError,
+            match="Expected int-compatible value for usage",
+        ):
+            tag_repo.list_with_usage()
+
     def test_list_with_usage_raises_for_invalid_name_projection(
         self,
         tag_repo: TagRepository,

@@ -192,7 +192,11 @@ class TagRepository:
                     f"Expected int or str for {key}, got {type(value).__name__}"
                 )
                 raise TypeError(msg)
-            return int(value)
+            try:
+                return int(value)
+            except ValueError as exc:
+                msg = f"Expected int-compatible value for {key}, got {value!r}"
+                raise TypeError(msg) from exc
 
         def mapped_str(row: dict[str, object], key: str) -> str:
             """Extract a string-compatible mapped value."""
