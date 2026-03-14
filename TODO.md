@@ -93,8 +93,6 @@ Ideas to add to Cogitus
 - avoid unconditional FTS index rebuild on every `get_db()` startup; add an
   index validity/version check or other lightweight verification so rebuilds
   only happen when needed, while keeping an explicit/manual rebuild path.
-- now that `sqliter-py` has aggregate/group-by support, replace raw SQL in
-  `TagRepository.list_with_usage()` with ORM/query-builder aggregation.
 
 ## AI Assistance
 

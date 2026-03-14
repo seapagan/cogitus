@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 from sqliter.exceptions import RecordInsertionError, RecordUpdateError
 
-from cogitus.models import Idea
+from cogitus.models import Idea, Tag
 from cogitus.repositories import tag_repo as tag_repo_module
 from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.search import SearchFilter, parse_search_query
@@ -32,6 +32,36 @@ def _seed_tag_usage_data(
     tag_repo.get_or_create("unused")
     idea_repo.create("First idea", tag_names=["python", "testing"])
     idea_repo.create("Second idea", tag_names=["python"])
+
+
+class _FakeTagUsageQuery:
+    """Minimal query stub for list_with_usage() projection tests."""
+
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        """Store the rows returned by fetch_dicts()."""
+        self._rows = rows
+
+    def with_count(
+        self,
+        path: str,
+        alias: str = "count",
+    ) -> _FakeTagUsageQuery:
+        """Return self after verifying the expected aggregation call."""
+        assert path == Idea.tags.related_name
+        assert alias == "usage"
+        return self
+
+    def order(
+        self,
+        order_by_field: str | None = None,
+    ) -> _FakeTagUsageQuery:
+        """Return self after verifying ordering."""
+        assert order_by_field == "name"
+        return self
+
+    def fetch_dicts(self) -> list[dict[str, object]]:
+        """Return the configured projection rows."""
+        return self._rows
 
 
 class TestTagRepository:
@@ -136,11 +166,139 @@ class TestTagRepository:
 
         tags_with_usage = tag_repo.list_with_usage()
 
+        assert all(isinstance(tag, Tag) for tag, _usage in tags_with_usage)
+        assert all(tag.pk > 0 for tag, _usage in tags_with_usage)
         assert [(tag.name, usage) for tag, usage in tags_with_usage] == [
             ("python", 2),
             ("testing", 1),
             ("unused", 0),
         ]
+
+    def test_list_with_usage_raises_for_invalid_usage_projection(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Unexpected non-int usage values should fail clearly."""
+        mocker.patch.object(
+            tag_repo._db,
+            "select",
+            return_value=_FakeTagUsageQuery(
+                [
+                    {
+                        "pk": 1,
+                        "name": "python",
+                        "created_at": 1,
+                        "updated_at": 1,
+                        "usage": None,
+                    }
+                ]
+            ),
+        )
+
+        with pytest.raises(TypeError, match="Expected int or str for usage"):
+            tag_repo.list_with_usage()
+
+    def test_list_with_usage_raises_for_non_numeric_usage_projection(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Non-numeric string usage values should fail clearly."""
+        mocker.patch.object(
+            tag_repo._db,
+            "select",
+            return_value=_FakeTagUsageQuery(
+                [
+                    {
+                        "pk": 1,
+                        "name": "python",
+                        "created_at": 1,
+                        "updated_at": 1,
+                        "usage": "abc",
+                    }
+                ]
+            ),
+        )
+
+        with pytest.raises(
+            TypeError,
+            match="Expected int-compatible value for usage",
+        ):
+            tag_repo.list_with_usage()
+
+    def test_list_with_usage_raises_for_invalid_name_projection(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Unexpected non-string names should fail clearly."""
+        mocker.patch.object(
+            tag_repo._db,
+            "select",
+            return_value=_FakeTagUsageQuery(
+                [
+                    {
+                        "pk": 1,
+                        "name": None,
+                        "created_at": 1,
+                        "updated_at": 1,
+                        "usage": 2,
+                    }
+                ]
+            ),
+        )
+
+        with pytest.raises(TypeError, match="Expected str for name"):
+            tag_repo.list_with_usage()
+
+    def test_list_with_usage_raises_for_missing_usage_projection(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Missing usage fields should fail clearly."""
+        mocker.patch.object(
+            tag_repo._db,
+            "select",
+            return_value=_FakeTagUsageQuery(
+                [
+                    {
+                        "pk": 1,
+                        "name": "python",
+                        "created_at": 1,
+                        "updated_at": 1,
+                    }
+                ]
+            ),
+        )
+
+        with pytest.raises(KeyError, match="Missing projected field: usage"):
+            tag_repo.list_with_usage()
+
+    def test_list_with_usage_raises_for_missing_name_projection(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Missing name fields should fail clearly."""
+        mocker.patch.object(
+            tag_repo._db,
+            "select",
+            return_value=_FakeTagUsageQuery(
+                [
+                    {
+                        "pk": 1,
+                        "created_at": 1,
+                        "updated_at": 1,
+                        "usage": 2,
+                    }
+                ]
+            ),
+        )
+
+        with pytest.raises(KeyError, match="Missing projected field: name"):
+            tag_repo.list_with_usage()
 
     def test_metadata_helper_raises_when_descriptor_metadata_missing(
         self,
@@ -158,6 +316,23 @@ class TestTagRepository:
             match=r"Idea\.tags SQL metadata is unavailable",
         ):
             tag_repo_module._idea_tags_sql_metadata()
+
+    def test_related_name_helper_raises_when_descriptor_name_missing(
+        self,
+        mocker: MockerFixture,
+    ) -> None:
+        """Related-name helper should fail clearly when unavailable."""
+        mocker.patch.object(
+            tag_repo_module,
+            "Idea",
+            SimpleNamespace(tags=SimpleNamespace(related_name=None)),
+        )
+
+        with pytest.raises(
+            RuntimeError,
+            match=r"Idea\.tags related_name is unavailable",
+        ):
+            tag_repo_module._idea_tags_related_name()
 
 
 class TestIdeaRepository:
