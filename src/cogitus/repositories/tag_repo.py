@@ -181,12 +181,16 @@ class TagRepository:
             .fetch_dicts()
         )
 
-        def mapped_int(row: dict[str, object], key: str) -> int:
-            """Extract an integer-compatible mapped value."""
+        def require_mapped_value(row: dict[str, object], key: str) -> object:
+            """Return a projected field value or raise a clear key error."""
             if key not in row:
                 msg = f"Missing projected field: {key}"
                 raise KeyError(msg)
-            value = row[key]
+            return row[key]
+
+        def mapped_int(row: dict[str, object], key: str) -> int:
+            """Extract an integer-compatible mapped value."""
+            value = require_mapped_value(row, key)
             if isinstance(value, bool) or not isinstance(value, (int, str)):
                 msg = (
                     f"Expected int or str for {key}, got {type(value).__name__}"
@@ -200,10 +204,7 @@ class TagRepository:
 
         def mapped_str(row: dict[str, object], key: str) -> str:
             """Extract a string-compatible mapped value."""
-            if key not in row:
-                msg = f"Missing projected field: {key}"
-                raise KeyError(msg)
-            value = row[key]
+            value = require_mapped_value(row, key)
             if not isinstance(value, str):
                 msg = f"Expected str for {key}, got {type(value).__name__}"
                 raise TypeError(msg)
