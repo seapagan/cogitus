@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
 import pytest
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.widgets import Input, Markdown, OptionList, Static, Tree
 from textual.widgets.option_list import Option
@@ -110,6 +111,28 @@ async def test_idea_list_panel_load_and_selection(
 
 
 @pytest.mark.asyncio
+async def test_idea_list_panel_can_load_without_auto_selection(
+    service: IdeaService,
+) -> None:
+    """Grouped loads can intentionally leave the tree with no selection."""
+    first = service.create_idea("First")
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        assert panel.select_idea(first.pk) is True
+        panel.load_grouped_ideas(
+            service.list_ideas_grouped(),
+            auto_select_first=False,
+        )
+        await pilot.pause()
+
+        assert panel.get_selected_idea() is None
+        assert panel.get_selected_group_pk() is None
+
+
+@pytest.mark.asyncio
 async def test_idea_list_panel_methods_and_events(
     service: IdeaService,
 ) -> None:
@@ -172,6 +195,42 @@ async def test_idea_list_panel_refreshes_bindings_on_search_and_selection(
         refresh.reset_mock()
         panel.on_tree_node_selected(Tree.NodeSelected(cursor_node))
         assert refresh.call_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_uses_stronger_group_label_emphasis(
+    service: IdeaService,
+) -> None:
+    """Group headings should be stronger than idea titles in the tree."""
+    backend = service.create_group("Backend")
+    idea = service.create_idea("API polish", group_pk=backend.pk)
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        await pilot.pause()
+
+        tree = panel.query_one("#idea-list", Tree)
+        assert tree.show_root is False
+        group_node = next(
+            node
+            for node in tree.root.children
+            if node.data == IdeaTreeNodeData(kind="group", group_pk=backend.pk)
+        )
+        idea_node = group_node.children[0]
+
+        assert isinstance(group_node.label, Text)
+        assert group_node.label.plain == f"{backend.name} (1)"
+        assert group_node.label.style == "bold"
+        assert any(
+            span.style == "not bold dim" for span in group_node.label.spans
+        )
+
+        assert isinstance(idea_node.label, Text)
+        assert idea_node.label.plain.startswith(idea.title)
+        assert idea_node.label.style == ""
+        assert any(span.style == "dim" for span in idea_node.label.spans)
 
 
 @pytest.mark.asyncio
@@ -369,14 +428,16 @@ async def test_idea_list_panel_remaining_branches(
         await pilot.pause()
         assert panel.select_idea(999999) is False
 
-        tree.move_cursor(tree.root, animate=False)
+        # Add malformed idea node to exercise idea_pk is None branch.
+        malformed = tree.root.add_leaf("Bad")
+        tree.select_node(malformed)
+        tree.move_cursor(malformed, animate=False)
         await pilot.pause()
         assert panel.get_selected_idea() is None
         assert panel.get_selected_group_pk() is None
 
-        # Add malformed idea node to exercise idea_pk is None branch.
-        malformed = tree.root.add_leaf("Bad")
         malformed.data = IdeaTreeNodeData(kind="idea", idea_pk=None)
+        tree.select_node(malformed)
         tree.move_cursor(malformed, animate=False)
         await pilot.pause()
         assert panel.get_selected_idea() is None

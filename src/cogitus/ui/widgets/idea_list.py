@@ -79,6 +79,22 @@ def _format_timestamp(unix_ts: int) -> str:
     return dt.strftime("%Y-%m-%d")
 
 
+def _format_group_label(name: str, idea_count: int) -> Text:
+    """Build a group label with stronger emphasis and a dimmed count."""
+    label = Text(name, style="bold")
+    label.append(f" ({idea_count})", style="not bold dim")
+    return label
+
+
+def _format_idea_label(idea: Idea) -> Text:
+    """Build an idea label with a secondary timestamp suffix."""
+    ts = _format_timestamp(idea.updated_at)
+    label = Text(idea.title)
+    if ts:
+        label.append(f" [{ts}]", style="dim")
+    return label
+
+
 class IdeaListPanel(Vertical):
     """Left panel with search input and grouped idea tree."""
 
@@ -151,11 +167,13 @@ class IdeaListPanel(Vertical):
             id="search-input",
         )
         yield OptionList(id="search-autocomplete", classes="-hidden")
-        yield Tree[IdeaTreeNodeData](
+        tree = Tree[IdeaTreeNodeData](
             "Ideas",
             data=IdeaTreeNodeData(kind="root"),
             id="idea-list",
         )
+        tree.show_root = False
+        yield tree
         yield SearchResultsList(id="search-results", classes="-hidden")
 
     def _reset_tree(self) -> Tree[IdeaTreeNodeData]:
@@ -184,7 +202,7 @@ class IdeaListPanel(Vertical):
         ordered_pks: list[int] = []
         for group, ideas in grouped_ideas:
             group_node = tree.root.add(
-                group.name,
+                _format_group_label(group.name, len(ideas)),
                 data=IdeaTreeNodeData(kind="group", group_pk=group.pk),
                 expand=True,
             )
@@ -204,7 +222,7 @@ class IdeaListPanel(Vertical):
             tree.select_node(first_idea_node)
             tree.move_cursor(first_idea_node, animate=False)
         else:
-            tree.move_cursor(None, animate=False)
+            tree.unselect()
 
     def load_grouped_search_results(
         self,
@@ -268,10 +286,7 @@ class IdeaListPanel(Vertical):
         group_pk: int | None = None,
     ) -> TreeNode[IdeaTreeNodeData]:
         """Add an idea leaf node under parent and track it by primary key."""
-        ts = _format_timestamp(idea.updated_at)
-        label = Text(idea.title, style="bold")
-        if ts:
-            label.append(f" [{ts}]", style="dim")
+        label = _format_idea_label(idea)
         node = parent.add_leaf(
             label,
             data=IdeaTreeNodeData(
@@ -322,6 +337,8 @@ class IdeaListPanel(Vertical):
                 SearchResultsList,
             ).get_selected_idea()
         tree = self.query_one("#idea-list", Tree)
+        if getattr(tree, "cursor_line", 0) == -1:
+            return None
         node = tree.cursor_node
         data = node.data if node is not None else None
         if not isinstance(data, IdeaTreeNodeData) or data.kind != "idea":
@@ -335,6 +352,8 @@ class IdeaListPanel(Vertical):
         if self.search_is_active():
             return None
         tree = self.query_one("#idea-list", Tree)
+        if getattr(tree, "cursor_line", 0) == -1:
+            return None
         node = tree.cursor_node
         data = node.data if node is not None else None
         if not isinstance(data, IdeaTreeNodeData) or data.kind != "group":

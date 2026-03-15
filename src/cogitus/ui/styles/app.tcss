@@ -24,10 +24,19 @@ MainScreen {
     height: 3;
     margin: 0;
     padding: 0 1;
+    border: solid $border-blurred;
+}
+
+#search-input:focus {
+    border: solid $border;
 }
 
 #search-input.search-active {
-    border: tall $warning;
+    border: solid $warning;
+}
+
+#search-input.search-active:focus {
+    border: solid $border;
 }
 
 #search-autocomplete {
@@ -45,6 +54,7 @@ MainScreen {
 
 #idea-list {
     height: 1fr;
+    padding: 1 1 0 1;
 }
 
 #idea-list.-hidden,
@@ -64,6 +74,7 @@ MainScreen {
 
 #search-results {
     height: 1fr;
+    padding: 0 1 0 1;
     background: $surface;
 }
 
