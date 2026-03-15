@@ -24,10 +24,15 @@ MainScreen {
     height: 3;
     margin: 0;
     padding: 0 1;
+    border: solid $border-blurred;
+}
+
+#search-input:focus {
+    border: solid $border;
 }
 
 #search-input.search-active {
-    border: tall $warning;
+    border: solid $warning;
 }
 
 #search-autocomplete {
