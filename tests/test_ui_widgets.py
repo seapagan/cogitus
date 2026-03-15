@@ -198,8 +198,11 @@ async def test_idea_list_panel_uses_stronger_group_label_emphasis(
         idea_node = group_node.children[0]
 
         assert isinstance(group_node.label, Text)
-        assert group_node.label.plain == backend.name
+        assert group_node.label.plain == f"{backend.name} (1)"
         assert group_node.label.style == "bold"
+        assert any(
+            span.style == "not bold dim" for span in group_node.label.spans
+        )
 
         assert isinstance(idea_node.label, Text)
         assert idea_node.label.plain.startswith(idea.title)

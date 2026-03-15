@@ -79,9 +79,11 @@ def _format_timestamp(unix_ts: int) -> str:
     return dt.strftime("%Y-%m-%d")
 
 
-def _format_group_label(name: str) -> Text:
-    """Build a group label with stronger visual emphasis."""
-    return Text(name, style="bold")
+def _format_group_label(name: str, idea_count: int) -> Text:
+    """Build a group label with stronger emphasis and a dimmed count."""
+    label = Text(name, style="bold")
+    label.append(f" ({idea_count})", style="not bold dim")
+    return label
 
 
 def _format_idea_label(idea: Idea) -> Text:
@@ -198,7 +200,7 @@ class IdeaListPanel(Vertical):
         ordered_pks: list[int] = []
         for group, ideas in grouped_ideas:
             group_node = tree.root.add(
-                _format_group_label(group.name),
+                _format_group_label(group.name, len(ideas)),
                 data=IdeaTreeNodeData(kind="group", group_pk=group.pk),
                 expand=True,
             )
