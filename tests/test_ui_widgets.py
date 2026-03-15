@@ -111,6 +111,28 @@ async def test_idea_list_panel_load_and_selection(
 
 
 @pytest.mark.asyncio
+async def test_idea_list_panel_can_load_without_auto_selection(
+    service: IdeaService,
+) -> None:
+    """Grouped loads can intentionally leave the tree with no selection."""
+    first = service.create_idea("First")
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        assert panel.select_idea(first.pk) is True
+        panel.load_grouped_ideas(
+            service.list_ideas_grouped(),
+            auto_select_first=False,
+        )
+        await pilot.pause()
+
+        assert panel.get_selected_idea() is None
+        assert panel.get_selected_group_pk() is None
+
+
+@pytest.mark.asyncio
 async def test_idea_list_panel_methods_and_events(
     service: IdeaService,
 ) -> None:
@@ -190,6 +212,7 @@ async def test_idea_list_panel_uses_stronger_group_label_emphasis(
         await pilot.pause()
 
         tree = panel.query_one("#idea-list", Tree)
+        assert tree.show_root is False
         group_node = next(
             node
             for node in tree.root.children
@@ -405,14 +428,16 @@ async def test_idea_list_panel_remaining_branches(
         await pilot.pause()
         assert panel.select_idea(999999) is False
 
-        tree.move_cursor(tree.root, animate=False)
+        # Add malformed idea node to exercise idea_pk is None branch.
+        malformed = tree.root.add_leaf("Bad")
+        tree.select_node(malformed)
+        tree.move_cursor(malformed, animate=False)
         await pilot.pause()
         assert panel.get_selected_idea() is None
         assert panel.get_selected_group_pk() is None
 
-        # Add malformed idea node to exercise idea_pk is None branch.
-        malformed = tree.root.add_leaf("Bad")
         malformed.data = IdeaTreeNodeData(kind="idea", idea_pk=None)
+        tree.select_node(malformed)
         tree.move_cursor(malformed, animate=False)
         await pilot.pause()
         assert panel.get_selected_idea() is None

@@ -167,11 +167,13 @@ class IdeaListPanel(Vertical):
             id="search-input",
         )
         yield OptionList(id="search-autocomplete", classes="-hidden")
-        yield Tree[IdeaTreeNodeData](
+        tree = Tree[IdeaTreeNodeData](
             "Ideas",
             data=IdeaTreeNodeData(kind="root"),
             id="idea-list",
         )
+        tree.show_root = False
+        yield tree
         yield SearchResultsList(id="search-results", classes="-hidden")
 
     def _reset_tree(self) -> Tree[IdeaTreeNodeData]:
@@ -220,7 +222,7 @@ class IdeaListPanel(Vertical):
             tree.select_node(first_idea_node)
             tree.move_cursor(first_idea_node, animate=False)
         else:
-            tree.move_cursor(None, animate=False)
+            tree.unselect()
 
     def load_grouped_search_results(
         self,
@@ -335,6 +337,8 @@ class IdeaListPanel(Vertical):
                 SearchResultsList,
             ).get_selected_idea()
         tree = self.query_one("#idea-list", Tree)
+        if getattr(tree, "cursor_line", 0) == -1:
+            return None
         node = tree.cursor_node
         data = node.data if node is not None else None
         if not isinstance(data, IdeaTreeNodeData) or data.kind != "idea":
@@ -348,6 +352,8 @@ class IdeaListPanel(Vertical):
         if self.search_is_active():
             return None
         tree = self.query_one("#idea-list", Tree)
+        if getattr(tree, "cursor_line", 0) == -1:
+            return None
         node = tree.cursor_node
         data = node.data if node is not None else None
         if not isinstance(data, IdeaTreeNodeData) or data.kind != "group":

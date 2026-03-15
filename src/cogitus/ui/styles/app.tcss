@@ -45,6 +45,7 @@ MainScreen {
 
 #idea-list {
     height: 1fr;
+    padding: 1 1 0 1;
 }
 
 #idea-list.-hidden,
@@ -64,6 +65,7 @@ MainScreen {
 
 #search-results {
     height: 1fr;
+    padding: 0 1 0 1;
     background: $surface;
 }
 
