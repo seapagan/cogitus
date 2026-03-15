@@ -35,6 +35,10 @@ MainScreen {
     border: solid $warning;
 }
 
+#search-input.search-active:focus {
+    border: solid $border;
+}
+
 #search-autocomplete {
     overlay: screen;
     width: 1fr;
