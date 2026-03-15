@@ -79,6 +79,20 @@ def _format_timestamp(unix_ts: int) -> str:
     return dt.strftime("%Y-%m-%d")
 
 
+def _format_group_label(name: str) -> Text:
+    """Build a group label with stronger visual emphasis."""
+    return Text(name, style="bold")
+
+
+def _format_idea_label(idea: Idea) -> Text:
+    """Build an idea label with a secondary timestamp suffix."""
+    ts = _format_timestamp(idea.updated_at)
+    label = Text(idea.title)
+    if ts:
+        label.append(f" [{ts}]", style="dim")
+    return label
+
+
 class IdeaListPanel(Vertical):
     """Left panel with search input and grouped idea tree."""
 
@@ -184,7 +198,7 @@ class IdeaListPanel(Vertical):
         ordered_pks: list[int] = []
         for group, ideas in grouped_ideas:
             group_node = tree.root.add(
-                group.name,
+                _format_group_label(group.name),
                 data=IdeaTreeNodeData(kind="group", group_pk=group.pk),
                 expand=True,
             )
@@ -268,10 +282,7 @@ class IdeaListPanel(Vertical):
         group_pk: int | None = None,
     ) -> TreeNode[IdeaTreeNodeData]:
         """Add an idea leaf node under parent and track it by primary key."""
-        ts = _format_timestamp(idea.updated_at)
-        label = Text(idea.title, style="bold")
-        if ts:
-            label.append(f" [{ts}]", style="dim")
+        label = _format_idea_label(idea)
         node = parent.add_leaf(
             label,
             data=IdeaTreeNodeData(
