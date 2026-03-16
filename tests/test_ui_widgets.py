@@ -1007,6 +1007,51 @@ def test_search_results_widget_can_render_selectable_idea_rows() -> None:
     assert results.get_selected_idea() is idea
     assert results.get_selected_fragment() is None
     assert results.options[0].id == "idea-3"
+    prompt = results.options[0].prompt
+    assert isinstance(prompt, Text)
+    assert prompt.plain == "backend / Tagged"
+    assert [(span.start, span.end, span.style) for span in prompt.spans] == [
+        (0, 7, "bold"),
+        (7, 10, "dim"),
+    ]
+
+
+def test_search_results_widget_renders_group_first_heading_emphasis() -> None:
+    """Match headings should show bold group first and plain title second."""
+    idea = cast(
+        "Idea",
+        SimpleNamespace(
+            pk=9,
+            title="API polish",
+            group=SimpleNamespace(name="backend"),
+        ),
+    )
+    results = SearchResultsList(id="search-results")
+
+    results.load_results(
+        [
+            SearchResult(
+                idea=idea,
+                score=0.0,
+                matches=(
+                    SearchMatchFragment(
+                        source="body",
+                        text="refine API polish",
+                        rank=0,
+                    ),
+                ),
+            )
+        ],
+        show_match_rows=True,
+    )
+
+    prompt = results.options[0].prompt
+    assert isinstance(prompt, Text)
+    assert prompt.plain == "backend / API polish"
+    assert [(span.start, span.end, span.style) for span in prompt.spans] == [
+        (0, 7, "bold"),
+        (7, 10, "dim"),
+    ]
 
 
 def test_search_results_widget_renders_title_once() -> None:

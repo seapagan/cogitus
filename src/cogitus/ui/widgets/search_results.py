@@ -255,17 +255,20 @@ class SearchResultsList(OptionList):
 
 def _render_heading_prompt(result: SearchResult) -> Text:
     """Render one idea heading prompt."""
-    prompt = Text(result.idea.title, style="bold")
-    prompt.append("\n")
-    prompt.append(result.idea.group.name, style="dim")
-    return prompt
+    return _render_identity_prompt(result)
 
 
 def _render_idea_prompt(result: SearchResult) -> Text:
     """Render one selectable idea row for structured-only results."""
-    prompt = Text(result.idea.title, style="bold")
-    prompt.append("\n")
-    prompt.append(result.idea.group.name, style="dim")
+    return _render_identity_prompt(result)
+
+
+def _render_identity_prompt(result: SearchResult) -> Text:
+    """Render one inline group/title label aligned with the tree hierarchy."""
+    prompt = Text()
+    prompt.append(result.idea.group.name, style="bold")
+    prompt.append(" / ", style="dim")
+    prompt.append(result.idea.title)
     return prompt
 
 
