@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 class TestSearch:
-    """Tests for idea search across title, body, and tags."""
+    """Tests for idea search across visible text and structured filters."""
 
     def test_search_by_title(
         self,
@@ -34,15 +34,14 @@ class TestSearch:
         assert len(results) == 1
         assert results[0].title == "Async patterns"
 
-    def test_search_by_tag(
+    def test_search_does_not_match_tag_name_without_filter(
         self,
         service: IdeaService,
         sample_ideas: list[Idea],
     ) -> None:
-        """Ideas matching tag names are found."""
+        """Tag names should not qualify plain free-text results."""
         results = service.search_ideas("architecture")
-        assert len(results) == 1
-        assert results[0].title == "REST API design"
+        assert results == []
 
     def test_search_across_fields(
         self,
@@ -147,6 +146,16 @@ class TestSearch:
 
         assert len(results) == 1
         assert results[0].title == "Backend only"
+
+    def test_search_by_tag_filter(
+        self,
+        service: IdeaService,
+        sample_ideas: list[Idea],
+    ) -> None:
+        """tag: filter should still match ideas by exact tag name."""
+        results = service.search_ideas("tag:architecture")
+        assert len(results) == 1
+        assert results[0].title == "REST API design"
 
     def test_search_tag_filters_default_to_and(
         self,

@@ -170,7 +170,7 @@ class IdeaService:
         return self._idea_repo.list_all()
 
     def search_ideas(self, query: str) -> list[Idea]:
-        """Search ideas across title, body, and tags.
+        """Search ideas by visible text and optional structured filters.
 
         Args:
             query: Search string.

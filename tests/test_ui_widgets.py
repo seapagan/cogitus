@@ -369,11 +369,11 @@ async def test_idea_list_panel_structured_only_search_uses_idea_rows(
 
 
 @pytest.mark.asyncio
-async def test_idea_list_panel_tag_only_text_match_falls_back_to_idea_row(
+async def test_idea_list_panel_tag_only_text_match_returns_no_results(
     service: IdeaService,
 ) -> None:
-    """Tag-only free-text matches should not render explicit tag rows."""
-    tagged = service.create_idea("No visible text hit", tags=["python"])
+    """Tag-only free-text matches should not render any result rows."""
+    service.create_idea("No visible text hit", tags=["python"])
     panel = IdeaListPanel(id="idea-list-panel")
     app = _WidgetApp(panel)
 
@@ -386,16 +386,7 @@ async def test_idea_list_panel_tag_only_text_match_falls_back_to_idea_row(
         await pilot.pause()
 
         results = panel.query_one("#search-results", SearchResultsList)
-        prompts = [
-            option.prompt.plain
-            if hasattr(option.prompt, "plain")
-            else str(option.prompt)
-            for option in results.options
-        ]
-
-        assert results.options[0].id == f"idea-{tagged.pk}"
-        assert prompts == [f"No visible text hit\n{tagged.group.name}"]
-        assert all("Tag:" not in prompt for prompt in prompts)
+        assert results.options == []
 
 
 @pytest.mark.asyncio

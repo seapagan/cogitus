@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 
 from cogitus.constants import DEFAULT_GROUP_NAME
 from cogitus.models.idea import Idea
-from cogitus.models.tag import Tag
 from cogitus.search import (
     SearchFilter,
     SearchMatchFragment,
@@ -263,13 +262,16 @@ class IdeaRepository:
         """Return ranked text matches keyed by idea primary key."""
         backend_matches = self._search_backend.search_text(text_query)
         if backend_matches is not None:
-            return {
-                match.idea_pk: (
-                    match.score,
-                    self._fts_match_fragments(match),
-                )
-                for match in backend_matches
-            }
+            visible_matches: dict[
+                int,
+                tuple[float, tuple[SearchMatchFragment, ...]],
+            ] = {}
+            for match in backend_matches:
+                fragments = self._fts_match_fragments(match)
+                if not fragments:
+                    continue
+                visible_matches[match.idea_pk] = (match.score, fragments)
+            return visible_matches
 
         return self._legacy_text_matches(text_query)
 
@@ -281,7 +283,7 @@ class IdeaRepository:
         self,
         text_query: str,
     ) -> dict[int, tuple[float, tuple[SearchMatchFragment, ...]]]:
-        """Return idea primary keys matching text across title/body/tag."""
+        """Return idea primary keys matching visible text in title/body."""
         query = text_query.strip()
         if not query:
             return {}
@@ -320,16 +322,6 @@ class IdeaRepository:
                     ),
                 ),
             )
-
-        matching_tags = (
-            self._db.select(Tag).filter(name__icontains=query).fetch_all()
-        )
-        for tag in matching_tags:
-            for idea in tag.ideas.fetch_all():  # type: ignore[attr-defined]
-                matched[idea.pk] = (
-                    _LEGACY_TEXT_MATCH_SCORE,
-                    matched.get(idea.pk, _DEFAULT_TEXT_MATCH)[1],
-                )
 
         return matched
 

@@ -76,19 +76,19 @@ def test_search_index_rebuild_restores_removed_documents(
 def test_search_index_refreshes_after_group_move(
     service: IdeaService,
 ) -> None:
-    """Group-derived indexed text should update after bulk reassignment."""
+    """Structured group search should follow bulk reassignment."""
     source = service.create_group("source")
     target = service.create_group("target")
     service.create_idea("Grouped idea", group_pk=source.pk)
 
-    assert [item.title for item in service.search_ideas("source")] == [
+    assert [item.title for item in service.search_ideas("group:source")] == [
         "Grouped idea",
     ]
 
     service.delete_group(source.pk, move_to_group_pk=target.pk)
 
-    assert service.search_ideas("source") == []
-    assert [item.title for item in service.search_ideas("target")] == [
+    assert service.search_ideas("group:source") == []
+    assert [item.title for item in service.search_ideas("group:target")] == [
         "Grouped idea",
     ]
 
@@ -96,18 +96,18 @@ def test_search_index_refreshes_after_group_move(
 def test_search_index_refreshes_after_group_rename(
     service: IdeaService,
 ) -> None:
-    """Group rename should refresh indexed group-name search text."""
+    """Structured group search should follow group renames."""
     group = service.create_group("source")
     service.create_idea("Grouped idea", group_pk=group.pk)
 
-    assert [item.title for item in service.search_ideas("source")] == [
+    assert [item.title for item in service.search_ideas("group:source")] == [
         "Grouped idea",
     ]
 
     service.rename_group(group.pk, "target")
 
-    assert service.search_ideas("source") == []
-    assert [item.title for item in service.search_ideas("target")] == [
+    assert service.search_ideas("group:source") == []
+    assert [item.title for item in service.search_ideas("group:target")] == [
         "Grouped idea",
     ]
 
