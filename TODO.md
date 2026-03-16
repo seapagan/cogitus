@@ -36,17 +36,12 @@ Ideas to add to Cogitus
 
 ## Search and Filtering
 
-- fix search operator autocomplete chaining: accepting `tag:` or `group:` via
-  autocomplete `Enter` should immediately open the corresponding value
-  suggestions, matching the behavior of typing the trailing `:` manually.
 - upgrade dedicated search results from best-fragment rows to true
   occurrence-level navigation: let one match row map to one specific occurrence
   where practical, then scroll the right pane to that exact occurrence and add
   inline match highlighting there.
 - optimize advanced search query execution to reduce multi-pass PK collection
   and re-fetch overhead as dataset size grows.
-- for search results, put the `group` on the same line as the title, maybe in
-  parethesis but defo dimmed as it is now
 
 ## Export, Import, and Backup
 
