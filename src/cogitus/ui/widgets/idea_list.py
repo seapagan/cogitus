@@ -695,13 +695,16 @@ class IdeaListPanel(Vertical):
             return
         if highlighted >= len(state.candidates):
             return
+        suggestion = state.candidates[highlighted]
         search = self.query_one("#search-input", Input)
-        apply_highlighted_autocomplete(
+        applied = apply_highlighted_autocomplete(
             state=state,
             autocomplete=autocomplete,
             input_widget=search,
             before_input_change=self._suspend_autocomplete_sync_once,
         )
+        if applied and suggestion in _SEARCH_OPERATORS:
+            self._sync_autocomplete()
 
     def _suspend_autocomplete_sync_once(self) -> None:
         """Suppress the next programmatic Input.Changed event."""

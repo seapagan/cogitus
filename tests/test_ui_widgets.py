@@ -469,7 +469,7 @@ async def test_idea_list_panel_select_group_branches(
 async def test_idea_list_panel_search_autocomplete_flow(
     service: IdeaService,
 ) -> None:
-    """Search autocomplete should suggest operators and values."""
+    """Search autocomplete should chain operator acceptance into values."""
     backend = service.create_group("backend")
     service.create_idea("With python", tags=["python"], group_pk=backend.pk)
     service.create_idea("With api", tags=["api"], group_pk=backend.pk)
@@ -504,9 +504,6 @@ async def test_idea_list_panel_search_autocomplete_flow(
         await pilot.press("enter")
         await pilot.pause()
         assert search.value == "tag:"
-
-        await pilot.press("tab")
-        await pilot.pause()
         assert not autocomplete.has_class("-hidden")
         assert [str(option.prompt) for option in autocomplete.options] == [
             "api",
@@ -539,6 +536,38 @@ async def test_idea_list_panel_search_autocomplete_flow(
         await pilot.pause()
         assert search.value == "tag:api"
         assert autocomplete.has_class("-hidden")
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_group_operator_acceptance_chains() -> None:
+    """Accepting `group:` should immediately show matching group values."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_autocomplete_sources(
+            tags=["python"],
+            groups=["backend"],
+        )
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        search.focus()
+        await pilot.pause()
+
+        await pilot.press("g")
+        await pilot.pause()
+        assert [str(option.prompt) for option in autocomplete.options] == [
+            "group:",
+        ]
+
+        await pilot.press("enter")
+        await pilot.pause()
+        assert search.value == "group:"
+        assert not autocomplete.has_class("-hidden")
+        assert [str(option.prompt) for option in autocomplete.options] == [
+            "backend",
+        ]
 
 
 @pytest.mark.asyncio
@@ -1201,7 +1230,10 @@ async def test_idea_list_panel_blur_defers_for_option_selection() -> None:
         await pilot.pause()
 
         assert search.value == "tag:"
-        assert autocomplete.has_class("-hidden")
+        assert not autocomplete.has_class("-hidden")
+        assert [str(option.prompt) for option in autocomplete.options] == [
+            "python",
+        ]
         assert app.focused is search
 
 
