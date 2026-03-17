@@ -80,6 +80,7 @@ class SearchResultsList(OptionList):
         results: list[SearchResult],
         *,
         show_match_rows: bool,
+        search_query: str | None = None,
     ) -> None:
         """Replace the option list contents with search results."""
         options: list[Option] = []
@@ -102,10 +103,20 @@ class SearchResultsList(OptionList):
                 ordered_ids=ordered_ids,
             )
 
+        if not options and search_query:
+            options.append(
+                Option(
+                    _render_empty_prompt(search_query),
+                    id="search-empty-state",
+                    disabled=True,
+                )
+            )
+
         self._selections_by_option_id = selections
         self._ordered_match_option_ids = tuple(ordered_ids)
         self.set_options(options)
         if not ordered_ids:
+            self.highlighted = None
             return
         self.highlighted = self.get_option_index(ordered_ids[0])
 
@@ -278,6 +289,14 @@ def _render_match_prompt(fragment: SearchMatchFragment) -> Text:
     if fragment.source == "title":
         prompt.append("Title: ", style="dim")
     prompt.append_text(_marked_text_to_text(fragment.text))
+    return prompt
+
+
+def _render_empty_prompt(search_query: str) -> Text:
+    """Render a non-selectable empty-state message for active search."""
+    prompt = Text('No results for "', style="dim")
+    prompt.append(search_query)
+    prompt.append('"', style="dim")
     return prompt
 
 

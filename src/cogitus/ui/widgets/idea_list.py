@@ -244,6 +244,7 @@ class IdeaListPanel(Vertical):
         results: list[SearchResult],
         *,
         show_match_rows: bool = True,
+        search_query: str | None = None,
     ) -> None:
         """Replace the active-search view with dedicated search results."""
         self._show_search_results_mode()
@@ -255,6 +256,7 @@ class IdeaListPanel(Vertical):
         search_results.load_results(
             results,
             show_match_rows=show_match_rows,
+            search_query=search_query,
         )
 
     def load_ideas(self, ideas: list[Idea]) -> None:

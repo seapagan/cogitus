@@ -443,6 +443,31 @@ async def test_idea_list_panel_remaining_branches(
 
 
 @pytest.mark.asyncio
+async def test_idea_list_panel_empty_search_results_show_message() -> None:
+    """Empty active search should render a non-selectable message row."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.query_one("#search-input", Input).value = "no-match"
+        panel.load_search_results(
+            [],
+            show_match_rows=True,
+            search_query="no-match",
+        )
+        await pilot.pause()
+
+        results = panel.query_one("#search-results", SearchResultsList)
+        assert results.option_count == 1
+        assert results.has_matches() is False
+        assert results.get_selected_idea() is None
+        assert results.options[0].id == "search-empty-state"
+        prompt = results.options[0].prompt
+        plain = prompt.plain if hasattr(prompt, "plain") else str(prompt)
+        assert plain == 'No results for "no-match"'
+
+
+@pytest.mark.asyncio
 async def test_idea_list_panel_select_group_branches(
     service: IdeaService,
 ) -> None:
@@ -935,7 +960,16 @@ def test_search_results_widget_helpers_cover_empty_state() -> None:
     assert results.adjacent_match_id(1) is None
     assert results.select_first_match_for_idea(1) is False
 
-    results.load_results([], show_match_rows=True)
+    results.load_results(
+        [],
+        show_match_rows=True,
+        search_query="no-match",
+    )
+    assert results.option_count == 1
+    assert results.options[0].id == "search-empty-state"
+    prompt = results.options[0].prompt
+    plain = prompt.plain if hasattr(prompt, "plain") else str(prompt)
+    assert plain == 'No results for "no-match"'
     assert results.highlighted is None
 
 

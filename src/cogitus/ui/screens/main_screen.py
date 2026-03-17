@@ -284,6 +284,7 @@ class MainScreen(Screen[None]):
         panel.load_search_results(
             search_results,
             show_match_rows=parsed.text is not None,
+            search_query=search_query,
         )
         matched_select_pk = False
         if select_pk is not None and any(
@@ -335,6 +336,7 @@ class MainScreen(Screen[None]):
             panel.load_search_results(
                 self._service.search_results(query),
                 show_match_rows=parsed.text is not None,
+                search_query=query,
             )
             self._show_search_selection_preview(
                 panel,
