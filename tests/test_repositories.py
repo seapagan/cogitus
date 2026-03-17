@@ -12,6 +12,7 @@ from cogitus.models import Idea, Tag
 from cogitus.repositories import tag_repo as tag_repo_module
 from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.search import SearchFilter, parse_search_query
+from cogitus.search.backend import FtsSearchMatch
 from cogitus.search.result import SearchMatchFragment
 
 if TYPE_CHECKING:
@@ -817,6 +818,29 @@ class TestIdeaRepository:
         monkeypatch.setattr(idea_repo, "_legacy_snippet", lambda *_args: None)
 
         assert idea_repo._legacy_text_matches("body?") == {}
+
+    def test_search_text_matches_drop_fts_rows_without_visible_fragments(
+        self,
+        idea_repo: IdeaRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """FTS rows with only hidden-field hits should still be ignored."""
+        monkeypatch.setattr(
+            idea_repo._search_backend,
+            "search_text",
+            lambda _text_query: [
+                FtsSearchMatch(
+                    idea_pk=42,
+                    score=-1.0,
+                    body_snippet="",
+                    title_snippet="",
+                    group_snippet="[[backend]]",
+                    tag_snippet="[[python]]",
+                )
+            ],
+        )
+
+        assert idea_repo._search_text_matches("async python") == {}
 
     def test_search_results_structured_only_have_no_visible_matches(
         self,

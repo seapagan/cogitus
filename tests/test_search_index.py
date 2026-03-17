@@ -135,8 +135,75 @@ def test_build_fts_query_rejects_safe_but_tokenless_input() -> None:
 
 def test_build_fts_query_tokenizes_punctuation_queries() -> None:
     """Common punctuation should not block token extraction for FTS."""
-    expected = '"node"* AND "js"* AND "c"*'
+    expected = '{title body} : ("node"* AND "js"* AND "c"*)'
     assert _build_fts_query("node.js? c++") == expected
+
+
+def test_plain_fts_query_ignores_tag_only_terms(
+    service: IdeaService,
+    idea_repo: IdeaRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Plain multi-term FTS search should not satisfy terms via tags."""
+    service.create_idea(
+        "Async patterns",
+        body="Visible async text only",
+        tags=["python"],
+    )
+    visible = service.create_idea(
+        "Visible both",
+        body="async and python both visible",
+    )
+
+    def fail_legacy_fallback(
+        _text_query: str,
+    ) -> dict[int, tuple[float, str | None]]:
+        msg = "word query should stay on the FTS path"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(
+        idea_repo,
+        "_legacy_text_matches",
+        fail_legacy_fallback,
+    )
+
+    results = idea_repo.search_results(parse_search_query("async python"))
+
+    assert [result.idea.pk for result in results] == [visible.pk]
+
+
+def test_plain_fts_query_ignores_group_only_terms(
+    service: IdeaService,
+    idea_repo: IdeaRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Plain multi-term FTS search should not satisfy terms via groups."""
+    backend = service.create_group("backend")
+    service.create_idea(
+        "Async patterns",
+        body="Visible async text only",
+        group_pk=backend.pk,
+    )
+    visible = service.create_idea(
+        "Visible backend",
+        body="async backend text both visible",
+    )
+
+    def fail_legacy_fallback(
+        _text_query: str,
+    ) -> dict[int, tuple[float, str | None]]:
+        msg = "word query should stay on the FTS path"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(
+        idea_repo,
+        "_legacy_text_matches",
+        fail_legacy_fallback,
+    )
+
+    results = idea_repo.search_results(parse_search_query("async backend"))
+
+    assert [result.idea.pk for result in results] == [visible.pk]
 
 
 def test_punctuation_queries_stay_on_fts_path(
