@@ -30,7 +30,8 @@ The app opens with:
 - Type a query to filter ideas with ranked matches.
 - Press `Down` to move into the dedicated search-results list.
 - `tag:` / `group:` searches show matching ideas directly.
-- Text searches show idea headings with selectable match rows.
+- Text searches show `Group / Title` headings with selectable match rows.
+- If nothing matches, the results pane shows `No results for "<query>"`.
 - Press `Up` on the first match row to return to the search input.
 - Press `Esc` to leave search.
 
