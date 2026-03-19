@@ -45,7 +45,6 @@ Future versions may introduce:
 - Idea linking (relationships between ideas)
 - Graph views
 - Scoring or priority signals
-- SQLite FTS5-powered full-text search
 - AI-assisted idea expansion
 
 ---
