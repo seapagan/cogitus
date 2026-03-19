@@ -244,6 +244,7 @@ class IdeaListPanel(Vertical):
         results: list[SearchResult],
         *,
         show_match_rows: bool = True,
+        search_query: str | None = None,
     ) -> None:
         """Replace the active-search view with dedicated search results."""
         self._show_search_results_mode()
@@ -255,6 +256,7 @@ class IdeaListPanel(Vertical):
         search_results.load_results(
             results,
             show_match_rows=show_match_rows,
+            search_query=search_query,
         )
 
     def load_ideas(self, ideas: list[Idea]) -> None:
@@ -695,13 +697,16 @@ class IdeaListPanel(Vertical):
             return
         if highlighted >= len(state.candidates):
             return
+        suggestion = state.candidates[highlighted]
         search = self.query_one("#search-input", Input)
-        apply_highlighted_autocomplete(
+        applied = apply_highlighted_autocomplete(
             state=state,
             autocomplete=autocomplete,
             input_widget=search,
             before_input_change=self._suspend_autocomplete_sync_once,
         )
+        if applied and suggestion in _SEARCH_OPERATORS:
+            self._sync_autocomplete()
 
     def _suspend_autocomplete_sync_once(self) -> None:
         """Suppress the next programmatic Input.Changed event."""

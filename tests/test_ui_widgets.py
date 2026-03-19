@@ -369,11 +369,11 @@ async def test_idea_list_panel_structured_only_search_uses_idea_rows(
 
 
 @pytest.mark.asyncio
-async def test_idea_list_panel_tag_only_text_match_falls_back_to_idea_row(
+async def test_idea_list_panel_tag_only_text_match_returns_no_results(
     service: IdeaService,
 ) -> None:
-    """Tag-only free-text matches should not render explicit tag rows."""
-    tagged = service.create_idea("No visible text hit", tags=["python"])
+    """Tag-only free-text matches should not render any result rows."""
+    service.create_idea("No visible text hit", tags=["python"])
     panel = IdeaListPanel(id="idea-list-panel")
     app = _WidgetApp(panel)
 
@@ -386,16 +386,7 @@ async def test_idea_list_panel_tag_only_text_match_falls_back_to_idea_row(
         await pilot.pause()
 
         results = panel.query_one("#search-results", SearchResultsList)
-        prompts = [
-            option.prompt.plain
-            if hasattr(option.prompt, "plain")
-            else str(option.prompt)
-            for option in results.options
-        ]
-
-        assert results.options[0].id == f"idea-{tagged.pk}"
-        assert prompts == [f"No visible text hit\n{tagged.group.name}"]
-        assert all("Tag:" not in prompt for prompt in prompts)
+        assert results.options == []
 
 
 @pytest.mark.asyncio
@@ -452,6 +443,31 @@ async def test_idea_list_panel_remaining_branches(
 
 
 @pytest.mark.asyncio
+async def test_idea_list_panel_empty_search_results_show_message() -> None:
+    """Empty active search should render a non-selectable message row."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.query_one("#search-input", Input).value = "no-match"
+        panel.load_search_results(
+            [],
+            show_match_rows=True,
+            search_query="no-match",
+        )
+        await pilot.pause()
+
+        results = panel.query_one("#search-results", SearchResultsList)
+        assert results.option_count == 1
+        assert results.has_matches() is False
+        assert results.get_selected_idea() is None
+        assert results.options[0].id == "search-empty-state"
+        prompt = results.options[0].prompt
+        plain = prompt.plain if hasattr(prompt, "plain") else str(prompt)
+        assert plain == 'No results for "no-match"'
+
+
+@pytest.mark.asyncio
 async def test_idea_list_panel_select_group_branches(
     service: IdeaService,
 ) -> None:
@@ -478,7 +494,7 @@ async def test_idea_list_panel_select_group_branches(
 async def test_idea_list_panel_search_autocomplete_flow(
     service: IdeaService,
 ) -> None:
-    """Search autocomplete should suggest operators and values."""
+    """Search autocomplete should chain operator acceptance into values."""
     backend = service.create_group("backend")
     service.create_idea("With python", tags=["python"], group_pk=backend.pk)
     service.create_idea("With api", tags=["api"], group_pk=backend.pk)
@@ -513,9 +529,6 @@ async def test_idea_list_panel_search_autocomplete_flow(
         await pilot.press("enter")
         await pilot.pause()
         assert search.value == "tag:"
-
-        await pilot.press("tab")
-        await pilot.pause()
         assert not autocomplete.has_class("-hidden")
         assert [str(option.prompt) for option in autocomplete.options] == [
             "api",
@@ -548,6 +561,38 @@ async def test_idea_list_panel_search_autocomplete_flow(
         await pilot.pause()
         assert search.value == "tag:api"
         assert autocomplete.has_class("-hidden")
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_group_operator_acceptance_chains() -> None:
+    """Accepting `group:` should immediately show matching group values."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_autocomplete_sources(
+            tags=["python"],
+            groups=["backend"],
+        )
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        search.focus()
+        await pilot.pause()
+
+        await pilot.press("g")
+        await pilot.pause()
+        assert [str(option.prompt) for option in autocomplete.options] == [
+            "group:",
+        ]
+
+        await pilot.press("enter")
+        await pilot.pause()
+        assert search.value == "group:"
+        assert not autocomplete.has_class("-hidden")
+        assert [str(option.prompt) for option in autocomplete.options] == [
+            "backend",
+        ]
 
 
 @pytest.mark.asyncio
@@ -915,7 +960,16 @@ def test_search_results_widget_helpers_cover_empty_state() -> None:
     assert results.adjacent_match_id(1) is None
     assert results.select_first_match_for_idea(1) is False
 
-    results.load_results([], show_match_rows=True)
+    results.load_results(
+        [],
+        show_match_rows=True,
+        search_query="no-match",
+    )
+    assert results.option_count == 1
+    assert results.options[0].id == "search-empty-state"
+    prompt = results.options[0].prompt
+    plain = prompt.plain if hasattr(prompt, "plain") else str(prompt)
+    assert plain == 'No results for "no-match"'
     assert results.highlighted is None
 
 
@@ -1016,6 +1070,51 @@ def test_search_results_widget_can_render_selectable_idea_rows() -> None:
     assert results.get_selected_idea() is idea
     assert results.get_selected_fragment() is None
     assert results.options[0].id == "idea-3"
+    prompt = results.options[0].prompt
+    assert isinstance(prompt, Text)
+    assert prompt.plain == "backend / Tagged"
+    assert [(span.start, span.end, span.style) for span in prompt.spans] == [
+        (0, 7, "bold"),
+        (7, 10, "dim"),
+    ]
+
+
+def test_search_results_widget_renders_group_first_heading_emphasis() -> None:
+    """Match headings should show bold group first and plain title second."""
+    idea = cast(
+        "Idea",
+        SimpleNamespace(
+            pk=9,
+            title="API polish",
+            group=SimpleNamespace(name="backend"),
+        ),
+    )
+    results = SearchResultsList(id="search-results")
+
+    results.load_results(
+        [
+            SearchResult(
+                idea=idea,
+                score=0.0,
+                matches=(
+                    SearchMatchFragment(
+                        source="body",
+                        text="refine API polish",
+                        rank=0,
+                    ),
+                ),
+            )
+        ],
+        show_match_rows=True,
+    )
+
+    prompt = results.options[0].prompt
+    assert isinstance(prompt, Text)
+    assert prompt.plain == "backend / API polish"
+    assert [(span.start, span.end, span.style) for span in prompt.spans] == [
+        (0, 7, "bold"),
+        (7, 10, "dim"),
+    ]
 
 
 def test_search_results_widget_renders_title_once() -> None:
@@ -1165,7 +1264,10 @@ async def test_idea_list_panel_blur_defers_for_option_selection() -> None:
         await pilot.pause()
 
         assert search.value == "tag:"
-        assert autocomplete.has_class("-hidden")
+        assert not autocomplete.has_class("-hidden")
+        assert [str(option.prompt) for option in autocomplete.options] == [
+            "python",
+        ]
         assert app.focused is search
 
 

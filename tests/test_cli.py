@@ -97,9 +97,9 @@ class TestListCommand:
         db: SqliterDB,
         cli_ideas: list[Idea],
     ) -> None:
-        """List with query filters results."""
+        """List with plain-text query filters visible text results."""
         with patch("cogitus.cli.commands.get_db", return_value=db):
-            result = runner.invoke(app, ["list", "--query", "rust"])
+            result = runner.invoke(app, ["list", "--query", "second"])
             assert result.exit_code == 0
             assert "Second idea" in result.output
             assert "First idea" not in result.output

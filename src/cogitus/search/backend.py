@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 _SNIPPET_START = "[["
 _SNIPPET_END = "]]"
 _FTS_TOKEN_RE = re.compile(r"\w+")
+_VISIBLE_FTS_COLUMNS = "{title body}"
 _REBUILD_SQL = """
     INSERT INTO idea_search (
         rowid,
@@ -199,7 +200,7 @@ class FtsSearchBackend:
 
 
 def _build_fts_query(query_text: str) -> str | None:
-    """Compile plain text into a safe FTS5 prefix query."""
+    """Compile plain text into a safe FTS5 prefix query on visible fields."""
     stripped = query_text.strip()
     if not stripped:
         return None
@@ -207,7 +208,8 @@ def _build_fts_query(query_text: str) -> str | None:
     tokens = _FTS_TOKEN_RE.findall(stripped.lower())
     if not tokens:
         return None
-    return " AND ".join(f'"{token}"*' for token in tokens)
+    visible_expression = " AND ".join(f'"{token}"*' for token in tokens)
+    return f"{_VISIBLE_FTS_COLUMNS} : ({visible_expression})"
 
 
 def _choose_snippet(

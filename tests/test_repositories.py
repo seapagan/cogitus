@@ -12,6 +12,7 @@ from cogitus.models import Idea, Tag
 from cogitus.repositories import tag_repo as tag_repo_module
 from cogitus.repositories.idea_repo import IdeaRepository
 from cogitus.search import SearchFilter, parse_search_query
+from cogitus.search.backend import FtsSearchMatch
 from cogitus.search.result import SearchMatchFragment
 
 if TYPE_CHECKING:
@@ -602,14 +603,14 @@ class TestIdeaRepository:
         assert len(ideas) == 1
         assert ideas[0].pk == source_idea.pk
 
-    def test_search_tag_matches_include_group_relations(
+    def test_search_free_text_excludes_tag_only_matches(
         self,
         idea_repo: IdeaRepository,
         group_repo: GroupRepository,
     ) -> None:
-        """Tag-only matches should still return ideas with group loaded."""
+        """Free-text should not return ideas matched only through tags."""
         source = group_repo.create("source")
-        created = idea_repo.create(
+        idea_repo.create(
             "No query text in title",
             body="No query text in body",
             tag_names=["needle"],
@@ -618,8 +619,24 @@ class TestIdeaRepository:
 
         results = idea_repo.search("needle")
 
-        assert [idea.pk for idea in results] == [created.pk]
-        assert results[0].group.pk == source.pk
+        assert results == []
+
+    def test_search_free_text_excludes_group_only_matches(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Free-text should not return ideas matched only through groups."""
+        source = group_repo.create("needle")
+        idea_repo.create(
+            "No query text in title",
+            body="No query text in body",
+            group_pk=source.pk,
+        )
+
+        results = idea_repo.search("needle")
+
+        assert results == []
 
     def test_search_structured_group_and_tag_filters(
         self,
@@ -727,11 +744,11 @@ class TestIdeaRepository:
         with pytest.raises(ValueError, match="Unsupported filter field"):
             idea_repo._matching_pks_for_filter(invalid)
 
-    def test_legacy_text_matches_cover_body_only_and_tag_matches(
+    def test_legacy_text_matches_cover_title_and_body_only(
         self,
         idea_repo: IdeaRepository,
     ) -> None:
-        """Legacy fallback should still match title, body, and tag-only text."""
+        """Legacy fallback should only match visible title/body text."""
         title_match = idea_repo.create(
             "Title fallback marker",
             body="",
@@ -740,19 +757,13 @@ class TestIdeaRepository:
             "No punctuation in title",
             body="Body-only fallback for body? queries",
         )
-        tag_match = idea_repo.create(
-            "Tag fallback",
-            body="",
-            tag_names=["c++"],
-        )
 
         title_results = idea_repo._legacy_text_matches("marker")
         body_results = idea_repo._legacy_text_matches("body?")
-        tag_results = idea_repo._legacy_text_matches("c++")
 
         assert title_match.pk in title_results
         assert body_results[body_match.pk][1] is not None
-        assert tag_match.pk in tag_results
+        assert idea_repo._legacy_text_matches("c++") == {}
 
     def test_legacy_snippet_and_window_cover_fallback_branches(
         self,
@@ -807,6 +818,29 @@ class TestIdeaRepository:
         monkeypatch.setattr(idea_repo, "_legacy_snippet", lambda *_args: None)
 
         assert idea_repo._legacy_text_matches("body?") == {}
+
+    def test_search_text_matches_drop_fts_rows_without_visible_fragments(
+        self,
+        idea_repo: IdeaRepository,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """FTS rows with only hidden-field hits should still be ignored."""
+        monkeypatch.setattr(
+            idea_repo._search_backend,
+            "search_text",
+            lambda _text_query: [
+                FtsSearchMatch(
+                    idea_pk=42,
+                    score=-1.0,
+                    body_snippet="",
+                    title_snippet="",
+                    group_snippet="[[backend]]",
+                    tag_snippet="[[python]]",
+                )
+            ],
+        )
+
+        assert idea_repo._search_text_matches("async python") == {}
 
     def test_search_results_structured_only_have_no_visible_matches(
         self,
