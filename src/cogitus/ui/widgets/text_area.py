@@ -13,14 +13,16 @@ if TYPE_CHECKING:
 
 
 class CogitusTextArea(TextArea):
-    """TextArea that copies selected text on 'y' key press."""
+    """TextArea with custom clipboard and cursor-visibility behavior."""
 
     def on_key(self, event: Key) -> None:
-        """Intercept 'y' to copy selected text to clipboard.
+        """Intercept custom key handling for the text area.
 
         When text is selected and 'y' is pressed, copies the
         selection to the system clipboard instead of inserting
-        the character. Falls through to normal behavior otherwise.
+        the character. When Enter inserts a new line at the bottom
+        of the viewport, schedule a post-refresh scroll so the new
+        cursor row is immediately visible.
 
         Args:
             event: The key event.
@@ -32,3 +34,7 @@ class CogitusTextArea(TextArea):
                 self.notify("Clipboard unavailable", severity="warning")
             event.prevent_default()
             event.stop()
+            return
+
+        if event.key == "enter":
+            self.call_after_refresh(self.scroll_cursor_visible)
