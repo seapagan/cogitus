@@ -3494,6 +3494,32 @@ async def test_cogitus_text_area_y_copies_selection(
 
 
 @pytest.mark.asyncio
+async def test_cogitus_text_area_enter_scrolls_new_line_into_view() -> None:
+    """Pressing Enter at the bottom should reveal the new cursor row."""
+
+    class _TextAreaApp(App[None]):
+        CSS = "#ta { height: 3; width: 20; }"
+
+        def compose(self) -> ComposeResult:
+            yield CogitusTextArea("line1\nline2\nline3", id="ta")
+
+    app = _TextAreaApp()
+    async with app.run_test() as pilot:
+        ta = app.query_one("#ta", CogitusTextArea)
+        ta.focus()
+        ta.cursor_location = (2, len("line3"))
+        await pilot.pause()
+        initial_scroll_y = ta.scroll_offset.y
+
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert ta.text == "line1\nline2\nline3\n"
+        assert ta.cursor_location == (3, 0)
+        assert ta.scroll_offset.y > initial_scroll_y
+
+
+@pytest.mark.asyncio
 async def test_main_screen_y_binding_not_triggered_by_text_area_typing(
     service: IdeaService,
     mocker: MockerFixture,
