@@ -5,6 +5,24 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0](https://github.com/seapagan/cogitus/releases/tag/0.7.0) (March 24, 2026)
+
+**New Features**
+
+- Refine search result matching and layout ([#41](https://github.com/seapagan/cogitus/pull/41)) by [seapagan](https://github.com/seapagan)
+- Refine left pane tree hierarchy and layout ([#40](https://github.com/seapagan/cogitus/pull/40)) by [seapagan](https://github.com/seapagan)
+
+**Bug Fixes**
+
+- Fix: scroll text area after enter ([#42](https://github.com/seapagan/cogitus/pull/42)) by [seapagan](https://github.com/seapagan)
+
+**Refactoring**
+
+- Use aggregation for tag usage listing ([#39](https://github.com/seapagan/cogitus/pull/39)) by [seapagan](https://github.com/seapagan)
+- Use M2M metadata in tag repository ([#38](https://github.com/seapagan/cogitus/pull/38)) by [seapagan](https://github.com/seapagan)
+
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.6.0...0.7.0) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.6.0...0.7.0.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.6.0...0.7.0.patch)
+
 ## [0.6.0](https://github.com/seapagan/cogitus/releases/tag/0.6.0) (March 10, 2026)
 
 **New Features**
