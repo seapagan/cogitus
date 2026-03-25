@@ -10,6 +10,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.widgets import (
     Button,
+    Header,
     Input,
     Markdown,
     OptionList,
@@ -20,6 +21,7 @@ from textual.widgets import (
 
 from cogitus.app import CSS_PATH, CogitusApp
 from cogitus.config import EditBodyCursorMode, NewIdeaGroupMode
+from cogitus.metadata import AppMetadata
 from cogitus.search import SearchResult
 from cogitus.ui.screens.idea_form_screen import (
     ConfirmDialog,
@@ -868,6 +870,28 @@ async def test_main_screen_toggle_focus_noop_when_search_focused(
         content_focus.assert_not_called()
         tree_focus.assert_not_called()
         assert app.focused is search
+
+
+@pytest.mark.asyncio
+async def test_main_screen_shows_custom_app_header(
+    service: IdeaService,
+) -> None:
+    """Main screen should show the version in the header icon slot."""
+    service.create_idea("First")
+    screen = MainScreen(
+        service,
+        app_metadata=AppMetadata(
+            title="Cogitus",
+            version="1.2.3",
+        ),
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        header = screen.query_one(Header)
+
+        assert header.icon == "v1.2.3"
+        await pilot.pause()
 
 
 @pytest.mark.asyncio
@@ -3249,6 +3273,39 @@ def test_cogitus_app_init_normalizes_configured_default_group_name(
     CogitusApp(settings=settings)
 
     get_db.assert_called_once_with(default_group_name="inbox")
+
+
+def test_cogitus_app_build_main_screen_includes_app_metadata(
+    mocker: MockerFixture,
+    db: SqliterDB,
+) -> None:
+    """App should pass resolved metadata into the main screen."""
+    settings = _FakeSettings()
+    main_screen = mocker.patch("cogitus.app.MainScreen")
+    mocker.patch(
+        "cogitus.app.get_app_metadata",
+        return_value=AppMetadata(
+            title="Cogitus",
+            version="1.2.3",
+            summary="Test summary",
+        ),
+    )
+
+    app = CogitusApp(db=db, settings=settings)
+    app._build_main_screen()
+
+    main_screen.assert_called_once_with(
+        app._service,
+        initial_select_pk=None,
+        on_selected_idea_changed=app._on_selected_idea_changed,
+        edit_body_cursor_mode=app._edit_body_cursor_mode,
+        new_idea_group_mode=app._new_idea_group_mode,
+        app_metadata=AppMetadata(
+            title="Cogitus",
+            version="1.2.3",
+            summary="Test summary",
+        ),
+    )
 
 
 @pytest.mark.asyncio
