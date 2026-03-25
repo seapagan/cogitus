@@ -65,7 +65,7 @@ def _version_callback(value: object) -> None:
 
 @app.callback(invoke_without_command=True)
 def main(
-    version: Annotated[
+    _version: Annotated[
         bool,
         typer.Option(
             "--version",
@@ -76,8 +76,13 @@ def main(
         ),
     ] = False,
 ) -> None:
-    """Run the Cogitus CLI."""
-    del version
+    """Define the top-level Typer callback for global CLI options.
+
+    This callback exists to register options that apply to the root
+    `cogitus` command, such as `--version`. Command dispatch is still
+    handled by Typer; when `--version` is passed, `_version_callback`
+    prints the version and exits before any subcommand runs.
+    """
 
 
 @app.command("list")
