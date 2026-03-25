@@ -15,6 +15,7 @@ from cogitus.config import (
     EditBodyCursorMode,
     NewIdeaGroupMode,
 )
+from cogitus.metadata import AppMetadata, get_app_metadata
 from cogitus.search import parse_search_query
 from cogitus.ui.clipboard import copy_to_clipboard
 from cogitus.ui.screens.idea_form_screen import (
@@ -137,6 +138,7 @@ class MainScreen(Screen[None]):
             DEFAULT_EDIT_BODY_CURSOR_MODE
         ),
         new_idea_group_mode: NewIdeaGroupMode = (DEFAULT_NEW_IDEA_GROUP_MODE),
+        app_metadata: AppMetadata | None = None,
     ) -> None:
         """Initialize with the idea service.
 
@@ -146,20 +148,27 @@ class MainScreen(Screen[None]):
             on_selected_idea_changed: Callback for selected idea changes.
             edit_body_cursor_mode: Edit form body cursor mode.
             new_idea_group_mode: New idea group selection mode.
+            app_metadata: App metadata shown in the top bar.
         """
         super().__init__()
+        resolved_app_metadata = (
+            get_app_metadata() if app_metadata is None else app_metadata
+        )
         self._service = service
         self._initial_select_pk = initial_select_pk
         self._on_selected_idea_changed = on_selected_idea_changed
         self._edit_body_cursor_mode = edit_body_cursor_mode
         self._new_idea_group_mode = new_idea_group_mode
+        self._app_title = resolved_app_metadata.title
+        self._app_version = resolved_app_metadata.version
+        self.title = self._app_title
         self._selected_idea_pk: int | None = None
         self._active_pane: str = "list"
         self._focus_before_search: str = "list"
 
     def compose(self) -> ComposeResult:
         """Compose the main screen layout."""
-        yield Header()
+        yield Header(icon=f"v{self._app_version}")
         yield IdeaListPanel(id="idea-list-panel")
         yield IdeaView(id="content-panel")
         yield Footer()

@@ -9,6 +9,7 @@ import pytest
 from cogitus import main
 from cogitus.cli import run_cli
 from cogitus.db import get_db
+from cogitus.metadata import AppMetadata
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -39,6 +40,26 @@ def test_main_exits_on_cli_command(mocker: MockerFixture) -> None:
         main.main()
 
     assert exc_info.value.code == 0
+
+
+def test_main_exits_on_version_command(mocker: MockerFixture) -> None:
+    """Main should exit before creating the TUI for --version."""
+    mocker.patch("sys.argv", ["cogitus", "--version"])
+    app_cls = mocker.patch("cogitus.main.CogitusApp")
+    mocker.patch(
+        "cogitus.cli.commands.get_app_metadata",
+        return_value=AppMetadata(
+            title="Cogitus",
+            version="1.2.3",
+            summary="Test summary",
+        ),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main.main()
+
+    assert exc_info.value.code == 0
+    app_cls.assert_not_called()
 
 
 def test_run_cli_returns_for_tui(mocker: MockerFixture) -> None:

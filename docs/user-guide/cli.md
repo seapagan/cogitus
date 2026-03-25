@@ -10,6 +10,12 @@ Running `cogitus` with no arguments launches the TUI:
 cogitus
 ```
 
+Show the installed version:
+
+```bash
+cogitus --version
+```
+
 ## List Ideas
 
 ```bash

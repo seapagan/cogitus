@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -18,8 +19,10 @@ from cogitus.cli.formatters import (
     format_ideas_simple,
     format_ideas_table,
 )
+from cogitus.metadata import AppMetadata
 
 if TYPE_CHECKING:
+    from pytest_mock import MockerFixture
     from sqliter import SqliterDB
 
     from cogitus.models.idea import Idea
@@ -283,6 +286,34 @@ class TestDeleteCommand:
             result = runner.invoke(app, ["delete", "999", "--force"])
             assert result.exit_code == 1
             assert "not found" in result.output
+
+
+class TestVersionOption:
+    """Tests for the global version option."""
+
+    def test_version_outputs_metadata(self, mocker: MockerFixture) -> None:
+        """The version option should print metadata and exit cleanly."""
+        mocker.patch(
+            "cogitus.cli.commands.get_app_metadata",
+            return_value=AppMetadata(
+                title="Cogitus",
+                version="1.2.3",
+                summary="Test summary",
+            ),
+        )
+        get_db = mocker.patch("cogitus.cli.commands.get_db")
+
+        result = runner.invoke(app, ["--version"])
+
+        assert result.exit_code == 0
+        assert result.output == (
+            "Test summary\n"
+            "© "
+            f"{datetime.now(tz=timezone.utc).year} "
+            "Grant Ramsay (seapagan)\n"
+            "Version: 1.2.3\n"
+        )
+        get_db.assert_not_called()
 
 
 class TestFormatters:
