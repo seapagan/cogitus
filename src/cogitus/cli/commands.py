@@ -16,6 +16,7 @@ from cogitus.cli.formatters import (
     format_ideas_table,
 )
 from cogitus.db import get_db
+from cogitus.metadata import format_version_output, get_app_metadata
 from cogitus.services.idea_service import IdeaService
 
 if TYPE_CHECKING:
@@ -53,6 +54,30 @@ app = typer.Typer(
     no_args_is_help=False,
     add_completion=False,
 )
+
+
+def _version_callback(value: object) -> None:
+    """Print the application version and exit."""
+    if value is True:
+        typer.echo(format_version_output(get_app_metadata()))
+        raise typer.Exit
+
+
+@app.callback(invoke_without_command=True)
+def main(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            expose_value=False,
+            is_eager=True,
+            help="Show version and exit.",
+        ),
+    ] = False,
+) -> None:
+    """Run the Cogitus CLI."""
+    del version
 
 
 @app.command("list")

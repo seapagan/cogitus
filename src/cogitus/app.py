@@ -15,6 +15,7 @@ from cogitus.config import (
     normalize_new_idea_group_mode,
 )
 from cogitus.db import get_db
+from cogitus.metadata import get_app_metadata
 from cogitus.repositories.group_repo import GroupRepository
 from cogitus.services.idea_service import IdeaService
 from cogitus.ui.screens.main_screen import MainScreen
@@ -60,6 +61,9 @@ class CogitusApp(App[None]):
             settings: Optional settings instance (for testing).
         """
         super().__init__(css_path=CSS_PATH)
+        self._app_metadata = get_app_metadata()
+        self.title = self._app_metadata.title
+        self.sub_title = self.SUB_TITLE
         self._settings = settings if settings is not None else get_settings()
         self._edit_body_cursor_mode = normalize_edit_body_cursor_mode(
             self._settings.edit_body_cursor_mode
@@ -118,6 +122,7 @@ class CogitusApp(App[None]):
             on_selected_idea_changed=self._on_selected_idea_changed,
             edit_body_cursor_mode=self._edit_body_cursor_mode,
             new_idea_group_mode=self._new_idea_group_mode,
+            app_metadata=self._app_metadata,
         )
 
     def _notify_invalid_config(self) -> None:
