@@ -33,6 +33,9 @@ Ideas to add to Cogitus
   footer/binding state, screen transitions, or other user-visible interaction
   flows; keep direct method/event calls only for unit-style helper and branch
   coverage where pilot would add noise without improving confidence.
+- review `ty` type-checker findings in tests, especially whether intentionally
+  invalid `SearchFilter` construction should use a clearer explicit escape hatch
+  than `invalid_field: Any = "status"`.
 
 ## Search and Filtering
 
