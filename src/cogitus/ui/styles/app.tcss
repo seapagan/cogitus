@@ -353,6 +353,20 @@ AboutScreen {
     text-style: bold;
     width: 100%;
     text-align: center;
+}
+
+#about-separator {
+    width: 100%;
+    text-align: center;
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+#about-summary {
+    width: 100%;
+    text-align: center;
+    text-style: italic;
+    color: $text-muted;
     margin-bottom: 1;
 }
 

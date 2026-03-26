@@ -1344,15 +1344,23 @@ async def test_about_screen_shows_metadata_and_closes(
 
     async with app.run_test() as pilot:
         title = about_screen.query_one("#about-title", Static)
+        separator = about_screen.query_one("#about-separator", Static)
+        summary = about_screen.query_one("#about-summary", Static)
         content = about_screen.query_one("#about-content", Static)
 
-        assert str(title.content) == "About Cogitus"
-        assert "Version: 1.2.3" in str(content.content)
-        assert "Author: Grant Ramsay" in str(content.content)
-        assert "Repository: https://example.com/repo" in str(content.content)
-        assert "Docs: https://example.com/docs" in str(content.content)
-        assert "Issues: https://example.com/issues" in str(content.content)
-        assert "License: MIT" in str(content.content)
+        assert str(title.content) == "Cogitus"
+        assert str(separator.content) == AboutScreen.SEPARATOR
+        assert str(summary.content) == "Test summary"
+        assert "[bold]Version:[/] 1.2.3" in str(content.content)
+        assert "[bold]Author:[/] Grant Ramsay" in str(content.content)
+        assert "[bold]Repository:[/] https://example.com/repo" in str(
+            content.content
+        )
+        assert "[bold]Docs:[/] https://example.com/docs" in str(content.content)
+        assert "[bold]Issues:[/] https://example.com/issues" in str(
+            content.content
+        )
+        assert "[bold]License:[/] MIT" in str(content.content)
 
         dismiss = mocker.patch.object(about_screen, "dismiss")
         about_screen.action_close()

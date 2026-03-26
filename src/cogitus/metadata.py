@@ -95,7 +95,9 @@ def format_version_output(
 ) -> str:
     """Format the CLI version output."""
     resolved_year = datetime.now(tz=timezone.utc).year if year is None else year
-    lines = [app_metadata.summary or app_metadata.title]
+    lines = [app_metadata.title]
+    if app_metadata.summary:
+        lines.append(app_metadata.summary)
     lines.append(f"© {resolved_year} {COPYRIGHT_HOLDER}")
     lines.append(f"Version: {app_metadata.version}")
     return "\n".join(lines)
@@ -103,16 +105,12 @@ def format_version_output(
 
 def format_about_output(app_metadata: AppMetadata) -> str:
     """Format the About dialog content."""
-    lines = [app_metadata.title]
-    if app_metadata.summary:
-        lines.append(app_metadata.summary)
-    lines.append("")
-    lines.append(f"Version: {app_metadata.version}")
+    lines = [f"[bold]Version:[/] {app_metadata.version}"]
     if app_metadata.author:
-        lines.append(f"Author: {app_metadata.author}")
+        lines.append(f"[bold]Author:[/] {app_metadata.author}")
     for project_url_label, display_label in _ABOUT_PROJECT_URL_LABELS:
         project_url = app_metadata.project_urls.get(project_url_label)
         if project_url:
-            lines.append(f"{display_label}: {project_url}")
-    lines.append(f"License: {LICENSE_NAME}")
+            lines.append(f"[bold]{display_label}:[/] {project_url}")
+    lines.append(f"[bold]License:[/] {LICENSE_NAME}")
     return "\n".join(lines)

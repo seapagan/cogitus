@@ -131,7 +131,7 @@ def test_format_version_output_uses_fixed_layout() -> None:
     result = metadata_module.format_version_output(app_metadata, year=2026)
 
     assert result == (
-        "Test summary\n© 2026 Grant Ramsay (seapagan)\nVersion: 1.2.3"
+        "Cogitus\nTest summary\n© 2026 Grant Ramsay (seapagan)\nVersion: 1.2.3"
     )
 
 
@@ -154,15 +154,12 @@ def test_format_about_output_uses_selected_metadata_fields() -> None:
     result = metadata_module.format_about_output(app_metadata)
 
     assert result == (
-        "Cogitus\n"
-        "Test summary\n"
-        "\n"
-        "Version: 1.2.3\n"
-        "Author: Grant Ramsay\n"
-        "Repository: https://example.com/repo\n"
-        "Docs: https://example.com/docs\n"
-        "Issues: https://example.com/issues\n"
-        "License: MIT"
+        "[bold]Version:[/] 1.2.3\n"
+        "[bold]Author:[/] Grant Ramsay\n"
+        "[bold]Repository:[/] https://example.com/repo\n"
+        "[bold]Docs:[/] https://example.com/docs\n"
+        "[bold]Issues:[/] https://example.com/issues\n"
+        "[bold]License:[/] MIT"
     )
 
 
@@ -175,4 +172,4 @@ def test_format_about_output_omits_missing_optional_fields() -> None:
 
     result = metadata_module.format_about_output(app_metadata)
 
-    assert result == "Cogitus\n\nVersion: 1.2.3\nLicense: MIT"
+    assert result == "[bold]Version:[/] 1.2.3\n[bold]License:[/] MIT"

@@ -989,6 +989,7 @@ class HelpScreen(ModalScreen[None]):
 class AboutScreen(ModalScreen[None]):
     """About overlay showing app metadata and support links."""
 
+    SEPARATOR: ClassVar[str] = "-" * 24
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "close", "Close", show=False),
         Binding("a", "close", "Close", show=False),
@@ -1002,14 +1003,18 @@ class AboutScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         """Compose the About overlay."""
         with Vertical(id="about-container"):
-            yield Static(
-                f"About {self._app_metadata.title}",
-                id="about-title",
-            )
+            yield Static(self._app_metadata.title, id="about-title")
+            yield Static(self.SEPARATOR, id="about-separator")
             with VerticalScroll(id="about-content-scroll"):
+                if self._app_metadata.summary:
+                    yield Static(
+                        self._app_metadata.summary,
+                        id="about-summary",
+                    )
                 yield Static(
                     format_about_output(self._app_metadata),
                     id="about-content",
+                    markup=True,
                 )
 
     def action_close(self) -> None:

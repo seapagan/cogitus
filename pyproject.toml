@@ -1,7 +1,7 @@
 [project]
 name = "cogitus"
 version = "0.7.0"
-description = "Cogitus — a fast, searchable terminal workspace for capturing and evolving programming ideas."
+description = "A fast, searchable terminal workspace for capturing and evolving programming ideas."
 readme = "README.md"
 authors = [{ name = "Grant Ramsay", email = "seapagan@gmail.com" }]
 requires-python = ">=3.10"

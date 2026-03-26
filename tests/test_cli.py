@@ -307,6 +307,7 @@ class TestVersionOption:
 
         assert result.exit_code == 0
         assert result.output == (
+            "Cogitus\n"
             "Test summary\n"
             "© "
             f"{datetime.now(tz=timezone.utc).year} "
