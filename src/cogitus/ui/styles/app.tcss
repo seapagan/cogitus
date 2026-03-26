@@ -356,10 +356,8 @@ AboutScreen {
 }
 
 #about-separator {
-    width: 100%;
-    text-align: center;
     color: $text-muted;
-    margin-bottom: 1;
+    margin: 0 2 1 2;
 }
 
 #about-summary {
@@ -371,5 +369,10 @@ AboutScreen {
 }
 
 #about-content-scroll {
+    height: auto;
+}
+
+#about-metadata {
+    width: 100%;
     height: auto;
 }

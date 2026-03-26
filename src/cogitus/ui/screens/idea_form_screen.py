@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Literal
 
+from rich.table import Table
+from rich.text import Text
 from textual import on
 from textual.binding import Binding, BindingType
 from textual.containers import (
@@ -14,10 +16,18 @@ from textual.containers import (
     VerticalScroll,
 )
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, OptionList, Select, Static
+from textual.widgets import (
+    Button,
+    Input,
+    Label,
+    OptionList,
+    Rule,
+    Select,
+    Static,
+)
 
 from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
-from cogitus.metadata import AppMetadata, format_about_output
+from cogitus.metadata import AppMetadata, get_about_entries
 from cogitus.ui.widgets.autocomplete import (
     _AutocompleteState,
     apply_highlighted_autocomplete,
@@ -989,7 +999,6 @@ class HelpScreen(ModalScreen[None]):
 class AboutScreen(ModalScreen[None]):
     """About overlay showing app metadata and support links."""
 
-    SEPARATOR: ClassVar[str] = "-" * 24
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "close", "Close", show=False),
         Binding("a", "close", "Close", show=False),
@@ -1000,22 +1009,30 @@ class AboutScreen(ModalScreen[None]):
         super().__init__()
         self._app_metadata = app_metadata
 
+    def _build_about_table(self) -> Table:
+        """Build a borderless Rich table for About metadata rows."""
+        table = Table.grid(padding=(0, 2), expand=True)
+        table.add_column(no_wrap=True)
+        table.add_column(ratio=1, overflow="fold")
+        for label, value in get_about_entries(self._app_metadata):
+            table.add_row(
+                Text(f"{label}:", style="dim"),
+                Text(value),
+            )
+        return table
+
     def compose(self) -> ComposeResult:
         """Compose the About overlay."""
         with Vertical(id="about-container"):
-            yield Static(self._app_metadata.title, id="about-title")
-            yield Static(self.SEPARATOR, id="about-separator")
+            yield Static(f"About {self._app_metadata.title}", id="about-title")
+            yield Rule(id="about-separator")
             with VerticalScroll(id="about-content-scroll"):
                 if self._app_metadata.summary:
                     yield Static(
                         self._app_metadata.summary,
                         id="about-summary",
                     )
-                yield Static(
-                    format_about_output(self._app_metadata),
-                    id="about-content",
-                    markup=True,
-                )
+                yield Static(self._build_about_table(), id="about-metadata")
 
     def action_close(self) -> None:
         """Close the About overlay."""

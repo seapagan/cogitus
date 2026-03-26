@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import PropertyMock
 
 import pytest
+from rich.table import Table
 from textual.app import App, ComposeResult
 from textual.containers import Container
 from textual.widgets import (
@@ -14,6 +15,7 @@ from textual.widgets import (
     Input,
     Markdown,
     OptionList,
+    Rule,
     Select,
     Static,
     TextArea,
@@ -1344,23 +1346,14 @@ async def test_about_screen_shows_metadata_and_closes(
 
     async with app.run_test() as pilot:
         title = about_screen.query_one("#about-title", Static)
-        separator = about_screen.query_one("#about-separator", Static)
+        separator = about_screen.query_one("#about-separator", Rule)
         summary = about_screen.query_one("#about-summary", Static)
-        content = about_screen.query_one("#about-content", Static)
+        metadata = about_screen.query_one("#about-metadata", Static)
 
-        assert str(title.content) == "Cogitus"
-        assert str(separator.content) == AboutScreen.SEPARATOR
+        assert str(title.content) == "About Cogitus"
+        assert separator.orientation == "horizontal"
         assert str(summary.content) == "Test summary"
-        assert "[bold]Version:[/] 1.2.3" in str(content.content)
-        assert "[bold]Author:[/] Grant Ramsay" in str(content.content)
-        assert "[bold]Repository:[/] https://example.com/repo" in str(
-            content.content
-        )
-        assert "[bold]Docs:[/] https://example.com/docs" in str(content.content)
-        assert "[bold]Issues:[/] https://example.com/issues" in str(
-            content.content
-        )
-        assert "[bold]License:[/] MIT" in str(content.content)
+        assert isinstance(metadata.content, Table)
 
         dismiss = mocker.patch.object(about_screen, "dismiss")
         about_screen.action_close()

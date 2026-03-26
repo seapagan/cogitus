@@ -103,14 +103,14 @@ def format_version_output(
     return "\n".join(lines)
 
 
-def format_about_output(app_metadata: AppMetadata) -> str:
-    """Format the About dialog content."""
-    lines = [f"[bold]Version:[/] {app_metadata.version}"]
+def get_about_entries(app_metadata: AppMetadata) -> list[tuple[str, str]]:
+    """Return ordered About dialog metadata rows."""
+    lines: list[tuple[str, str]] = [("Version", app_metadata.version)]
     if app_metadata.author:
-        lines.append(f"[bold]Author:[/] {app_metadata.author}")
+        lines.append(("Author", app_metadata.author))
     for project_url_label, display_label in _ABOUT_PROJECT_URL_LABELS:
         project_url = app_metadata.project_urls.get(project_url_label)
         if project_url:
-            lines.append(f"[bold]{display_label}:[/] {project_url}")
-    lines.append(f"[bold]License:[/] {LICENSE_NAME}")
-    return "\n".join(lines)
+            lines.append((display_label, project_url))
+    lines.append(("License", LICENSE_NAME))
+    return lines

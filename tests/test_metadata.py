@@ -135,8 +135,8 @@ def test_format_version_output_uses_fixed_layout() -> None:
     )
 
 
-def test_format_about_output_uses_selected_metadata_fields() -> None:
-    """About output should include runtime metadata and curated links."""
+def test_get_about_entries_uses_selected_metadata_fields() -> None:
+    """About metadata rows should include curated runtime fields."""
     app_metadata = metadata_module.AppMetadata(
         title="Cogitus",
         version="1.2.3",
@@ -151,25 +151,25 @@ def test_format_about_output_uses_selected_metadata_fields() -> None:
         },
     )
 
-    result = metadata_module.format_about_output(app_metadata)
+    result = metadata_module.get_about_entries(app_metadata)
 
-    assert result == (
-        "[bold]Version:[/] 1.2.3\n"
-        "[bold]Author:[/] Grant Ramsay\n"
-        "[bold]Repository:[/] https://example.com/repo\n"
-        "[bold]Docs:[/] https://example.com/docs\n"
-        "[bold]Issues:[/] https://example.com/issues\n"
-        "[bold]License:[/] MIT"
-    )
+    assert result == [
+        ("Version", "1.2.3"),
+        ("Author", "Grant Ramsay"),
+        ("Repository", "https://example.com/repo"),
+        ("Docs", "https://example.com/docs"),
+        ("Issues", "https://example.com/issues"),
+        ("License", "MIT"),
+    ]
 
 
-def test_format_about_output_omits_missing_optional_fields() -> None:
-    """About output should omit optional lines that are unavailable."""
+def test_get_about_entries_omits_missing_optional_fields() -> None:
+    """About metadata rows should omit unavailable optional fields."""
     app_metadata = metadata_module.AppMetadata(
         title="Cogitus",
         version="1.2.3",
     )
 
-    result = metadata_module.format_about_output(app_metadata)
+    result = metadata_module.get_about_entries(app_metadata)
 
-    assert result == "[bold]Version:[/] 1.2.3\n[bold]License:[/] MIT"
+    assert result == [("Version", "1.2.3"), ("License", "MIT")]
