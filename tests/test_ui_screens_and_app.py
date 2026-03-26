@@ -15,6 +15,7 @@ from textual.widgets import (
     Markdown,
     OptionList,
     Select,
+    Static,
     TextArea,
     Tree,
 )
@@ -24,6 +25,7 @@ from cogitus.config import EditBodyCursorMode, NewIdeaGroupMode
 from cogitus.metadata import AppMetadata
 from cogitus.search import SearchResult
 from cogitus.ui.screens.idea_form_screen import (
+    AboutScreen,
     ConfirmDialog,
     GroupDeleteReassignScreen,
     GroupFormScreen,
@@ -1321,6 +1323,44 @@ async def test_help_screen_close_action(mocker: MockerFixture) -> None:
 
 
 @pytest.mark.asyncio
+async def test_about_screen_shows_metadata_and_closes(
+    mocker: MockerFixture,
+) -> None:
+    """About modal should render metadata and dismiss cleanly."""
+    about_screen = AboutScreen(
+        AppMetadata(
+            title="Cogitus",
+            version="1.2.3",
+            summary="Test summary",
+            author="Grant Ramsay",
+            project_urls={
+                "Homepage": "https://example.com/docs",
+                "Repository": "https://example.com/repo",
+                "Issues": "https://example.com/issues",
+            },
+        ),
+    )
+    app = _StyledSingleScreenApp(about_screen)
+
+    async with app.run_test() as pilot:
+        title = about_screen.query_one("#about-title", Static)
+        content = about_screen.query_one("#about-content", Static)
+
+        assert str(title.content) == "About Cogitus"
+        assert "Version: 1.2.3" in str(content.content)
+        assert "Author: Grant Ramsay" in str(content.content)
+        assert "Repository: https://example.com/repo" in str(content.content)
+        assert "Docs: https://example.com/docs" in str(content.content)
+        assert "Issues: https://example.com/issues" in str(content.content)
+        assert "License: MIT" in str(content.content)
+
+        dismiss = mocker.patch.object(about_screen, "dismiss")
+        about_screen.action_close()
+        dismiss.assert_called_once_with(None)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_group_form_and_reassign_validation_branches(
     service: IdeaService,
     mocker: MockerFixture,
@@ -2212,7 +2252,7 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
     service: IdeaService,
     mocker: MockerFixture,
 ) -> None:
-    """Main screen should handle focus, help, quit, and callback updates."""
+    """Main screen should handle focus, help, about, quit, and callbacks."""
     first = service.create_idea("First")
     selected: list[int | None] = []
     screen = MainScreen(service, on_selected_idea_changed=selected.append)
@@ -2229,6 +2269,9 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
         push = mocker.patch.object(app, "push_screen")
         screen.action_show_help()
         push.assert_called()
+        push.reset_mock()
+        screen.action_show_about()
+        push.assert_called_once()
 
         panel.query_one("#idea-list", Tree).focus()
         await pilot.pause()
@@ -2269,7 +2312,7 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
 async def test_main_screen_footer_shows_switch_pane_binding(
     service: IdeaService,
 ) -> None:
-    """Default footer should expose the pane-switch hint."""
+    """Default footer should expose pane-switch and About hints."""
     service.create_idea("First")
     screen = MainScreen(service)
     app = _SingleScreenApp(screen)
@@ -2277,6 +2320,7 @@ async def test_main_screen_footer_shows_switch_pane_binding(
     async with app.run_test() as pilot:
         await pilot.pause()
         bindings = screen.active_bindings
+        assert bindings["a"].binding.description == "About"
         assert bindings["tab"].binding.description == "Switch Pane"
 
 

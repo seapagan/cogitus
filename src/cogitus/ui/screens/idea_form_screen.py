@@ -1,4 +1,4 @@
-"""Modal screens for idea create/edit, delete confirm, and help."""
+"""Modal screens for idea create/edit, delete confirm, help, and about."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, OptionList, Select, Static
 
 from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
+from cogitus.metadata import AppMetadata, format_about_output
 from cogitus.ui.widgets.autocomplete import (
     _AutocompleteState,
     apply_highlighted_autocomplete,
@@ -982,4 +983,35 @@ class HelpScreen(ModalScreen[None]):
 
     def action_close(self) -> None:
         """Close the help overlay."""
+        self.dismiss(None)
+
+
+class AboutScreen(ModalScreen[None]):
+    """About overlay showing app metadata and support links."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape", "close", "Close", show=False),
+        Binding("a", "close", "Close", show=False),
+    ]
+
+    def __init__(self, app_metadata: AppMetadata) -> None:
+        """Initialize the About modal."""
+        super().__init__()
+        self._app_metadata = app_metadata
+
+    def compose(self) -> ComposeResult:
+        """Compose the About overlay."""
+        with Vertical(id="about-container"):
+            yield Static(
+                f"About {self._app_metadata.title}",
+                id="about-title",
+            )
+            with VerticalScroll(id="about-content-scroll"):
+                yield Static(
+                    format_about_output(self._app_metadata),
+                    id="about-content",
+                )
+
+    def action_close(self) -> None:
+        """Close the About overlay."""
         self.dismiss(None)
