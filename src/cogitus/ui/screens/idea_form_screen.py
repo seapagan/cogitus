@@ -980,6 +980,7 @@ class HelpScreen(ModalScreen[None]):
         "  Escape           Cancel (confirm if edit is dirty)\n"
         "\n"
         "[bold]General[/bold]\n"
+        "  a                About\n"
         "  ?                Toggle this help\n"
         "  q                Quit"
     )

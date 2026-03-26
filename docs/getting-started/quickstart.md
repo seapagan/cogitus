@@ -37,4 +37,5 @@ The app opens with:
 
 ## Help
 
+- Press `a` to open the in-app About dialog.
 - Press `?` to open the in-app help screen.

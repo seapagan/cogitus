@@ -1313,6 +1313,7 @@ async def test_group_form_and_reassign_cancel_actions(
 async def test_help_screen_close_action(mocker: MockerFixture) -> None:
     """Help modal close action should dismiss correctly."""
     help_screen = HelpScreen()
+    assert "a                About" in help_screen.HELP_TEXT
     assert "Escape           Cancel (confirm if edit is dirty)" in (
         help_screen.HELP_TEXT
     )
