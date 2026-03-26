@@ -8,7 +8,7 @@ from unittest.mock import PropertyMock
 import pytest
 from rich.table import Table
 from textual.app import App, ComposeResult
-from textual.containers import Container
+from textual.containers import Container, VerticalScroll
 from textual.widgets import (
     Button,
     Header,
@@ -1319,10 +1319,23 @@ async def test_help_screen_close_action(mocker: MockerFixture) -> None:
     )
     app2 = _SingleScreenApp(help_screen)
     async with app2.run_test() as pilot:
+        assert help_screen.query_one("#help-body", Static) is not None
         dismiss = mocker.patch.object(help_screen, "dismiss")
         help_screen.action_close()
         dismiss.assert_called_once_with(None)
         await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_help_screen_scrolls_when_terminal_is_short() -> None:
+    """Help modal should expose scrolling on constrained terminal heights."""
+    help_screen = HelpScreen()
+    app = _StyledSingleScreenApp(help_screen)
+
+    async with app.run_test(size=(60, 10)) as pilot:
+        await pilot.pause()
+        content = help_screen.query_one("#help-content", VerticalScroll)
+        assert content.max_scroll_y > 0
 
 
 @pytest.mark.asyncio

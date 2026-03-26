@@ -990,7 +990,7 @@ class HelpScreen(ModalScreen[None]):
         with Vertical(id="help-container"):
             yield Static("Keyboard Shortcuts", id="help-title")
             with VerticalScroll(id="help-content"):
-                yield Static(self.HELP_TEXT, markup=True)
+                yield Static(self.HELP_TEXT, id="help-body", markup=True)
 
     def action_close(self) -> None:
         """Close the help overlay."""

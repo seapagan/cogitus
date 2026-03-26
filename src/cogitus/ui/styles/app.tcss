@@ -332,7 +332,15 @@ HelpScreen {
 }
 
 #help-content {
-    height: auto;
+    height: 1fr;
+    min-height: 1;
+    scrollbar-gutter: stable;
+    scrollbar-size-vertical: 1;
+}
+
+#help-body {
+    width: 100%;
+    padding-right: 1;
 }
 
 /* About overlay */
