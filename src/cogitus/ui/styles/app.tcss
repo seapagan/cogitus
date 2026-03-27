@@ -332,5 +332,55 @@ HelpScreen {
 }
 
 #help-content {
+    height: 1fr;
+    min-height: 1;
+    scrollbar-gutter: stable;
+    scrollbar-size-vertical: 1;
+}
+
+#help-body {
+    width: 100%;
+    padding-right: 1;
+}
+
+/* About overlay */
+AboutScreen {
+    align: center middle;
+}
+
+#about-container {
+    width: 72;
+    height: auto;
+    max-height: 80%;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#about-title {
+    text-style: bold;
+    width: 100%;
+    text-align: center;
+}
+
+#about-separator {
+    color: $text-muted;
+    margin: 0 2 1 2;
+}
+
+#about-summary {
+    width: 100%;
+    text-align: center;
+    text-style: italic;
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+#about-content-scroll {
+    height: auto;
+}
+
+#about-metadata {
+    width: 100%;
     height: auto;
 }

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from email.utils import parseaddr
 from importlib import metadata as importlib_metadata
 from typing import TYPE_CHECKING, cast
 
@@ -12,6 +13,12 @@ if TYPE_CHECKING:
 
 DISTRIBUTION_NAME = "cogitus"
 COPYRIGHT_HOLDER = "Grant Ramsay (seapagan)"
+LICENSE_NAME = "MIT"
+_ABOUT_PROJECT_URL_LABELS = (
+    ("Repository", "Repository"),
+    ("Homepage", "Docs"),
+    ("Issues", "Issues"),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +28,35 @@ class AppMetadata:
     title: str
     version: str
     summary: str | None = None
+    author: str | None = None
+    author_email: str | None = None
+    project_urls: dict[str, str] = field(default_factory=dict)
+
+
+def _clean_optional_text(value: str | None) -> str | None:
+    """Return a stripped metadata value or None when it is blank."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _parse_project_urls(package_metadata: Message) -> dict[str, str]:
+    """Normalize repeated Project-URL metadata entries into a mapping."""
+    get_all = getattr(package_metadata, "get_all", None)
+    raw_values = get_all("Project-URL", []) if callable(get_all) else []
+    project_urls: dict[str, str] = {}
+
+    for raw_value in raw_values:
+        label, separator, url = raw_value.partition(",")
+        if not separator:
+            continue
+        clean_label = label.strip()
+        clean_url = url.strip()
+        if clean_label and clean_url:
+            project_urls[clean_label] = clean_url
+
+    return project_urls
 
 
 def get_app_metadata(
@@ -33,9 +69,23 @@ def get_app_metadata(
     )
     raw_name = package_metadata.get("Name", distribution_name).strip()
     title = raw_name[:1].upper() + raw_name[1:] if raw_name else "Cogitus"
-    summary = package_metadata.get("Summary")
+    summary = _clean_optional_text(package_metadata.get("Summary"))
+    raw_author = _clean_optional_text(package_metadata.get("Author"))
+    raw_author_email = _clean_optional_text(
+        package_metadata.get("Author-email")
+    )
+    parsed_author_name, parsed_author_email = parseaddr(raw_author_email or "")
+    author = raw_author or _clean_optional_text(parsed_author_name)
+    author_email = _clean_optional_text(parsed_author_email)
     version = importlib_metadata.version(distribution_name)
-    return AppMetadata(title=title, version=version, summary=summary)
+    return AppMetadata(
+        title=title,
+        version=version,
+        summary=summary,
+        author=author,
+        author_email=author_email,
+        project_urls=_parse_project_urls(package_metadata),
+    )
 
 
 def format_version_output(
@@ -45,7 +95,22 @@ def format_version_output(
 ) -> str:
     """Format the CLI version output."""
     resolved_year = datetime.now(tz=timezone.utc).year if year is None else year
-    lines = [app_metadata.summary or app_metadata.title]
+    lines = [app_metadata.title]
+    if app_metadata.summary:
+        lines.append(app_metadata.summary)
     lines.append(f"© {resolved_year} {COPYRIGHT_HOLDER}")
     lines.append(f"Version: {app_metadata.version}")
     return "\n".join(lines)
+
+
+def get_about_entries(app_metadata: AppMetadata) -> list[tuple[str, str]]:
+    """Return ordered About dialog metadata rows."""
+    lines: list[tuple[str, str]] = [("Version", app_metadata.version)]
+    if app_metadata.author:
+        lines.append(("Author", app_metadata.author))
+    for project_url_label, display_label in _ABOUT_PROJECT_URL_LABELS:
+        project_url = app_metadata.project_urls.get(project_url_label)
+        if project_url:
+            lines.append((display_label, project_url))
+    lines.append(("License", LICENSE_NAME))
+    return lines

@@ -19,6 +19,7 @@ from cogitus.metadata import AppMetadata, get_app_metadata
 from cogitus.search import parse_search_query
 from cogitus.ui.clipboard import copy_to_clipboard
 from cogitus.ui.screens.idea_form_screen import (
+    AboutScreen,
     ConfirmDialog,
     GroupDeleteReassignScreen,
     GroupFormScreen,
@@ -102,6 +103,12 @@ class MainScreen(Screen[None]):
             priority=True,
         ),
         Binding(
+            "a",
+            "show_about",
+            "About",
+            key_display="a",
+        ),
+        Binding(
             "question_mark",
             "show_help",
             "Help",
@@ -154,6 +161,7 @@ class MainScreen(Screen[None]):
         resolved_app_metadata = (
             get_app_metadata() if app_metadata is None else app_metadata
         )
+        self._app_metadata = resolved_app_metadata
         self._service = service
         self._initial_select_pk = initial_select_pk
         self._on_selected_idea_changed = on_selected_idea_changed
@@ -725,6 +733,10 @@ class MainScreen(Screen[None]):
     def action_show_help(self) -> None:
         """Show the help overlay."""
         self.app.push_screen(HelpScreen())
+
+    def action_show_about(self) -> None:
+        """Show the About overlay."""
+        self.app.push_screen(AboutScreen(self._app_metadata))
 
     def action_toggle_focus(self) -> None:
         """Toggle focus between list and content panes."""

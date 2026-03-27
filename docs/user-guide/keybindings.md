@@ -15,6 +15,7 @@
 | `Tab`    | Switch pane (outside focused search)           |
 | `ctrl+b` | Toggle list pane visibility                    |
 | `y`      | Copy body or selected text (context-sensitive) |
+| `a`      | About                                          |
 | `?`      | Help                                           |
 | `q`      | Quit                                           |
 

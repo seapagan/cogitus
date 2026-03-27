@@ -1,10 +1,12 @@
-"""Modal screens for idea create/edit, delete confirm, and help."""
+"""Modal screens for idea create/edit, delete confirm, help, and about."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Literal
 
+from rich.table import Table
+from rich.text import Text
 from textual import on
 from textual.binding import Binding, BindingType
 from textual.containers import (
@@ -14,9 +16,18 @@ from textual.containers import (
     VerticalScroll,
 )
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, OptionList, Select, Static
+from textual.widgets import (
+    Button,
+    Input,
+    Label,
+    OptionList,
+    Rule,
+    Select,
+    Static,
+)
 
 from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
+from cogitus.metadata import AppMetadata, get_about_entries
 from cogitus.ui.widgets.autocomplete import (
     _AutocompleteState,
     apply_highlighted_autocomplete,
@@ -969,6 +980,7 @@ class HelpScreen(ModalScreen[None]):
         "  Escape           Cancel (confirm if edit is dirty)\n"
         "\n"
         "[bold]General[/bold]\n"
+        "  a                About\n"
         "  ?                Toggle this help\n"
         "  q                Quit"
     )
@@ -978,8 +990,51 @@ class HelpScreen(ModalScreen[None]):
         with Vertical(id="help-container"):
             yield Static("Keyboard Shortcuts", id="help-title")
             with VerticalScroll(id="help-content"):
-                yield Static(self.HELP_TEXT, markup=True)
+                yield Static(self.HELP_TEXT, id="help-body", markup=True)
 
     def action_close(self) -> None:
         """Close the help overlay."""
+        self.dismiss(None)
+
+
+class AboutScreen(ModalScreen[None]):
+    """About overlay showing app metadata and support links."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape", "close", "Close", show=False),
+        Binding("a", "close", "Close", show=False),
+    ]
+
+    def __init__(self, app_metadata: AppMetadata) -> None:
+        """Initialize the About modal."""
+        super().__init__()
+        self._app_metadata = app_metadata
+
+    def _build_about_table(self) -> Table:
+        """Build a borderless Rich table for About metadata rows."""
+        table = Table.grid(padding=(0, 2), expand=True)
+        table.add_column(no_wrap=True)
+        table.add_column(ratio=1, overflow="fold")
+        for label, value in get_about_entries(self._app_metadata):
+            table.add_row(
+                Text(f"{label}:", style="dim"),
+                Text(value),
+            )
+        return table
+
+    def compose(self) -> ComposeResult:
+        """Compose the About overlay."""
+        with Vertical(id="about-container"):
+            yield Static(f"About {self._app_metadata.title}", id="about-title")
+            yield Rule(id="about-separator")
+            with VerticalScroll(id="about-content-scroll"):
+                if self._app_metadata.summary:
+                    yield Static(
+                        self._app_metadata.summary,
+                        id="about-summary",
+                    )
+                yield Static(self._build_about_table(), id="about-metadata")
+
+    def action_close(self) -> None:
+        """Close the About overlay."""
         self.dismiss(None)

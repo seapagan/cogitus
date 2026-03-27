@@ -6,15 +6,18 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import PropertyMock
 
 import pytest
+from rich.table import Table
 from textual.app import App, ComposeResult
-from textual.containers import Container
+from textual.containers import Container, VerticalScroll
 from textual.widgets import (
     Button,
     Header,
     Input,
     Markdown,
     OptionList,
+    Rule,
     Select,
+    Static,
     TextArea,
     Tree,
 )
@@ -24,6 +27,7 @@ from cogitus.config import EditBodyCursorMode, NewIdeaGroupMode
 from cogitus.metadata import AppMetadata
 from cogitus.search import SearchResult
 from cogitus.ui.screens.idea_form_screen import (
+    AboutScreen,
     ConfirmDialog,
     GroupDeleteReassignScreen,
     GroupFormScreen,
@@ -1309,13 +1313,64 @@ async def test_group_form_and_reassign_cancel_actions(
 async def test_help_screen_close_action(mocker: MockerFixture) -> None:
     """Help modal close action should dismiss correctly."""
     help_screen = HelpScreen()
+    assert "a                About" in help_screen.HELP_TEXT
     assert "Escape           Cancel (confirm if edit is dirty)" in (
         help_screen.HELP_TEXT
     )
     app2 = _SingleScreenApp(help_screen)
     async with app2.run_test() as pilot:
+        assert help_screen.query_one("#help-body", Static) is not None
         dismiss = mocker.patch.object(help_screen, "dismiss")
         help_screen.action_close()
+        dismiss.assert_called_once_with(None)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_help_screen_scrolls_when_terminal_is_short() -> None:
+    """Help modal should expose scrolling on constrained terminal heights."""
+    help_screen = HelpScreen()
+    app = _StyledSingleScreenApp(help_screen)
+
+    async with app.run_test(size=(60, 10)) as pilot:
+        await pilot.pause()
+        content = help_screen.query_one("#help-content", VerticalScroll)
+        assert content.max_scroll_y > 0
+
+
+@pytest.mark.asyncio
+async def test_about_screen_shows_metadata_and_closes(
+    mocker: MockerFixture,
+) -> None:
+    """About modal should render metadata and dismiss cleanly."""
+    about_screen = AboutScreen(
+        AppMetadata(
+            title="Cogitus",
+            version="1.2.3",
+            summary="Test summary",
+            author="Grant Ramsay",
+            project_urls={
+                "Homepage": "https://example.com/docs",
+                "Repository": "https://example.com/repo",
+                "Issues": "https://example.com/issues",
+            },
+        ),
+    )
+    app = _StyledSingleScreenApp(about_screen)
+
+    async with app.run_test() as pilot:
+        title = about_screen.query_one("#about-title", Static)
+        separator = about_screen.query_one("#about-separator", Rule)
+        summary = about_screen.query_one("#about-summary", Static)
+        metadata = about_screen.query_one("#about-metadata", Static)
+
+        assert str(title.content) == "About Cogitus"
+        assert separator.orientation == "horizontal"
+        assert str(summary.content) == "Test summary"
+        assert isinstance(metadata.content, Table)
+
+        dismiss = mocker.patch.object(about_screen, "dismiss")
+        about_screen.action_close()
         dismiss.assert_called_once_with(None)
         await pilot.pause()
 
@@ -2212,7 +2267,7 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
     service: IdeaService,
     mocker: MockerFixture,
 ) -> None:
-    """Main screen should handle focus, help, quit, and callback updates."""
+    """Main screen should handle focus, help, about, quit, and callbacks."""
     first = service.create_idea("First")
     selected: list[int | None] = []
     screen = MainScreen(service, on_selected_idea_changed=selected.append)
@@ -2229,6 +2284,9 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
         push = mocker.patch.object(app, "push_screen")
         screen.action_show_help()
         push.assert_called()
+        push.reset_mock()
+        screen.action_show_about()
+        push.assert_called_once()
 
         panel.query_one("#idea-list", Tree).focus()
         await pilot.pause()
@@ -2269,7 +2327,7 @@ async def test_main_screen_focus_toggle_help_quit_and_callback(
 async def test_main_screen_footer_shows_switch_pane_binding(
     service: IdeaService,
 ) -> None:
-    """Default footer should expose the pane-switch hint."""
+    """Default footer should expose pane-switch and About hints."""
     service.create_idea("First")
     screen = MainScreen(service)
     app = _SingleScreenApp(screen)
@@ -2277,6 +2335,7 @@ async def test_main_screen_footer_shows_switch_pane_binding(
     async with app.run_test() as pilot:
         await pilot.pause()
         bindings = screen.active_bindings
+        assert bindings["a"].binding.description == "About"
         assert bindings["tab"].binding.description == "Switch Pane"
 
 
