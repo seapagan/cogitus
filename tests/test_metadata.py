@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import cogitus.metadata as metadata_module
 
 if TYPE_CHECKING:
+    from email.message import Message
+
     import pytest
 
 
@@ -118,6 +120,22 @@ def test_get_app_metadata_falls_back_to_author_email_name(
 
     assert result.author == "Grant Ramsay"
     assert result.author_email == "grant@example.com"
+
+
+def test_parse_project_urls_ignores_malformed_entries() -> None:
+    """Project URLs without a label separator should be ignored."""
+    package_metadata = _FakePackageMetadata(
+        project_urls=[
+            "Malformed project url entry",
+            "Repository, https://example.com/repo",
+        ]
+    )
+
+    result = metadata_module._parse_project_urls(
+        cast("Message", package_metadata)
+    )
+
+    assert result == {"Repository": "https://example.com/repo"}
 
 
 def test_format_version_output_uses_fixed_layout() -> None:
