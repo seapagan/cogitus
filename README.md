@@ -2,7 +2,7 @@
 
 > [!NOTE]
 >
-> Cogitus is currently in MVP/alpha stage. Core workflows are available, and
+> Cogitus is currently in beta. Core workflows are available, and
 > interfaces may continue to evolve in subsequent releases.
 
 **Cogitus — a fast, searchable terminal workspace for capturing and evolving
@@ -68,17 +68,16 @@ Cogitus is also a real-world validation project for `sqliter-py`.
 
 ## Current Functionality
 
-Functionality available in the current MVP includes:
+Functionality available in the current release:
 
-- Create new ideas
-- Edit existing ideas
-- List ideas in a grouped tree view
-- Arrange ideas into groups (with bulk idea move to the default group on group
-  delete)
+- Create, edit, rename, and delete ideas
+- Organize ideas in groups, including create/rename/delete flows and bulk
+  reassignment on group delete
+- Browse ideas in a grouped tree view
 - Tag ideas
 - Advanced search with SQLite FTS5 text search plus inline operators (`tag:`,
   `group:`, `and`, `or`)
-- View idea details
+- Rendered Markdown detail view with tags and timestamps
 - Copy & Paste support
 - CLI commands for scripting (`list`, `export`, `delete`)
 
