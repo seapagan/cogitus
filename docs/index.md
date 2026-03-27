@@ -5,7 +5,7 @@ ideas.
 
 !!! note
 
-    Cogitus is currently in MVP/alpha stage. Core workflows are available and UI
+    Cogitus is currently in beta. Core workflows are available and UI
     details may continue to evolve.
 
 ## What Cogitus Focuses On
