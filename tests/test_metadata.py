@@ -23,9 +23,9 @@ class _FakePackageMetadata(dict[str, str]):
         **kwargs: object,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self._repeated_fields = repeated_fields or {}
+        self._repeated_fields = dict(repeated_fields or {})
         if project_urls is not None:
-            self._repeated_fields["Project-URL"] = project_urls
+            self._repeated_fields["Project-URL"] = list(project_urls)
 
     def get_all(
         self,
