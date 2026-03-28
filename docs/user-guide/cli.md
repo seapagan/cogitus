@@ -60,6 +60,17 @@ cogitus api serve --host 127.0.0.1 --port 8000
 cogitus api serve --db-path /path/to/cogitus.db
 ```
 
+## Configure API Auth
+
+```bash
+cogitus api set-auth --username your-username
+cogitus api set-auth --username your-username --rotate-secret
+```
+
+The command prompts for the password, stores a password hash in config, and can
+optionally rotate the JWT signing secret. You can use any username you want, or
+omit `--username` and be prompted for it.
+
 See the [API guide](api.md) for routes, example output, and current warnings.
 
 ## Help
@@ -70,4 +81,5 @@ cogitus list --help
 cogitus export --help
 cogitus delete --help
 cogitus api serve --help
+cogitus api set-auth --help
 ```
