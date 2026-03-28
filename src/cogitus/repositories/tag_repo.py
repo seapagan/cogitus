@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from sqliter.exceptions import RecordInsertionError
+from sqliter.exceptions import RecordInsertionError, RecordUpdateError
 
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
@@ -90,6 +90,22 @@ class TagRepository:
         self._idea_tags_metadata = _idea_tags_sql_metadata()
         self._idea_tags_related_name = _idea_tags_related_name()
 
+    def create(self, name: str) -> Tag:
+        """Create and return a new tag."""
+        normalized = name.strip().lower()
+        if not normalized:
+            msg = "Tag name cannot be empty"
+            raise ValueError(msg)
+        try:
+            return self._db.insert(Tag(name=normalized))
+        except RecordInsertionError as exc:
+            msg = f'Tag "{normalized}" already exists'
+            raise ValueError(msg) from exc
+
+    def get(self, pk: int) -> Tag | None:
+        """Return a tag by primary key."""
+        return self._db.get(Tag, pk)
+
     def get_or_create(self, name: str) -> Tag:
         """Find an existing tag by name or create a new one.
 
@@ -106,8 +122,8 @@ class TagRepository:
         if existing is not None:
             return existing
         try:
-            return self._db.insert(Tag(name=normalized))
-        except RecordInsertionError:
+            return self.create(normalized)
+        except ValueError:
             # Race condition: created between check and insert
             found = self.find_by_name(normalized)
             if found is not None:
@@ -134,6 +150,37 @@ class TagRepository:
             List of all tags ordered alphabetically.
         """
         return self._db.select(Tag).order("name").fetch_all()
+
+    def rename(self, pk: int, name: str) -> Tag | None:
+        """Rename an existing tag."""
+        tag = self.get(pk)
+        if tag is None:
+            return None
+
+        normalized = name.strip().lower()
+        if not normalized:
+            msg = "Tag name cannot be empty"
+            raise ValueError(msg)
+
+        existing = self.find_by_name(normalized)
+        if existing is not None and existing.pk != pk:
+            msg = f'Tag "{normalized}" already exists'
+            raise ValueError(msg)
+
+        tag.name = normalized
+        try:
+            self._db.update(tag)
+        except RecordUpdateError as exc:
+            existing = self.find_by_name(normalized)
+            if existing is not None and existing.pk != pk:
+                msg = f'Tag "{normalized}" already exists'
+                raise ValueError(msg) from exc
+            raise
+        return tag
+
+    def delete(self, pk: int) -> None:
+        """Delete a tag by primary key."""
+        self._db.delete(Tag, pk)
 
     def list_in_use(self) -> list[Tag]:
         """Return tags currently linked to at least one idea.

@@ -161,13 +161,17 @@ class IdeaService:
         """Fetch one idea with group and tags eagerly loaded."""
         return self._idea_repo.get_with_relations(pk)
 
-    def list_ideas(self) -> list[Idea]:
+    def list_ideas(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Idea]:
         """List all ideas, most recently updated first.
 
         Returns:
             List of all ideas.
         """
-        return self._idea_repo.list_all()
+        return self._idea_repo.list_all(limit=limit, offset=offset)
 
     def search_ideas(self, query: str) -> list[Idea]:
         """Search ideas by visible text and optional structured filters.
@@ -197,6 +201,26 @@ class IdeaService:
             List of all tags.
         """
         return self._tag_repo.list_all()
+
+    def get_tag(self, pk: int) -> Tag | None:
+        """Fetch a single tag by primary key."""
+        return self._tag_repo.get(pk)
+
+    def create_tag(self, name: str) -> Tag:
+        """Create a standalone tag."""
+        return self._tag_repo.create(name)
+
+    def rename_tag(self, pk: int, name: str) -> Tag | None:
+        """Rename an existing tag and refresh search data."""
+        tag = self._tag_repo.rename(pk, name)
+        if tag is not None:
+            self._idea_repo.rebuild_search_index()
+        return tag
+
+    def delete_tag(self, pk: int) -> None:
+        """Delete a tag and refresh search data."""
+        self._tag_repo.delete(pk)
+        self._idea_repo.rebuild_search_index()
 
     def list_tags_in_use(self) -> list[Tag]:
         """List tags currently linked to at least one idea."""

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import contextmanager
 from enum import Enum
 from typing import TYPE_CHECKING, Annotated
 
 import typer
+import uvicorn
 
+from cogitus.api.main import COGITUS_API_DB_PATH_ENV
 from cogitus.cli.formatters import (
     format_idea_markdown,
     format_ideas_json,
@@ -54,6 +57,8 @@ app = typer.Typer(
     no_args_is_help=False,
     add_completion=False,
 )
+api_app = typer.Typer(help="Serve and manage the Cogitus API.")
+app.add_typer(api_app, name="api")
 
 
 def _version_callback(value: object) -> None:
@@ -170,3 +175,25 @@ def delete(
 
         service.delete_idea(pk)
         typer.secho(f"Deleted idea {pk}.", fg=typer.colors.GREEN)
+
+
+@api_app.command("serve")
+def serve_api(
+    host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port")] = 8000,
+    reload: Annotated[bool, typer.Option("--reload/--no-reload")] = False,
+    db_path: Annotated[str | None, typer.Option("--db-path")] = None,
+) -> None:
+    """Serve the FastAPI application."""
+    if db_path is None:
+        os.environ.pop(COGITUS_API_DB_PATH_ENV, None)
+    else:
+        os.environ[COGITUS_API_DB_PATH_ENV] = db_path
+
+    uvicorn.run(
+        "cogitus.api.main:create_api_app",
+        host=host,
+        port=port,
+        reload=reload,
+        factory=True,
+    )
