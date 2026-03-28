@@ -102,6 +102,7 @@ def test_get_app_metadata_allows_missing_summary(
     assert result.summary is None
     assert result.author is None
     assert result.author_email is None
+    assert result.license_name is None
     assert result.project_urls == {}
     assert result.version == "2.0.0"
 
