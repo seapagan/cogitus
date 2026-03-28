@@ -39,13 +39,13 @@ rtoml==0.13.0
     # via simple-toml-settings
 shellingham==1.5.4
     # via typer
-simple-toml-settings==0.10.0
+simple-toml-settings==0.12.0
     # via cogitus
 sqliter-py==0.20.0
     # via cogitus
-textual==8.0.2
+textual==8.2.0
     # via cogitus
-typer==0.23.1
+typer==0.24.1
     # via cogitus
 typing-extensions==4.15.0
     # via
