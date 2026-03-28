@@ -3560,9 +3560,10 @@ def test_cogitus_app_init_uses_default_db(
     get_db = mocker.patch("cogitus.app.get_db", return_value=db)
     settings = _FakeSettings()
 
-    CogitusApp(settings=settings)
+    app = CogitusApp(settings=settings)
 
     get_db.assert_called_once_with(default_group_name="default")
+    assert app.title == "Cogitus [local]"
 
 
 def test_cogitus_app_init_normalizes_configured_default_group_name(
@@ -3593,12 +3594,13 @@ def test_cogitus_app_init_uses_remote_cache_db_when_api_mode(
         )
     )
 
-    CogitusApp(settings=settings)
+    app = CogitusApp(settings=settings)
 
     get_db.assert_called_once_with(
         "~/.config/cogitus/cogitus-remote-cache.db",
         default_group_name="default",
     )
+    assert app.title == "Cogitus [remote]"
 
 
 def test_cogitus_app_build_main_screen_includes_app_metadata(
@@ -3632,6 +3634,7 @@ def test_cogitus_app_build_main_screen_includes_app_metadata(
             summary="Test summary",
         ),
     )
+    assert main_screen.return_value.title == "Cogitus [local]"
 
 
 @pytest.mark.asyncio
@@ -3660,6 +3663,8 @@ async def test_cogitus_app_apply_backend_config_rebuilds_backend(
         assert settings.data_backend_mode == DataBackendMode.API.value
         assert isinstance(app._service, RemoteIdeaBackend)
         replace_service.assert_called_once_with(app._service)
+        assert app.title == "Cogitus [remote]"
+        assert app.screen.title == "Cogitus [remote]"
         app.exit()
         await pilot.pause()
 

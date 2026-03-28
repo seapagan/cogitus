@@ -78,12 +78,12 @@ class CogitusApp(App[None]):
         """
         super().__init__(css_path=CSS_PATH)
         self._app_metadata = get_app_metadata()
-        self.title = self._app_metadata.title
         self.sub_title = self.SUB_TITLE
         self._db_path = db_path
         self._injected_db = db
         self._settings = settings if settings is not None else get_settings()
         self._load_settings_state()
+        self._update_title()
         last_viewed = self._settings.last_viewed_idea_pk
         self._last_viewed_idea_pk = last_viewed if last_viewed > 0 else None
         self._db = (
@@ -132,6 +132,18 @@ class CogitusApp(App[None]):
         """Push the main screen on mount."""
         self.push_screen(self._build_main_screen())
         self._notify_invalid_config()
+
+    def _backend_title_suffix(self) -> str:
+        """Return the current backend mode label for the app title."""
+        if self._data_backend_mode == DataBackendMode.API:
+            return "remote"
+        return "local"
+
+    def _update_title(self) -> None:
+        """Refresh the visible app title for the active backend mode."""
+        self.title = (
+            f"{self._app_metadata.title} [{self._backend_title_suffix()}]"
+        )
 
     def _build_local_db(
         self,
@@ -217,6 +229,7 @@ class CogitusApp(App[None]):
         self._settings.remote_api_password = config.api_password
         self._settings.save()
         self._load_settings_state()
+        self._update_title()
         self._db = self._build_backend_db(
             db_path=self._db_path,
             db=self._injected_db,
@@ -224,11 +237,12 @@ class CogitusApp(App[None]):
         self._service = self._build_backend()
         if isinstance(self.screen, MainScreen):
             self.screen.replace_service(self._service)
+            self.screen.title = self.title
         self._notify_invalid_config()
 
     def _build_main_screen(self) -> MainScreen:
         """Build the main application screen."""
-        return MainScreen(
+        screen = MainScreen(
             self._service,
             initial_select_pk=self._last_viewed_idea_pk,
             on_selected_idea_changed=self._on_selected_idea_changed,
@@ -236,6 +250,8 @@ class CogitusApp(App[None]):
             new_idea_group_mode=self._new_idea_group_mode,
             app_metadata=self._app_metadata,
         )
+        screen.title = self.title
+        return screen
 
     def _notify_invalid_config(self) -> None:
         """Warn when persisted config values are invalid."""
