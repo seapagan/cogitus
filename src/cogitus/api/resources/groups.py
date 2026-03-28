@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from cogitus.api.dependencies import get_group_manager
+from cogitus.api.dependencies import get_current_api_user, get_group_manager
 from cogitus.api.managers.group_manager import GroupManager
 from cogitus.api.schemas.request.group import (
     GroupCreateRequest,
@@ -12,7 +12,11 @@ from cogitus.api.schemas.request.group import (
 )
 from cogitus.api.schemas.response.group import GroupResponse
 
-router = APIRouter(prefix="/api/v1/groups", tags=["groups"])
+router = APIRouter(
+    prefix="/api/v1/groups",
+    tags=["groups"],
+    dependencies=[Depends(get_current_api_user)],
+)
 
 
 @router.get("")

@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends, Request
+from fastapi.security import OAuth2PasswordBearer
 
+from cogitus.api.managers.auth_manager import AuthManager
 from cogitus.api.managers.group_manager import GroupManager
 from cogitus.api.managers.idea_manager import IdeaManager
 from cogitus.api.managers.tag_manager import TagManager
+from cogitus.config import get_settings
 from cogitus.services.idea_service import IdeaService
+
+if TYPE_CHECKING:
+    from cogitus.api.models.auth import APIUser
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 
 def get_service(request: Request) -> IdeaService:
@@ -40,3 +48,16 @@ def get_tag_manager(
 ) -> TagManager:
     """Return a tag manager bound to the current service."""
     return TagManager(service)
+
+
+def get_auth_manager() -> AuthManager:
+    """Return an auth manager bound to the persisted settings."""
+    return AuthManager(get_settings())
+
+
+def get_current_api_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    manager: Annotated[AuthManager, Depends(get_auth_manager)],
+) -> APIUser:
+    """Return the authenticated API user from the bearer token."""
+    return manager.decode_access_token(token)

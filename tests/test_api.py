@@ -3,12 +3,76 @@
 from fastapi.testclient import TestClient
 
 
-def test_health_returns_ok(api_client: TestClient) -> None:
+def test_health_returns_ok(unauthenticated_api_client: TestClient) -> None:
     """Health endpoint should return a simple OK payload."""
-    response = api_client.get("/health")
+    response = unauthenticated_api_client.get("/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_token_endpoint_returns_bearer_token(
+    unauthenticated_api_client: TestClient,
+    api_auth_credentials: dict[str, str],
+) -> None:
+    """Token endpoint should return a bearer token for valid credentials."""
+    expected_scheme = "bearer"
+    response = unauthenticated_api_client.post(
+        "/api/v1/auth/token",
+        data={
+            "username": api_auth_credentials["username"],
+            "password": api_auth_credentials["password"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["token_type"] == expected_scheme
+    assert isinstance(body["access_token"], str)
+    assert body["access_token"]
+
+
+def test_token_endpoint_rejects_invalid_credentials(
+    unauthenticated_api_client: TestClient,
+    api_auth_credentials: dict[str, str],
+) -> None:
+    """Token endpoint should reject bad username/password pairs."""
+    response = unauthenticated_api_client.post(
+        "/api/v1/auth/token",
+        data={
+            "username": api_auth_credentials["username"],
+            "password": "wrong-password",
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Incorrect username or password"
+
+
+def test_protected_routes_require_auth(
+    unauthenticated_api_client: TestClient,
+) -> None:
+    """Idea, group, and tag routes should require bearer auth."""
+    ideas = unauthenticated_api_client.get("/api/v1/ideas")
+    groups = unauthenticated_api_client.get("/api/v1/groups")
+    tags = unauthenticated_api_client.get("/api/v1/tags")
+
+    assert ideas.status_code == 401
+    assert groups.status_code == 401
+    assert tags.status_code == 401
+
+
+def test_protected_routes_reject_invalid_tokens(
+    unauthenticated_api_client: TestClient,
+) -> None:
+    """Protected routes should reject invalid bearer tokens."""
+    response = unauthenticated_api_client.get(
+        "/api/v1/ideas",
+        headers={"Authorization": "Bearer invalid-token"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Could not validate credentials"
 
 
 def test_idea_crud_roundtrip(api_client: TestClient) -> None:

@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from cogitus.api.dependencies import get_idea_manager
+from cogitus.api.dependencies import get_current_api_user, get_idea_manager
 from cogitus.api.managers.idea_manager import IdeaManager
 from cogitus.api.schemas.request.idea import (
     IdeaCreateRequest,
@@ -12,7 +12,11 @@ from cogitus.api.schemas.request.idea import (
 )
 from cogitus.api.schemas.response.idea import IdeaResponse
 
-router = APIRouter(prefix="/api/v1/ideas", tags=["ideas"])
+router = APIRouter(
+    prefix="/api/v1/ideas",
+    tags=["ideas"],
+    dependencies=[Depends(get_current_api_user)],
+)
 
 
 @router.get("")

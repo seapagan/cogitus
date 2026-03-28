@@ -6,6 +6,7 @@ import json
 import os
 import re
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -20,6 +21,7 @@ from cogitus.cli.formatters import (
     format_ideas_simple,
     format_ideas_table,
 )
+from cogitus.config import AppSettings, get_settings
 from cogitus.metadata import AppMetadata
 
 if TYPE_CHECKING:
@@ -369,6 +371,132 @@ class TestApiServeCommand:
             result = runner.invoke(app, ["delete", "999", "--force"])
             assert result.exit_code == 1
             assert "not found" in result.output
+
+
+class TestApiAuthCommand:
+    """Tests for API auth bootstrap commands."""
+
+    def test_api_set_auth_persists_credentials(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """set-auth should persist a hashed password and generated secret."""
+        monkeypatch.setattr(
+            "simple_toml_settings.settings.xdg_config_home",
+            lambda: tmp_path,
+        )
+        AppSettings._instances.clear()
+        monkeypatch.setattr(
+            "cogitus.cli.commands._import_optional_module",
+            lambda _: SimpleNamespace(
+                hash_password=lambda password: f"hashed::{password}"
+            ),
+        )
+        monkeypatch.setattr(
+            "cogitus.cli.commands.token_urlsafe",
+            lambda _: "generated-secret",
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "api",
+                "set-auth",
+                "--username",
+                "  api-user  ",
+                "--password",
+                "secret-password",
+            ],
+        )
+
+        AppSettings._instances.clear()
+        settings = get_settings()
+        expected_digest = "hashed::secret-password"
+        generated_key = "generated-secret"
+
+        assert result.exit_code == 0
+        assert "Configured API auth for user 'api-user'." in result.output
+        assert settings.api_auth_username == "api-user"
+        assert settings.api_auth_password_hash == expected_digest
+        assert settings.api_auth_jwt_secret == generated_key
+
+    def test_api_set_auth_rotates_existing_secret(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """set-auth should rotate the JWT secret when requested."""
+        monkeypatch.setattr(
+            "simple_toml_settings.settings.xdg_config_home",
+            lambda: tmp_path,
+        )
+        AppSettings._instances.clear()
+        settings = get_settings()
+        existing_key = "existing-signing-key"
+        rotated_key = "rotated-secret"
+        settings.api_auth_jwt_secret = existing_key
+        settings.save()
+
+        monkeypatch.setattr(
+            "cogitus.cli.commands._import_optional_module",
+            lambda _: SimpleNamespace(hash_password=lambda _: "stored-digest"),
+        )
+        monkeypatch.setattr(
+            "cogitus.cli.commands.token_urlsafe",
+            lambda _: rotated_key,
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "api",
+                "set-auth",
+                "--username",
+                "api-user",
+                "--password",
+                "secret-password",
+                "--rotate-secret",
+            ],
+        )
+
+        AppSettings._instances.clear()
+        loaded = get_settings()
+
+        assert result.exit_code == 0
+        assert "JWT signing secret rotated." in result.output
+        assert loaded.api_auth_jwt_secret == rotated_key
+
+    def test_api_set_auth_rejects_blank_username(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """set-auth should reject empty usernames."""
+        monkeypatch.setattr(
+            "simple_toml_settings.settings.xdg_config_home",
+            lambda: tmp_path,
+        )
+        AppSettings._instances.clear()
+        monkeypatch.setattr(
+            "cogitus.cli.commands._import_optional_module",
+            lambda _: SimpleNamespace(hash_password=lambda _: "stored-digest"),
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "api",
+                "set-auth",
+                "--username",
+                "   ",
+                "--password",
+                "secret-password",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "username cannot be empty" in result.output
 
 
 class TestVersionOption:

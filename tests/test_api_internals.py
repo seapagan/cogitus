@@ -6,11 +6,15 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import cogitus.api as api_package
 from cogitus.api.dependencies import get_service
 from cogitus.api.main import COGITUS_API_DB_PATH_ENV, create_api_app
+from cogitus.api.managers.auth_manager import AuthManager
+from cogitus.api.models.auth import APIUser
+from cogitus.config import AppSettings
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -88,3 +92,58 @@ def test_create_api_app_uses_env_db_path(
         default_group_name="default",
     )
     fake_db.close.assert_called_once_with()
+
+
+def test_token_endpoint_returns_service_unavailable_when_auth_unconfigured(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Token endpoint should fail clearly when API auth is not configured."""
+    monkeypatch.setattr(
+        "simple_toml_settings.settings.xdg_config_home",
+        lambda: tmp_path,
+    )
+    AppSettings._instances.clear()
+
+    with TestClient(
+        create_api_app(memory=True, default_group_name="default")
+    ) as client:
+        response = client.post(
+            "/api/v1/auth/token",
+            data={"username": "api-user", "password": "secret"},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "API authentication is not configured"
+    AppSettings._instances.clear()
+
+
+def test_auth_manager_rejects_wrong_username(
+    configured_api_settings: AppSettings,
+    api_auth_credentials: dict[str, str],
+) -> None:
+    """Auth manager should reject the wrong username."""
+    manager = AuthManager(configured_api_settings)
+
+    authenticated = manager.authenticate_user(
+        "someone-else",
+        api_auth_credentials["password"],
+    )
+
+    assert authenticated is None
+
+
+def test_auth_manager_rejects_token_for_different_subject(
+    configured_api_settings: AppSettings,
+) -> None:
+    """Auth manager should reject a signed token for a different username."""
+    manager = AuthManager(configured_api_settings)
+    token = manager.create_access_token(user=APIUser(username="someone-else"))
+
+    with pytest.raises(
+        HTTPException,
+        match="Could not validate credentials",
+    ) as exc:
+        manager.decode_access_token(token)
+
+    assert exc.value.status_code == 401

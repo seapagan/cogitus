@@ -30,6 +30,8 @@ hooks = [
     "pyperclip",
     "pytest",
     "pytest-mock",
+    "pwdlib",
+    "pyjwt",
     "rich",
     "simple-toml-settings",
     "sqliter-py",

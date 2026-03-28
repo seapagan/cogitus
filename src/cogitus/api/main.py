@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
+from cogitus.api.resources.auth import router as auth_router
 from cogitus.api.resources.groups import router as groups_router
 from cogitus.api.resources.ideas import router as ideas_router
 from cogitus.api.resources.tags import router as tags_router
@@ -68,6 +69,7 @@ def create_api_app(
         summary=app_metadata.summary,
         lifespan=lifespan,
     )
+    app.include_router(auth_router)
     app.include_router(ideas_router)
     app.include_router(groups_router)
     app.include_router(tags_router)

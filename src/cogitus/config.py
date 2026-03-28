@@ -34,6 +34,8 @@ VALID_NEW_IDEA_GROUP_MODES: tuple[str, ...] = tuple(
     mode.value for mode in NewIdeaGroupMode
 )
 DEFAULT_NEW_IDEA_GROUP_MODE = NewIdeaGroupMode.CONTEXTUAL
+DEFAULT_API_AUTH_JWT_ALGORITHM = "HS256"
+DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES = 30
 
 
 class AppSettings(TOMLSettings):
@@ -44,6 +46,11 @@ class AppSettings(TOMLSettings):
     edit_body_cursor_mode: str = DEFAULT_EDIT_BODY_CURSOR_MODE.value
     new_idea_group_mode: str = DEFAULT_NEW_IDEA_GROUP_MODE.value
     default_group_name: str = DEFAULT_GROUP_NAME
+    api_auth_username: str = ""
+    api_auth_password_hash: str = ""
+    api_auth_jwt_secret: str = ""
+    api_auth_jwt_algorithm: str = DEFAULT_API_AUTH_JWT_ALGORITHM
+    api_auth_token_expire_minutes: int = DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES
 
 
 def normalize_edit_body_cursor_mode(mode: str) -> EditBodyCursorMode:
@@ -68,6 +75,26 @@ def normalize_default_group_name(name: str) -> str:
     if normalized:
         return normalized
     return DEFAULT_GROUP_NAME
+
+
+def normalize_api_auth_username(username: str) -> str:
+    """Normalize configured API auth username."""
+    return username.strip()
+
+
+def normalize_api_auth_jwt_algorithm(algorithm: str) -> str:
+    """Normalize configured JWT algorithm with safe default."""
+    normalized = algorithm.strip().upper()
+    if normalized:
+        return normalized
+    return DEFAULT_API_AUTH_JWT_ALGORITHM
+
+
+def normalize_api_auth_token_expire_minutes(minutes: int) -> int:
+    """Normalize API token lifetime with safe default."""
+    if minutes > 0:
+        return minutes
+    return DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES
 
 
 def get_settings() -> AppSettings:

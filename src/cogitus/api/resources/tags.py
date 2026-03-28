@@ -4,12 +4,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from cogitus.api.dependencies import get_tag_manager
+from cogitus.api.dependencies import get_current_api_user, get_tag_manager
 from cogitus.api.managers.tag_manager import TagManager
 from cogitus.api.schemas.request.tag import TagCreateRequest, TagUpdateRequest
 from cogitus.api.schemas.response.tag import TagResponse
 
-router = APIRouter(prefix="/api/v1/tags", tags=["tags"])
+router = APIRouter(
+    prefix="/api/v1/tags",
+    tags=["tags"],
+    dependencies=[Depends(get_current_api_user)],
+)
 
 
 @router.get("")

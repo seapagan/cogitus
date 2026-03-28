@@ -6,7 +6,8 @@ import importlib
 import os
 from contextlib import contextmanager
 from enum import Enum
-from typing import TYPE_CHECKING, Annotated
+from secrets import token_urlsafe
+from typing import TYPE_CHECKING, Annotated, Protocol, cast
 
 import typer
 
@@ -17,14 +18,36 @@ from cogitus.cli.formatters import (
     format_ideas_simple,
     format_ideas_table,
 )
+from cogitus.config import get_settings, normalize_api_auth_username
 from cogitus.db import get_db
 from cogitus.metadata import format_version_output, get_app_metadata
 from cogitus.services.idea_service import IdeaService
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+    from types import ModuleType
 
 COGITUS_API_DB_PATH_ENV = "COGITUS_API_DB_PATH"
+
+
+class _UvicornModule(Protocol):
+    """Protocol for the optional uvicorn module."""
+
+    def run(
+        self,
+        app: str,
+        *,
+        host: str,
+        port: int,
+        reload: bool,
+        factory: bool,
+    ) -> None: ...
+
+
+class _AuthModule(Protocol):
+    """Protocol for the optional auth helper module."""
+
+    def hash_password(self, password: str) -> str: ...
 
 
 class ListFormat(str, Enum):
@@ -67,6 +90,19 @@ def _version_callback(value: object) -> None:
     if value is True:
         typer.echo(format_version_output(get_app_metadata()))
         raise typer.Exit
+
+
+def _import_optional_module(module_name: str) -> ModuleType:
+    """Import an optional API dependency with a consistent error message."""
+    try:
+        return importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        typer.secho(
+            "The API server requires the optional 'api' extra. "
+            "Install it with 'pip install cogitus[api]'.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1) from exc
 
 
 @app.callback(invoke_without_command=True)
@@ -186,15 +222,7 @@ def serve_api(
     db_path: Annotated[str | None, typer.Option("--db-path")] = None,
 ) -> None:
     """Serve the FastAPI application."""
-    try:
-        uvicorn = importlib.import_module("uvicorn")
-    except ModuleNotFoundError as exc:
-        typer.secho(
-            "The API server requires the optional 'api' extra. "
-            "Install it with 'pip install cogitus[api]'.",
-            fg=typer.colors.RED,
-        )
-        raise typer.Exit(1) from exc
+    uvicorn = cast("_UvicornModule", _import_optional_module("uvicorn"))
 
     if db_path is None:
         os.environ.pop(COGITUS_API_DB_PATH_ENV, None)
@@ -208,3 +236,47 @@ def serve_api(
         reload=reload,
         factory=True,
     )
+
+
+@api_app.command("set-auth")
+def set_api_auth(
+    username: Annotated[str, typer.Option("--username", prompt=True)],
+    password: Annotated[
+        str,
+        typer.Option(
+            "--password",
+            prompt=True,
+            hide_input=True,
+            confirmation_prompt=True,
+        ),
+    ],
+    rotate_secret: Annotated[bool, typer.Option("--rotate-secret")] = False,
+) -> None:
+    """Configure or rotate the single-user API credentials."""
+    auth_manager_module = cast(
+        "_AuthModule",
+        _import_optional_module("cogitus.api.managers.auth_manager"),
+    )
+    normalized_username = normalize_api_auth_username(username)
+    if not normalized_username:
+        typer.secho(
+            "Error: username cannot be empty.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    settings = get_settings()
+    settings.api_auth_username = normalized_username
+    settings.api_auth_password_hash = auth_manager_module.hash_password(
+        password
+    )
+    if rotate_secret or not settings.api_auth_jwt_secret.strip():
+        settings.api_auth_jwt_secret = token_urlsafe(32)
+    settings.save()
+
+    typer.secho(
+        f"Configured API auth for user '{normalized_username}'.",
+        fg=typer.colors.GREEN,
+    )
+    if rotate_secret:
+        typer.echo("JWT signing secret rotated.")
