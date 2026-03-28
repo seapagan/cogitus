@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
+from fastapi.testclient import TestClient
 
+from cogitus.api.main import create_api_app
 from cogitus.db import get_db
 from cogitus.repositories.group_repo import GroupRepository
 from cogitus.repositories.idea_cursor_state_repo import (
@@ -63,6 +65,15 @@ def idea_cursor_state_repo(db: SqliterDB) -> IdeaCursorStateRepository:
 def service(db: SqliterDB) -> IdeaService:
     """Provide an IdeaService backed by in-memory db."""
     return IdeaService(db)
+
+
+@pytest.fixture
+def api_client() -> Generator[TestClient]:
+    """Provide a FastAPI test client backed by in-memory storage."""
+    with TestClient(
+        create_api_app(memory=True, default_group_name="default")
+    ) as client:
+        yield client
 
 
 @pytest.fixture

@@ -74,6 +74,24 @@ class TestTagRepository:
         assert tag.name == "python"
         assert tag.pk > 0
 
+    def test_create_tag_rejects_empty_name(
+        self,
+        tag_repo: TagRepository,
+    ) -> None:
+        """Creating a tag with an empty name should fail."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            tag_repo.create("   ")
+
+    def test_create_tag_rejects_duplicate_name(
+        self,
+        tag_repo: TagRepository,
+    ) -> None:
+        """Creating a duplicate tag should fail clearly."""
+        tag_repo.create("python")
+
+        with pytest.raises(ValueError, match='Tag "python" already exists'):
+            tag_repo.create("Python")
+
     def test_get_or_create_existing(self, tag_repo: TagRepository) -> None:
         """Existing tag is returned without duplication."""
         t1 = tag_repo.get_or_create("python")
@@ -111,6 +129,84 @@ class TestTagRepository:
             "middle",
             "zebra",
         ]
+
+    def test_rename_tag_updates_name(self, tag_repo: TagRepository) -> None:
+        """Renaming a tag should normalize and persist the new name."""
+        tag = tag_repo.create("python")
+
+        renamed = tag_repo.rename(tag.pk, "FastAPI")
+
+        assert renamed is not None
+        assert renamed.name == "fastapi"
+        assert tag_repo.find_by_name("fastapi") is not None
+
+    def test_rename_tag_missing_returns_none(
+        self,
+        tag_repo: TagRepository,
+    ) -> None:
+        """Renaming a missing tag should return None."""
+        assert tag_repo.rename(99999, "python") is None
+
+    def test_rename_tag_rejects_empty_name(
+        self,
+        tag_repo: TagRepository,
+    ) -> None:
+        """Renaming a tag to an empty name should fail."""
+        tag = tag_repo.create("python")
+
+        with pytest.raises(ValueError, match="cannot be empty"):
+            tag_repo.rename(tag.pk, "   ")
+
+    def test_rename_tag_rejects_duplicate_name(
+        self,
+        tag_repo: TagRepository,
+    ) -> None:
+        """Renaming a tag to an existing tag name should fail."""
+        source = tag_repo.create("python")
+        tag_repo.create("fastapi")
+
+        with pytest.raises(ValueError, match='Tag "fastapi" already exists'):
+            tag_repo.rename(source.pk, "fastapi")
+
+    def test_rename_tag_translates_update_race(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Update races should surface as duplicate-name ValueErrors."""
+        tag = tag_repo.create("python")
+        conflicting = tag_repo.create("fastapi")
+        mocker.patch.object(
+            tag_repo._db,
+            "update",
+            side_effect=RecordUpdateError("update failed"),
+        )
+        find_by_name = mocker.patch.object(
+            tag_repo,
+            "find_by_name",
+            side_effect=[None, conflicting],
+        )
+
+        with pytest.raises(ValueError, match='Tag "fastapi" already exists'):
+            tag_repo.rename(tag.pk, "fastapi")
+
+        assert find_by_name.call_count == 2
+
+    def test_rename_tag_preserves_non_duplicate_update_errors(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Non-duplicate update failures should not be rewritten."""
+        tag = tag_repo.create("python")
+        mocker.patch.object(
+            tag_repo._db,
+            "update",
+            side_effect=RecordUpdateError("disk full"),
+        )
+
+        with pytest.raises(RecordUpdateError, match="disk full"):
+            tag_repo.rename(tag.pk, "fastapi")
 
     def test_get_or_create_recovers_after_insert_race(
         self,

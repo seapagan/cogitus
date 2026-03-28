@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -11,6 +12,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
+from cogitus.api.main import COGITUS_API_DB_PATH_ENV
 from cogitus.cli.commands import app
 from cogitus.cli.formatters import (
     format_idea_markdown,
@@ -22,6 +24,8 @@ from cogitus.cli.formatters import (
 from cogitus.metadata import AppMetadata
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from pytest_mock import MockerFixture
     from sqliter import SqliterDB
 
@@ -246,6 +250,67 @@ class TestDeleteCommand:
             verify_result = runner.invoke(app, ["list", "--format", "json"])
             remaining = json.loads(verify_result.output)
             assert pk not in [idea["pk"] for idea in remaining]
+
+
+class TestApiServeCommand:
+    """Tests for the API serve command."""
+
+    def test_api_serve_uses_uvicorn_factory(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        mocker: MockerFixture,
+        tmp_path: Path,
+    ) -> None:
+        """Serve command should invoke uvicorn with the app factory."""
+        mock_run = mocker.patch("cogitus.cli.commands.uvicorn.run")
+        monkeypatch.delenv(COGITUS_API_DB_PATH_ENV, raising=False)
+        db_path = tmp_path / "cogitus-api.db"
+
+        result = runner.invoke(
+            app,
+            [
+                "api",
+                "serve",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "9001",
+                "--reload",
+                "--db-path",
+                str(db_path),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert os.environ[COGITUS_API_DB_PATH_ENV] == str(db_path)
+        mock_run.assert_called_once_with(
+            "cogitus.api.main:create_api_app",
+            host="127.0.0.1",
+            port=9001,
+            reload=True,
+            factory=True,
+        )
+
+    def test_api_serve_clears_db_path_env_when_not_provided(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        mocker: MockerFixture,
+    ) -> None:
+        """Serve command should clear any prior API DB path override."""
+        mock_run = mocker.patch("cogitus.cli.commands.uvicorn.run")
+        monkeypatch.setenv(COGITUS_API_DB_PATH_ENV, "stale-value")
+
+        result = runner.invoke(app, ["api", "serve"])
+
+        assert result.exit_code == 0
+        assert COGITUS_API_DB_PATH_ENV not in os.environ
+        mock_run.assert_called_once_with(
+            "cogitus.api.main:create_api_app",
+            host="127.0.0.1",
+            port=8000,
+            reload=False,
+            factory=True,
+        )
 
     def test_delete_confirm_yes(
         self,

@@ -165,6 +165,40 @@ class TestIdeaService:
             "zebra",
         ]
 
+    def test_standalone_tag_crud(self, service: IdeaService) -> None:
+        """Standalone tags can be created, renamed, fetched, and deleted."""
+        created = service.create_tag("python")
+
+        fetched = service.get_tag(created.pk)
+        assert fetched is not None
+        assert fetched.name == "python"
+
+        renamed = service.rename_tag(created.pk, "fastapi")
+        assert renamed is not None
+        assert renamed.name == "fastapi"
+
+        service.delete_tag(created.pk)
+        assert service.get_tag(created.pk) is None
+
+    def test_rename_and_delete_tag_refresh_search_index(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Tag mutations should refresh search visibility."""
+        idea = service.create_idea("API", tags=["python"])
+        tag = service.list_tags()[0]
+
+        renamed = service.rename_tag(tag.pk, "fastapi")
+
+        assert renamed is not None
+        assert [
+            result.pk for result in service.search_ideas("tag:fastapi")
+        ] == [idea.pk]
+        assert service.search_ideas("tag:python") == []
+
+        service.delete_tag(tag.pk)
+        assert service.search_ideas("tag:fastapi") == []
+
     def test_list_tags_in_use_excludes_orphans(
         self,
         service: IdeaService,
