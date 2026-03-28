@@ -5,10 +5,14 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, ClassVar
 
+from textual import work
 from textual.binding import ActiveBinding, Binding, BindingType
 from textual.screen import Screen
 from textual.widgets import Footer, Header
+from textual.worker import Worker, WorkerState
 
+from cogitus.backends import BackendConfig
+from cogitus.backends.protocols import SyncingIdeaBackend
 from cogitus.config import (
     DEFAULT_EDIT_BODY_CURSOR_MODE,
     DEFAULT_NEW_IDEA_GROUP_MODE,
@@ -20,6 +24,7 @@ from cogitus.search import parse_search_query
 from cogitus.ui.clipboard import copy_to_clipboard
 from cogitus.ui.screens.idea_form_screen import (
     AboutScreen,
+    BackendConfigScreen,
     ConfirmDialog,
     GroupDeleteReassignScreen,
     GroupFormScreen,
@@ -35,14 +40,17 @@ if TYPE_CHECKING:
 
     from textual.app import ComposeResult
     from textual.events import AppFocus, ScreenResume
+    from textual.timer import Timer
 
+    from cogitus.backends.protocols import IdeaBackend
     from cogitus.models.group import Group
     from cogitus.models.idea import Idea
-    from cogitus.services.idea_service import IdeaService
 
 
 class MainScreen(Screen[None]):
     """Two-pane main screen: idea list + detail view."""
+
+    REMOTE_SYNC_INTERVAL_SECONDS: ClassVar[int] = 60
 
     _SEARCH_MODE_DISABLED_ACTIONS: ClassVar[frozenset[str]] = frozenset(
         {
@@ -85,6 +93,7 @@ class MainScreen(Screen[None]):
         Binding("e", "edit_idea", "Edit", key_display="e"),
         Binding("r", "rename_selected", "Rename", key_display="r"),
         Binding("d", "delete_idea", "Delete", key_display="d"),
+        Binding("c", "show_backend_config", "Settings", key_display="c"),
         Binding("slash", "focus_search", "Search", key_display="/"),
         Binding("escape", "cancel_search", "Back", show=False),
         Binding(
@@ -138,7 +147,7 @@ class MainScreen(Screen[None]):
 
     def __init__(
         self,
-        service: IdeaService,
+        service: IdeaBackend,
         *,
         initial_select_pk: int | None = None,
         on_selected_idea_changed: Callable[[int | None], None] | None = None,
@@ -151,7 +160,7 @@ class MainScreen(Screen[None]):
         """Initialize with the idea service.
 
         Args:
-            service: The IdeaService instance.
+            service: The idea backend instance.
             initial_select_pk: Idea primary key to select on first load.
             on_selected_idea_changed: Callback for selected idea changes.
             edit_body_cursor_mode: Edit form body cursor mode.
@@ -174,6 +183,10 @@ class MainScreen(Screen[None]):
         self._selected_idea_pk: int | None = None
         self._active_pane: str = "list"
         self._focus_before_search: str = "list"
+        self._remote_sync_timer: Timer | None = None
+        self._remote_sync_worker: Worker[None] | None = None
+        self._remote_sync_error: str | None = None
+        self._base_sub_title = ""
 
     def compose(self) -> ComposeResult:
         """Compose the main screen layout."""
@@ -184,17 +197,103 @@ class MainScreen(Screen[None]):
 
     def on_mount(self) -> None:
         """Load ideas when screen mounts."""
+        self._base_sub_title = self.app.sub_title
         self.refresh_ideas(select_pk=self._initial_select_pk)
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         panel.browse_widget().focus()
+        self._configure_remote_sync()
 
     def on_app_focus(self, _event: AppFocus) -> None:
         """Refresh visible relative timestamps when the app regains focus."""
         self._refresh_relative_timestamps()
+        self._request_remote_sync()
 
     def on_screen_resume(self, _event: ScreenResume) -> None:
         """Refresh visible relative timestamps when this screen resumes."""
         self._refresh_relative_timestamps()
+        self._request_remote_sync()
+
+    def replace_service(self, service: IdeaBackend) -> None:
+        """Swap in a new backend and refresh the visible state."""
+        self._service = service
+        self._configure_remote_sync()
+        self.refresh_ideas(select_pk=self._selected_idea_pk)
+
+    def _configure_remote_sync(self) -> None:
+        """Enable or disable background sync based on backend support."""
+        if self._remote_sync_timer is not None:
+            self._remote_sync_timer.stop()
+            self._remote_sync_timer = None
+        self._remote_sync_worker = None
+        self._remote_sync_error = None
+        self._clear_sync_indicator()
+        if not self._syncing_backend():
+            return
+        self._request_remote_sync()
+        self._remote_sync_timer = self.set_interval(
+            self.REMOTE_SYNC_INTERVAL_SECONDS,
+            self._request_remote_sync,
+        )
+
+    def _syncing_backend(self) -> SyncingIdeaBackend | None:
+        """Return the backend when it supports remote sync."""
+        if isinstance(self._service, SyncingIdeaBackend):
+            return self._service
+        return None
+
+    def _request_remote_sync(self) -> None:
+        """Schedule a background sync when the remote backend is active."""
+        if self.app.screen is not self:
+            return
+        if self._syncing_backend() is None:
+            return
+        self._set_sync_indicator()
+        self._remote_sync_worker = self._run_remote_sync()
+
+    @work(thread=True, exclusive=True)
+    def _run_remote_sync(self) -> None:
+        """Refresh the remote cache without blocking the UI."""
+        backend = self._syncing_backend()
+        if backend is None:
+            return
+        backend.sync_from_remote()
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        """Refresh the UI when a background remote sync completes."""
+        if event.worker is not self._remote_sync_worker:
+            return
+        if event.state == WorkerState.SUCCESS:
+            self._remote_sync_error = None
+            self._clear_sync_indicator()
+            self._refresh_after_remote_sync()
+            return
+        if event.state == WorkerState.ERROR:
+            self._clear_sync_indicator()
+            message = (
+                str(event.worker.error)
+                if event.worker.error is not None
+                else "Remote sync failed"
+            )
+            if message != self._remote_sync_error:
+                self.notify(message, severity="error")
+            self._remote_sync_error = message
+
+    def _refresh_after_remote_sync(self) -> None:
+        """Refresh visible state while preserving current selection."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        selected_group_pk = panel.get_selected_group_pk()
+        self.refresh_ideas(
+            select_pk=self._selected_idea_pk,
+            select_group_pk=selected_group_pk,
+        )
+
+    def _set_sync_indicator(self) -> None:
+        """Show a subtle syncing indicator in the app subtitle."""
+        self.app.sub_title = f"{self._base_sub_title} | Syncing..."
+
+    def _clear_sync_indicator(self) -> None:
+        """Restore the default subtitle after a sync completes."""
+        self.app.sub_title = self._base_sub_title
 
     def _refresh_relative_timestamps(self) -> None:
         """Refresh in-place relative timestamps in the visible idea tree."""
@@ -456,6 +555,8 @@ class MainScreen(Screen[None]):
         if idea is None:
             self.notify("No idea selected", severity="warning")
             return
+        if not self._sync_remote_before_edit():
+            return
         fresh = self._service.get_idea(idea.pk)
         if fresh is None:
             self.notify("Idea not found", severity="error")
@@ -499,6 +600,8 @@ class MainScreen(Screen[None]):
 
     def _rename_selected_group(self, group_pk: int) -> None:
         """Open rename flow for a selected group."""
+        if not self._sync_remote_before_edit():
+            return
         group = self._service.get_group(group_pk)
         if group is None:
             self.notify("Group not found", severity="error")
@@ -523,6 +626,8 @@ class MainScreen(Screen[None]):
 
     def _rename_selected_idea(self, idea_pk: int) -> None:
         """Open rename flow for a selected idea."""
+        if not self._sync_remote_before_edit():
+            return
         fresh = self._service.get_idea(idea_pk)
         if fresh is None:
             self.notify("Idea not found", severity="error")
@@ -538,6 +643,22 @@ class MainScreen(Screen[None]):
                 title,
             ),
         )
+
+    def _sync_remote_before_edit(self) -> bool:
+        """Refresh remote-backed data before opening edit-style flows."""
+        backend = self._syncing_backend()
+        if backend is None:
+            return True
+        self._set_sync_indicator()
+        try:
+            backend.sync_from_remote()
+        except ValueError as exc:
+            self._clear_sync_indicator()
+            self.notify(str(exc), severity="error")
+            return False
+        self._clear_sync_indicator()
+        self.refresh_ideas(select_pk=self._selected_idea_pk)
+        return True
 
     def action_delete_group(self) -> None:
         """Delete selected group with optional bulk move."""
@@ -749,6 +870,29 @@ class MainScreen(Screen[None]):
     def action_show_help(self) -> None:
         """Show the help overlay."""
         self.app.push_screen(HelpScreen())
+
+    def action_show_backend_config(self) -> None:
+        """Show the backend configuration modal."""
+        getter = getattr(self.app, "get_backend_config", None)
+        if getter is None:
+            self.notify("Backend settings are unavailable", severity="error")
+            return
+        config = getter()
+        self.app.push_screen(
+            BackendConfigScreen(config),
+            callback=self._on_backend_config_dismiss,
+        )
+
+    def _on_backend_config_dismiss(self, config: object) -> None:
+        """Apply backend configuration changes from the modal."""
+        if not isinstance(config, BackendConfig):
+            return
+        apply_backend_config = getattr(self.app, "apply_backend_config", None)
+        if apply_backend_config is None:
+            self.notify("Backend settings are unavailable", severity="error")
+            return
+        apply_backend_config(config)
+        self.notify("Connection settings updated")
 
     def action_show_about(self) -> None:
         """Show the About overlay."""

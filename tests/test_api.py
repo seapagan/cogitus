@@ -1,6 +1,11 @@
 """Tests for the FastAPI API."""
 
+from datetime import timedelta
+
 from fastapi.testclient import TestClient
+
+from cogitus.api.managers.auth_manager import AuthManager
+from cogitus.config import AppSettings
 
 
 def test_health_returns_ok(unauthenticated_api_client: TestClient) -> None:
@@ -73,6 +78,35 @@ def test_protected_routes_reject_invalid_tokens(
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Could not validate credentials"
+
+
+def test_protected_routes_return_expired_token_challenge(
+    unauthenticated_api_client: TestClient,
+    configured_api_settings: AppSettings,
+    api_auth_credentials: dict[str, str],
+) -> None:
+    """Expired access tokens should advertise the bearer invalid-token error."""
+    manager = AuthManager(configured_api_settings)
+    user = manager.authenticate_user(
+        api_auth_credentials["username"],
+        api_auth_credentials["password"],
+    )
+    assert user is not None
+    token = manager.create_access_token(
+        user=user,
+        expires_delta=timedelta(seconds=-1),
+    )
+
+    response = unauthenticated_api_client.get(
+        "/api/v1/ideas",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"] == (
+        'Bearer error="invalid_token", '
+        'error_description="The access token expired"'
+    )
 
 
 def test_idea_crud_roundtrip(api_client: TestClient) -> None:
@@ -209,6 +243,32 @@ def test_update_idea_with_missing_group_returns_not_found(
 
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
+
+
+def test_update_idea_with_stale_timestamp_returns_conflict(
+    api_client: TestClient,
+) -> None:
+    """Idea updates should reject stale optimistic-lock timestamps."""
+    created = api_client.post(
+        "/api/v1/ideas",
+        json={"title": "Idea", "body": "", "tags": []},
+    )
+    assert created.status_code == 201
+    created_body = created.json()
+
+    response = api_client.put(
+        f"/api/v1/ideas/{created_body['pk']}",
+        json={
+            "title": "Updated",
+            "body": "",
+            "tags": [],
+            "group_pk": created_body["group"]["pk"],
+            "last_known_updated_at": created_body["updated_at"] - 1,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Idea has been modified on the server"
 
 
 def test_group_crud_and_reassign_delete(api_client: TestClient) -> None:

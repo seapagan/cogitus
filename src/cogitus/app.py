@@ -7,12 +7,21 @@ from typing import TYPE_CHECKING
 
 from textual.app import App
 
+from cogitus.backends import (
+    BackendConfig,
+    IdeaBackend,
+    RemoteAPIClient,
+    RemoteIdeaBackend,
+)
 from cogitus.config import (
     VALID_NEW_IDEA_GROUP_MODES,
+    DataBackendMode,
     get_settings,
+    normalize_data_backend_mode,
     normalize_default_group_name,
     normalize_edit_body_cursor_mode,
     normalize_new_idea_group_mode,
+    normalize_remote_api_base_url,
 )
 from cogitus.db import get_db
 from cogitus.metadata import get_app_metadata
@@ -33,12 +42,17 @@ if TYPE_CHECKING:
         edit_body_cursor_mode: str
         new_idea_group_mode: str
         default_group_name: str
+        data_backend_mode: str
+        remote_api_base_url: str
+        remote_api_username: str
+        remote_api_password: str
 
         def save(self) -> None:
             """Persist settings."""
 
 
 CSS_PATH = Path(__file__).parent / "ui" / "styles" / "app.tcss"
+DEFAULT_REMOTE_CACHE_DB_PATH = "~/.config/cogitus/cogitus-remote-cache.db"
 
 
 class CogitusApp(App[None]):
@@ -52,6 +66,7 @@ class CogitusApp(App[None]):
         db_path: str | None = None,
         db: SqliterDB | None = None,
         settings: SettingsLike | None = None,
+        backend: IdeaBackend | None = None,
     ) -> None:
         """Initialize the Cogitus application.
 
@@ -59,12 +74,27 @@ class CogitusApp(App[None]):
             db_path: Path to the database file.
             db: Pre-configured database instance (for testing).
             settings: Optional settings instance (for testing).
+            backend: Optional pre-built backend (for testing).
         """
         super().__init__(css_path=CSS_PATH)
         self._app_metadata = get_app_metadata()
         self.title = self._app_metadata.title
         self.sub_title = self.SUB_TITLE
+        self._db_path = db_path
+        self._injected_db = db
         self._settings = settings if settings is not None else get_settings()
+        self._load_settings_state()
+        last_viewed = self._settings.last_viewed_idea_pk
+        self._last_viewed_idea_pk = last_viewed if last_viewed > 0 else None
+        self._db = (
+            self._build_backend_db(db_path=db_path, db=db)
+            if backend is None
+            else db
+        )
+        self._service = backend or self._build_backend()
+
+    def _load_settings_state(self) -> None:
+        """Load and normalize persisted settings values."""
         self._edit_body_cursor_mode = normalize_edit_body_cursor_mode(
             self._settings.edit_body_cursor_mode
         )
@@ -78,18 +108,24 @@ class CogitusApp(App[None]):
         self._default_group_name = normalize_default_group_name(
             configured_default_group_name
         )
+        configured_backend_mode = self._settings.data_backend_mode
+        self._configured_data_backend_mode = configured_backend_mode
+        self._data_backend_mode = normalize_data_backend_mode(
+            configured_backend_mode
+        )
+        self._remote_api_base_url = normalize_remote_api_base_url(
+            self._settings.remote_api_base_url
+        )
+        self._remote_api_username = self._settings.remote_api_username.strip()
+        self._remote_api_password = self._settings.remote_api_password
         self._invalid_new_idea_group_mode = (
             configured_new_idea_mode != self._new_idea_group_mode.value
         )
         self._invalid_default_group_name = (
             not configured_default_group_name.strip()
         )
-        last_viewed = self._settings.last_viewed_idea_pk
-        self._last_viewed_idea_pk = last_viewed if last_viewed > 0 else None
-        self._db = self._build_db(db_path=db_path, db=db)
-        self._service = IdeaService(
-            self._db,
-            default_group_name=self._default_group_name,
+        self._invalid_data_backend_mode = (
+            configured_backend_mode != self._data_backend_mode.value
         )
 
     def on_mount(self) -> None:
@@ -97,7 +133,7 @@ class CogitusApp(App[None]):
         self.push_screen(self._build_main_screen())
         self._notify_invalid_config()
 
-    def _build_db(
+    def _build_local_db(
         self,
         *,
         db_path: str | None,
@@ -113,6 +149,82 @@ class CogitusApp(App[None]):
                 default_group_name=self._default_group_name,
             )
         return get_db(default_group_name=self._default_group_name)
+
+    def _build_remote_cache_db(
+        self,
+        *,
+        db_path: str | None,
+        db: SqliterDB | None,
+    ) -> SqliterDB:
+        """Return the configured cache database for remote mode."""
+        if db is not None:
+            GroupRepository(db).get_or_create(self._default_group_name)
+            return db
+        cache_path = db_path or DEFAULT_REMOTE_CACHE_DB_PATH
+        return get_db(
+            cache_path,
+            default_group_name=self._default_group_name,
+        )
+
+    def _build_backend_db(
+        self,
+        *,
+        db_path: str | None,
+        db: SqliterDB | None,
+    ) -> SqliterDB:
+        """Build the backing SQLite database for the selected mode."""
+        if self._data_backend_mode == DataBackendMode.API:
+            return self._build_remote_cache_db(db_path=db_path, db=db)
+        return self._build_local_db(db_path=db_path, db=db)
+
+    def _build_backend(self) -> IdeaBackend:
+        """Build the configured local or remote backend implementation."""
+        if self._db is None:
+            msg = "Backend database is not initialized"
+            raise RuntimeError(msg)
+        if self._data_backend_mode == DataBackendMode.API:
+            client = RemoteAPIClient(
+                base_url=self._remote_api_base_url,
+                username=self._remote_api_username,
+                password=self._remote_api_password,
+            )
+            return RemoteIdeaBackend(
+                self._db,
+                default_group_name=self._default_group_name,
+                api_client=client,
+            )
+        return IdeaService(
+            self._db,
+            default_group_name=self._default_group_name,
+        )
+
+    def get_backend_config(self) -> BackendConfig:
+        """Return the current backend configuration snapshot."""
+        return BackendConfig(
+            mode=self._data_backend_mode,
+            api_base_url=self._remote_api_base_url,
+            api_username=self._remote_api_username,
+            api_password=self._remote_api_password,
+        )
+
+    def apply_backend_config(self, config: BackendConfig) -> None:
+        """Persist backend settings and rebuild the active backend."""
+        if isinstance(self._service, RemoteIdeaBackend):
+            self._service.close()
+        self._settings.data_backend_mode = config.mode.value
+        self._settings.remote_api_base_url = config.api_base_url
+        self._settings.remote_api_username = config.api_username
+        self._settings.remote_api_password = config.api_password
+        self._settings.save()
+        self._load_settings_state()
+        self._db = self._build_backend_db(
+            db_path=self._db_path,
+            db=self._injected_db,
+        )
+        self._service = self._build_backend()
+        if isinstance(self.screen, MainScreen):
+            self.screen.replace_service(self._service)
+        self._notify_invalid_config()
 
     def _build_main_screen(self) -> MainScreen:
         """Build the main application screen."""
@@ -147,6 +259,14 @@ class CogitusApp(App[None]):
                 f"using '{self._default_group_name}'.",
                 severity="warning",
             )
+        if self._invalid_data_backend_mode:
+            self.notify(
+                "Invalid config "
+                "'data_backend_mode="
+                f"{self._configured_data_backend_mode}'; "
+                f"using '{self._data_backend_mode.value}'.",
+                severity="warning",
+            )
 
     def _on_selected_idea_changed(self, idea_pk: int | None) -> None:
         """Track currently selected idea for persistence."""
@@ -161,6 +281,8 @@ class CogitusApp(App[None]):
         """Persist settings before the app exits."""
         self._settings.last_viewed_idea_pk = self._last_viewed_idea_pk or 0
         self._settings.save()
+        if isinstance(self._service, RemoteIdeaBackend):
+            self._service.close()
         super().exit(
             result=result,
             return_code=return_code,

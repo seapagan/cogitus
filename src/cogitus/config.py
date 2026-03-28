@@ -34,6 +34,19 @@ VALID_NEW_IDEA_GROUP_MODES: tuple[str, ...] = tuple(
     mode.value for mode in NewIdeaGroupMode
 )
 DEFAULT_NEW_IDEA_GROUP_MODE = NewIdeaGroupMode.CONTEXTUAL
+
+
+class DataBackendMode(str, Enum):
+    """Supported data backends for the TUI."""
+
+    LOCAL = "local"
+    API = "api"
+
+
+VALID_DATA_BACKEND_MODES: tuple[str, ...] = tuple(
+    mode.value for mode in DataBackendMode
+)
+DEFAULT_DATA_BACKEND_MODE = DataBackendMode.LOCAL
 DEFAULT_API_AUTH_JWT_ALGORITHM = "HS256"
 DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES = 30
 
@@ -46,6 +59,10 @@ class AppSettings(TOMLSettings):
     edit_body_cursor_mode: str = DEFAULT_EDIT_BODY_CURSOR_MODE.value
     new_idea_group_mode: str = DEFAULT_NEW_IDEA_GROUP_MODE.value
     default_group_name: str = DEFAULT_GROUP_NAME
+    data_backend_mode: str = DEFAULT_DATA_BACKEND_MODE.value
+    remote_api_base_url: str = ""
+    remote_api_username: str = ""
+    remote_api_password: str = ""
     api_auth_username: str = ""
     api_auth_password_hash: str = ""
     api_auth_jwt_secret: str = ""
@@ -69,6 +86,13 @@ def normalize_new_idea_group_mode(
     return DEFAULT_NEW_IDEA_GROUP_MODE
 
 
+def normalize_data_backend_mode(mode: str) -> DataBackendMode:
+    """Normalize persisted backend mode to enum with safe default."""
+    if mode in VALID_DATA_BACKEND_MODES:
+        return DataBackendMode(mode)
+    return DEFAULT_DATA_BACKEND_MODE
+
+
 def normalize_default_group_name(name: str) -> str:
     """Normalize configured default group name with safe fallback."""
     normalized = name.strip().lower()
@@ -80,6 +104,11 @@ def normalize_default_group_name(name: str) -> str:
 def normalize_api_auth_username(username: str) -> str:
     """Normalize configured API auth username."""
     return username.strip()
+
+
+def normalize_remote_api_base_url(url: str) -> str:
+    """Normalize configured remote API base URL."""
+    return url.strip().rstrip("/")
 
 
 def normalize_api_auth_jwt_algorithm(algorithm: str) -> str:

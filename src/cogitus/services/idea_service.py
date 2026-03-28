@@ -97,6 +97,7 @@ class IdeaService:
         body: str,
         tags: list[str] | None = None,
         group_pk: int | None = None,
+        last_known_updated_at: int | None = None,
     ) -> Idea | None:
         """Update an existing idea.
 
@@ -106,6 +107,7 @@ class IdeaService:
             body: New body text.
             tags: If provided, replaces all tags (normalized).
             group_pk: Optional group primary key.
+            last_known_updated_at: Optional optimistic-lock timestamp.
 
         Returns:
             The updated Idea, or None if not found.
@@ -116,6 +118,7 @@ class IdeaService:
             body=body,
             tag_names=self._normalize_tags(tags),
             group_pk=group_pk,
+            last_known_updated_at=last_known_updated_at,
         )
 
     def rename_idea(self, pk: int, title: str) -> Idea | None:

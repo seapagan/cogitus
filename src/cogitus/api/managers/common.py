@@ -30,6 +30,7 @@ def raise_http_for_value_error(error: ValueError) -> NoReturn:
         or "cannot be renamed" in lowered
         or "cannot be deleted" in lowered
         or "cannot move ideas" in lowered
+        or "modified on the server" in lowered
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

@@ -25,3 +25,4 @@ class IdeaUpdateRequest(BaseModel):
     body: str = ""
     tags: list[str] = Field(default_factory=list)
     group_pk: int | None = None
+    last_known_updated_at: int | None = None

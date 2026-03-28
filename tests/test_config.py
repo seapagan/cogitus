@@ -8,15 +8,18 @@ from cogitus.config import (
     DEFAULT_API_AUTH_JWT_ALGORITHM,
     DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES,
     AppSettings,
+    DataBackendMode,
     EditBodyCursorMode,
     NewIdeaGroupMode,
     get_settings,
     normalize_api_auth_jwt_algorithm,
     normalize_api_auth_token_expire_minutes,
     normalize_api_auth_username,
+    normalize_data_backend_mode,
     normalize_default_group_name,
     normalize_edit_body_cursor_mode,
     normalize_new_idea_group_mode,
+    normalize_remote_api_base_url,
 )
 
 if TYPE_CHECKING:
@@ -157,6 +160,34 @@ def test_settings_persist_api_auth_fields(
     assert loaded.api_auth_token_expire_minutes == 45
 
 
+def test_settings_persist_remote_backend_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Settings should persist and reload remote-backend fields."""
+    monkeypatch.setattr(
+        "simple_toml_settings.settings.xdg_config_home",
+        lambda: tmp_path,
+    )
+    AppSettings._instances.clear()
+
+    settings = get_settings()
+    remote_value = "secret" + "-pass"
+    settings.data_backend_mode = DataBackendMode.API.value
+    settings.remote_api_base_url = "http://127.0.0.1:8000"
+    settings.remote_api_username = "api-user"
+    settings.remote_api_password = remote_value
+    settings.save()
+
+    AppSettings._instances.clear()
+    loaded = get_settings()
+
+    assert loaded.data_backend_mode == DataBackendMode.API.value
+    assert loaded.remote_api_base_url == "http://127.0.0.1:8000"
+    assert loaded.remote_api_username == "api-user"
+    assert loaded.remote_api_password == remote_value
+
+
 def test_normalize_edit_body_cursor_mode_invalid_defaults_to_remember() -> None:
     """Invalid edit cursor mode should fallback to remember."""
     assert normalize_edit_body_cursor_mode("remmeber") == (
@@ -169,6 +200,11 @@ def test_normalize_new_idea_group_mode_invalid_defaults_to_contextual() -> None:
     assert normalize_new_idea_group_mode("legacy") == (
         NewIdeaGroupMode.CONTEXTUAL
     )
+
+
+def test_normalize_data_backend_mode_invalid_defaults_to_local() -> None:
+    """Invalid backend modes should fallback to local."""
+    assert normalize_data_backend_mode("broken") == DataBackendMode.LOCAL
 
 
 def test_normalize_default_group_name_empty_defaults_to_default() -> None:
@@ -197,4 +233,12 @@ def test_normalize_api_auth_token_expire_minutes_invalid_defaults() -> None:
     """Non-positive token lifetimes should fallback safely."""
     assert normalize_api_auth_token_expire_minutes(0) == (
         DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES
+    )
+
+
+def test_normalize_remote_api_base_url_trims_and_drops_trailing_slash() -> None:
+    """Configured remote API URLs should normalize consistently."""
+    assert (
+        normalize_remote_api_base_url("  http://127.0.0.1:8000/  ")
+        == "http://127.0.0.1:8000"
     )

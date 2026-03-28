@@ -488,6 +488,7 @@ name = "cogitus"
 version = "0.8.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "pyperclip" },
     { name = "simple-toml-settings" },
     { name = "sqliter-py" },
@@ -508,7 +509,6 @@ api = [
 dev = [
     { name = "fastapi" },
     { name = "github-changelog-md" },
-    { name = "httpx" },
     { name = "mdx-truly-sane-lists" },
     { name = "mkdocs" },
     { name = "mkdocs-material" },
@@ -539,6 +539,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.135.2" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pwdlib", extras = ["argon2"], marker = "extra == 'api'", specifier = ">=0.2.1" },
     { name = "pyjwt", marker = "extra == 'api'", specifier = ">=2.10.1" },
     { name = "pyperclip", specifier = ">=1.11.0" },
@@ -555,7 +556,6 @@ provides-extras = ["api"]
 dev = [
     { name = "fastapi", specifier = ">=0.135.2" },
     { name = "github-changelog-md", specifier = ">=0.9.8" },
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mdx-truly-sane-lists", specifier = ">=1.3" },
     { name = "mkdocs", specifier = ">=1.6.1" },
     { name = "mkdocs-material", specifier = ">=9.7.1" },

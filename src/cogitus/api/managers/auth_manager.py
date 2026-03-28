@@ -8,7 +8,7 @@ from typing import Final
 
 import jwt
 from fastapi import HTTPException, status
-from jwt import InvalidTokenError
+from jwt import ExpiredSignatureError, InvalidTokenError
 from pwdlib import PasswordHash
 
 from cogitus.api.models.auth import APIUser, TokenPayload
@@ -27,6 +27,18 @@ DUMMY_VERIFY_VALUE: Final = (
 )
 BEARER_SCHEME: Final = "bearer"
 WWW_AUTHENTICATE_HEADER: Final = {"WWW-Authenticate": "Bearer"}
+
+
+def _invalid_token_header(*, expired: bool = False) -> dict[str, str]:
+    """Return a standards-aligned bearer challenge for invalid tokens."""
+    if expired:
+        return {
+            "WWW-Authenticate": (
+                'Bearer error="invalid_token", '
+                'error_description="The access token expired"'
+            )
+        }
+    return {"WWW-Authenticate": 'Bearer error="invalid_token"'}
 
 
 def hash_password(password: str) -> str:
@@ -131,7 +143,7 @@ class AuthManager:
         credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
-            headers=WWW_AUTHENTICATE_HEADER,
+            headers=_invalid_token_header(),
         )
 
         try:
@@ -142,6 +154,12 @@ class AuthManager:
                     algorithms=[self.jwt_algorithm],
                 )
             )
+        except ExpiredSignatureError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers=_invalid_token_header(expired=True),
+            ) from exc
         except (InvalidTokenError, ValueError) as exc:
             raise credentials_exception from exc
 

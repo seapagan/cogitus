@@ -69,6 +69,7 @@ class IdeaManager:
                 body=payload.body,
                 tags=payload.tags,
                 group_pk=payload.group_pk,
+                last_known_updated_at=payload.last_known_updated_at,
             )
         except ValueError as error:
             raise_http_for_value_error(error)

@@ -21,7 +21,12 @@ from textual.widgets import (
     Static,
 )
 
-from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
+from cogitus.backends import BackendConfig
+from cogitus.config import (
+    DEFAULT_EDIT_BODY_CURSOR_MODE,
+    DataBackendMode,
+    EditBodyCursorMode,
+)
 from cogitus.metadata import AppMetadata, get_about_entries
 from cogitus.ui.widgets.autocomplete import (
     _AutocompleteState,
@@ -39,8 +44,8 @@ if TYPE_CHECKING:
     from textual.events import Key, Resize
     from textual.widget import Widget
 
+    from cogitus.backends.protocols import IdeaBackend
     from cogitus.models.idea import Idea
-    from cogitus.services.idea_service import IdeaService
 
 
 @dataclass(frozen=True)
@@ -91,7 +96,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
 
     def __init__(
         self,
-        service: IdeaService,
+        service: IdeaBackend,
         idea: Idea | None = None,
         *,
         initial_group_pk: int | None = None,
@@ -102,7 +107,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         """Initialize the idea form.
 
         Args:
-            service: The IdeaService instance.
+            service: The idea backend instance.
             idea: Existing idea to edit, or None for new.
             initial_group_pk: Initial group pk for new-idea mode.
             edit_body_cursor_mode: Cursor mode for edit form body.
@@ -638,22 +643,30 @@ class IdeaFormScreen(ModalScreen[int | None]):
         group_pk = group_value
 
         if self._idea is not None:
-            result = self._service.update_idea(
-                pk=self._idea.pk,
-                title=title,
-                body=body,
-                tags=tags,
-                group_pk=group_pk,
-            )
+            try:
+                result = self._service.update_idea(
+                    pk=self._idea.pk,
+                    title=title,
+                    body=body,
+                    tags=tags,
+                    group_pk=group_pk,
+                )
+            except ValueError as exc:
+                self.notify(str(exc), severity="error")
+                return
             pk = result.pk if result else None
             self._persist_edit_cursor_position()
         else:
-            idea = self._service.create_idea(
-                title=title,
-                body=body,
-                tags=tags or None,
-                group_pk=group_pk,
-            )
+            try:
+                idea = self._service.create_idea(
+                    title=title,
+                    body=body,
+                    tags=tags or None,
+                    group_pk=group_pk,
+                )
+            except ValueError as exc:
+                self.notify(str(exc), severity="error")
+                return
             pk = idea.pk
 
         self.dismiss(pk)
@@ -733,7 +746,7 @@ class GroupFormScreen(ModalScreen[int | None]):
         ),
     ]
 
-    def __init__(self, service: IdeaService) -> None:
+    def __init__(self, service: IdeaBackend) -> None:
         """Initialize the group form."""
         super().__init__()
         self._service = service
@@ -871,6 +884,114 @@ class NameInputScreen(ModalScreen[str | None]):
         self.dismiss(None)
 
 
+class BackendConfigScreen(ModalScreen[BackendConfig | None]):
+    """Modal dialog for choosing the active Cogitus backend."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape", "cancel", "Cancel", show=False),
+        Binding(
+            "ctrl+s",
+            "save",
+            "Save",
+            show=False,
+            priority=True,
+        ),
+    ]
+
+    def __init__(self, config: BackendConfig) -> None:
+        """Initialize the backend config modal with existing values."""
+        super().__init__()
+        self._config = config
+
+    def compose(self) -> ComposeResult:
+        """Compose the backend settings form."""
+        with Vertical(id="backend-config-container"):
+            yield Static("Connection Settings", id="form-title")
+            yield Label("Backend")
+            yield Select[DataBackendMode](
+                options=[
+                    ("Local SQLite", DataBackendMode.LOCAL),
+                    ("Remote API", DataBackendMode.API),
+                ],
+                value=self._config.mode,
+                allow_blank=False,
+                id="backend-mode-select",
+            )
+            yield Label("Remote API URL")
+            yield Input(
+                value=self._config.api_base_url,
+                placeholder="http://127.0.0.1:8000",
+                id="backend-api-url",
+            )
+            yield Label("Remote API Username")
+            yield Input(
+                value=self._config.api_username,
+                placeholder="api user",
+                id="backend-api-username",
+            )
+            yield Label("Remote API Password")
+            yield Input(
+                value=self._config.api_password,
+                placeholder="api password",
+                password=True,
+                id="backend-api-password",
+            )
+            with Horizontal(id="name-input-buttons"):
+                yield Button(
+                    "Save [Ctrl+s]",
+                    variant="primary",
+                    id="save-backend-btn",
+                )
+                yield Button(
+                    "Cancel [Esc]",
+                    variant="default",
+                    id="cancel-backend-btn",
+                )
+
+    @on(Button.Pressed, "#save-backend-btn")
+    def _handle_save_backend_button(self) -> None:
+        """Save backend configuration when the primary button is pressed."""
+        self.action_save()
+
+    @on(Button.Pressed, "#cancel-backend-btn")
+    def _handle_cancel_backend_button(self) -> None:
+        """Cancel backend configuration changes."""
+        self.action_cancel()
+
+    def action_save(self) -> None:
+        """Validate and return the selected backend configuration."""
+        mode = self.query_one("#backend-mode-select", Select).value
+        if not isinstance(mode, DataBackendMode):
+            self.notify("Select a backend mode", severity="error")
+            return
+
+        api_base_url = self.query_one("#backend-api-url", Input).value
+        api_username = self.query_one("#backend-api-username", Input).value
+        api_password = self.query_one("#backend-api-password", Input).value
+
+        if mode == DataBackendMode.API and not (
+            api_base_url.strip() and api_username.strip() and api_password
+        ):
+            self.notify(
+                "Remote API mode requires URL, username, and password",
+                severity="error",
+            )
+            return
+
+        self.dismiss(
+            BackendConfig(
+                mode=mode,
+                api_base_url=api_base_url.strip(),
+                api_username=api_username.strip(),
+                api_password=api_password,
+            )
+        )
+
+    def action_cancel(self) -> None:
+        """Cancel and dismiss the backend config modal."""
+        self.dismiss(None)
+
+
 class GroupDeleteReassignScreen(ModalScreen[int | None]):
     """Modal dialog to choose destination group when deleting a group."""
 
@@ -975,6 +1096,7 @@ class HelpScreen(ModalScreen[None]):
         "  Escape           Cancel (confirm if edit is dirty)\n"
         "\n"
         "[bold]General[/bold]\n"
+        "  c                Connection settings\n"
         "  a                About\n"
         "  ?                Toggle this help\n"
         "  q                Quit"

@@ -140,6 +140,7 @@ class IdeaRepository:
         body: str,
         tag_names: list[str] | None = None,
         group_pk: int | None = None,
+        last_known_updated_at: int | None = None,
     ) -> Idea | None:
         """Update an idea's fields and re-sync tag associations.
 
@@ -150,6 +151,7 @@ class IdeaRepository:
             tag_names: If provided, replace all tags with these.
             group_pk: Optional group primary key. When None, preserve the
                 existing group assignment.
+            last_known_updated_at: Optional optimistic-lock timestamp.
 
         Returns:
             The updated Idea, or None if not found.
@@ -157,6 +159,12 @@ class IdeaRepository:
         idea = self._db.get(Idea, pk)
         if idea is None:
             return None
+        if (
+            last_known_updated_at is not None
+            and idea.updated_at != last_known_updated_at
+        ):
+            msg = "Idea has been modified on the server"
+            raise ValueError(msg)
 
         idea.title = title
         idea.body = body
