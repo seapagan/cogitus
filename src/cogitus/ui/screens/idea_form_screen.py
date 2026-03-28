@@ -9,12 +9,7 @@ from rich.table import Table
 from rich.text import Text
 from textual import on
 from textual.binding import Binding, BindingType
-from textual.containers import (
-    Container,
-    Horizontal,
-    Vertical,
-    VerticalScroll,
-)
+from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,

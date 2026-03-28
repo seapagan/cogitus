@@ -19,10 +19,17 @@ class _FakePackageMetadata(dict[str, str]):
         self,
         *args: object,
         project_urls: list[str] | None = None,
+        repeated_fields: dict[str, list[str]] | None = None,
         **kwargs: object,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self._project_urls = project_urls or []
+        # Copy caller-provided repeated metadata so tests don't share
+        # mutable state.
+        self._repeated_fields = {
+            key: list(values) for key, values in (repeated_fields or {}).items()
+        }
+        if project_urls is not None:
+            self._repeated_fields["Project-URL"] = list(project_urls)
 
     def get_all(
         self,
@@ -30,9 +37,7 @@ class _FakePackageMetadata(dict[str, str]):
         default: list[str] | None = None,
     ) -> list[str] | None:
         """Return repeated metadata values for the requested key."""
-        if key == "Project-URL":
-            return self._project_urls
-        return default
+        return self._repeated_fields.get(key, default)
 
 
 def test_get_app_metadata_reads_installed_metadata(
@@ -47,12 +52,14 @@ def test_get_app_metadata_reads_installed_metadata(
                 "Summary": "Test summary",
                 "Author": "Grant Ramsay",
                 "Author-email": "Grant Ramsay <grant@example.com>",
+                "License-Expression": "MIT",
             },
             project_urls=[
                 "Homepage, https://example.com/docs",
                 "Repository, https://example.com/repo",
                 "Issues, https://example.com/issues",
             ],
+            repeated_fields={"License-File": ["LICENSE.txt"]},
         ),
     )
     monkeypatch.setattr(
@@ -73,6 +80,7 @@ def test_get_app_metadata_reads_installed_metadata(
             "Repository": "https://example.com/repo",
             "Issues": "https://example.com/issues",
         },
+        license_name="MIT",
     )
 
 
@@ -94,6 +102,7 @@ def test_get_app_metadata_allows_missing_summary(
     assert result.summary is None
     assert result.author is None
     assert result.author_email is None
+    assert result.license_name is None
     assert result.project_urls == {}
     assert result.version == "2.0.0"
 
@@ -120,6 +129,35 @@ def test_get_app_metadata_falls_back_to_author_email_name(
 
     assert result.author == "Grant Ramsay"
     assert result.author_email == "grant@example.com"
+
+
+def test_get_app_metadata_falls_back_to_license_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Metadata helper should fall back to the License metadata field."""
+    monkeypatch.setattr(
+        "cogitus.metadata.importlib_metadata.metadata",
+        lambda _: _FakePackageMetadata(
+            {
+                "Name": "cogitus",
+                "Summary": "Test summary",
+                "License": "BSD-3-Clause",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        "cogitus.metadata.importlib_metadata.version",
+        lambda _: "1.2.3",
+    )
+
+    result = metadata_module.get_app_metadata()
+
+    assert result == metadata_module.AppMetadata(
+        title="Cogitus",
+        version="1.2.3",
+        summary="Test summary",
+        license_name="BSD-3-Clause",
+    )
 
 
 def test_parse_project_urls_ignores_malformed_entries() -> None:
@@ -167,6 +205,7 @@ def test_get_about_entries_uses_selected_metadata_fields() -> None:
             "Issues": "https://example.com/issues",
             "Pull Requests": "https://example.com/pulls",
         },
+        license_name="MIT",
     )
 
     result = metadata_module.get_about_entries(app_metadata)
