@@ -13,8 +13,8 @@ Ideas to add to Cogitus
   all (only to the group level, not the root node).
 - add a tag management dialog with usage counts, rename/edit support, and
   explicit stale-tag pruning (selected/all stale with confirmation).
-- ~~Add theming and a dark/light mode (also option to auto-detect latter from
-  the OS setting)~~ Textual does this natively - document it.
+- ~~Add theming and a dark/light mode (also option to auto-detect the latter
+  from the OS setting)~~ Textual does this natively - document it.
 - clicking on any of the tags above the body window should open the search
   results as if `tag:<tag name>` was searched.
 
@@ -84,7 +84,7 @@ Ideas to add to Cogitus
 
 - add profiles, link ideas to a profile, optionally password protected.
 - cloud database, allows reading/writing from multiple machines (can probably be
-  surplanted by the API idea).
+  suplanted by the API idea).
 
 ## Relationships and Idea Graph
 
