@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
 _DAYS_IN_WEEK = 7
 _MAX_SNIPPET_LENGTH = 88
+_RELATIVE_TIMESTAMP_REFRESH_INTERVAL = 30.0
 _SEARCH_OPERATORS: tuple[str, ...] = ("tag:", "group:")
 
 
@@ -158,6 +159,7 @@ class IdeaListPanel(Vertical):
         self._tag_suggestions: tuple[str, ...] = ()
         self._group_suggestions: tuple[str, ...] = ()
         self._autocomplete_state: _AutocompleteState | None = None
+        self._relative_timestamp_timer: Timer | None = None
         self._suspend_autocomplete_sync = False
 
     def compose(self) -> ComposeResult:
@@ -175,6 +177,13 @@ class IdeaListPanel(Vertical):
         tree.show_root = False
         yield tree
         yield SearchResultsList(id="search-results", classes="-hidden")
+
+    def on_mount(self) -> None:
+        """Start lightweight periodic refreshes for relative timestamps."""
+        self._relative_timestamp_timer = self.set_interval(
+            _RELATIVE_TIMESTAMP_REFRESH_INTERVAL,
+            self.refresh_relative_timestamps,
+        )
 
     def _reset_tree(self) -> Tree[IdeaTreeNodeData]:
         """Clear tree and internal state, returning the tree widget."""
@@ -300,6 +309,24 @@ class IdeaListPanel(Vertical):
         self._ideas_by_pk[idea.pk] = idea
         self._idea_nodes_by_pk[idea.pk] = node
         return node
+
+    def refresh_relative_timestamps(self) -> None:
+        """Refresh idea-node relative timestamps without rebuilding the tree."""
+        if self.search_is_active():
+            return
+        for idea_pk, node in self._idea_nodes_by_pk.items():
+            idea = self._ideas_by_pk.get(idea_pk)
+            if idea is None:
+                continue
+            label = _format_idea_label(idea)
+            current_label = node.label
+            if (
+                not isinstance(current_label, Text)
+                or current_label.plain != label.plain
+                or current_label.style != label.style
+                or current_label.spans != label.spans
+            ):
+                node.set_label(label)
 
     def select_idea(self, idea_pk: int) -> bool:
         """Select an idea node by primary key."""

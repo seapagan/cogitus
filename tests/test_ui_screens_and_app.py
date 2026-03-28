@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone, tzinfo
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import PropertyMock
 
 import pytest
 from rich.table import Table
 from rich.text import Text
+from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Container, VerticalScroll
 from textual.widgets import (
@@ -37,6 +39,7 @@ from cogitus.ui.screens.idea_form_screen import (
     NameInputScreen,
 )
 from cogitus.ui.screens.main_screen import MainScreen
+from cogitus.ui.widgets import idea_list as idea_list_module
 from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
 from cogitus.ui.widgets.search_results import SearchResultsList
@@ -97,6 +100,28 @@ class _FakeSettings:
     def save(self) -> None:
         """Record save invocation."""
         self.saved = True
+
+
+class _FrozenDateTime:
+    """Controllable datetime replacement for relative-time tests."""
+
+    current = datetime.now(tz=timezone.utc)
+
+    @classmethod
+    def now(cls, tz: tzinfo | None = None) -> datetime:
+        """Return the configured current time."""
+        if tz is None:
+            return cls.current.replace(tzinfo=None)
+        return cls.current.astimezone(tz)
+
+    @classmethod
+    def fromtimestamp(
+        cls,
+        timestamp: float,
+        tz: tzinfo | None = None,
+    ) -> datetime:
+        """Delegate timestamp conversion to the real datetime class."""
+        return datetime.fromtimestamp(timestamp, tz=tz)
 
 
 _MAX_WAIT_TICKS = 200
@@ -1774,6 +1799,49 @@ async def test_main_screen_refresh_empty_tree_clears_missing_group_request(
         set_selected.assert_called_once_with(None)
         show_empty.assert_called_once_with()
         await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_focus_and_resume_refresh_relative_timestamps(
+    service: IdeaService,
+    mocker: MockerFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Focus/resume should refresh labels without reloading ideas."""
+    base_time = datetime(2025, 2, 7, 14, 5, tzinfo=timezone.utc)
+    _FrozenDateTime.current = base_time
+    monkeypatch.setattr(idea_list_module, "datetime", _FrozenDateTime)
+
+    service.create_idea("Fresh")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        idea = panel.get_selected_idea()
+        assert idea is not None
+        idea.updated_at = int(base_time.timestamp())
+
+        panel.refresh_relative_timestamps()
+        await pilot.pause()
+
+        node = panel._idea_nodes_by_pk[idea.pk]
+        assert isinstance(node.label, Text)
+        assert node.label.plain == f"{idea.title} [just now]"
+
+        refresh_ideas = mocker.patch.object(screen, "refresh_ideas")
+
+        _FrozenDateTime.current = base_time + timedelta(hours=2)
+        screen.on_app_focus(events.AppFocus())
+        await pilot.pause()
+        assert node.label.plain == f"{idea.title} [2h ago]"
+
+        _FrozenDateTime.current = base_time + timedelta(hours=3)
+        screen.on_screen_resume(events.ScreenResume())
+        await pilot.pause()
+        assert node.label.plain == f"{idea.title} [3h ago]"
+
+        refresh_ideas.assert_not_called()
 
 
 @pytest.mark.asyncio

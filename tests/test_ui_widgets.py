@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
@@ -13,6 +13,7 @@ from textual.widgets import Input, Markdown, OptionList, Static, Tree
 from textual.widgets.option_list import Option
 
 from cogitus.search import SearchMatchFragment, SearchResult
+from cogitus.ui.widgets import idea_list as idea_list_module
 from cogitus.ui.widgets.autocomplete import _AutocompleteState
 from cogitus.ui.widgets.idea_list import (
     IdeaListPanel,
@@ -49,6 +50,28 @@ class _WidgetApp(App[None]):
     def compose(self) -> ComposeResult:
         """Compose with one mounted widget."""
         yield self._widget
+
+
+class _FrozenDateTime:
+    """Controllable datetime replacement for relative-time tests."""
+
+    current = datetime.now(tz=timezone.utc)
+
+    @classmethod
+    def now(cls, tz: tzinfo | None = None) -> datetime:
+        """Return the configured current time."""
+        if tz is None:
+            return cls.current.replace(tzinfo=None)
+        return cls.current.astimezone(tz)
+
+    @classmethod
+    def fromtimestamp(
+        cls,
+        timestamp: float,
+        tz: tzinfo | None = None,
+    ) -> datetime:
+        """Delegate timestamp conversion to the real datetime class."""
+        return datetime.fromtimestamp(timestamp, tz=tz)
 
 
 def _to_unix(dt: datetime) -> int:
@@ -231,6 +254,150 @@ async def test_idea_list_panel_uses_stronger_group_label_emphasis(
         assert idea_node.label.plain.startswith(idea.title)
         assert idea_node.label.style == ""
         assert any(span.style == "dim" for span in idea_node.label.spans)
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_refreshes_relative_timestamps_in_place(
+    service: IdeaService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Relative timestamps should update without rebuilding the tree."""
+    base_time = datetime(2025, 2, 7, 14, 5, tzinfo=timezone.utc)
+    _FrozenDateTime.current = base_time
+    monkeypatch.setattr(idea_list_module, "datetime", _FrozenDateTime)
+
+    idea = service.create_idea("Fresh")
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        grouped = service.list_ideas_grouped()
+        grouped_idea = next(
+            candidate
+            for _, ideas in grouped
+            for candidate in ideas
+            if candidate.pk == idea.pk
+        )
+        grouped_idea.updated_at = _to_unix(base_time)
+
+        panel.load_grouped_ideas(grouped)
+        await pilot.pause()
+
+        node = panel._idea_nodes_by_pk[idea.pk]
+        assert isinstance(node.label, Text)
+        assert node.label.plain == "Fresh [just now]"
+
+        _FrozenDateTime.current = base_time + timedelta(hours=2)
+        panel.refresh_relative_timestamps()
+        await pilot.pause()
+
+        assert isinstance(node.label, Text)
+        assert node.label.plain == "Fresh [2h ago]"
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_relative_timestamp_refresh_keeps_selection(
+    service: IdeaService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In-place timestamp refresh should not disturb current selection."""
+    base_time = datetime(2025, 2, 7, 14, 5, tzinfo=timezone.utc)
+    _FrozenDateTime.current = base_time
+    monkeypatch.setattr(idea_list_module, "datetime", _FrozenDateTime)
+
+    first = service.create_idea("First")
+    second = service.create_idea("Second")
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        grouped = service.list_ideas_grouped()
+        for _, ideas in grouped:
+            for candidate in ideas:
+                candidate.updated_at = _to_unix(base_time)
+
+        panel.load_grouped_ideas(grouped)
+        assert panel.select_idea(second.pk) is True
+        await pilot.pause()
+
+        tree = panel.query_one("#idea-list", Tree)
+        cursor_before = tree.cursor_node
+        selected_before = panel.get_selected_idea()
+
+        _FrozenDateTime.current = base_time + timedelta(hours=1)
+        panel.refresh_relative_timestamps()
+        await pilot.pause()
+
+        selected_after = panel.get_selected_idea()
+        assert selected_before is not None
+        assert selected_after is not None
+        assert selected_before.pk == second.pk
+        assert selected_after.pk == second.pk
+        assert tree.cursor_node is cursor_before
+        assert first.pk in panel._idea_nodes_by_pk
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_relative_timestamp_refresh_skips_search_mode(
+    service: IdeaService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Active search should suppress the background timestamp relabel."""
+    base_time = datetime(2025, 2, 7, 14, 5, tzinfo=timezone.utc)
+    _FrozenDateTime.current = base_time
+    monkeypatch.setattr(idea_list_module, "datetime", _FrozenDateTime)
+
+    idea = service.create_idea("Fresh")
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        grouped = service.list_ideas_grouped()
+        grouped_idea = next(
+            candidate
+            for _, ideas in grouped
+            for candidate in ideas
+            if candidate.pk == idea.pk
+        )
+        grouped_idea.updated_at = _to_unix(base_time)
+
+        panel.load_grouped_ideas(grouped)
+        await pilot.pause()
+
+        node = panel._idea_nodes_by_pk[idea.pk]
+        assert isinstance(node.label, Text)
+        assert node.label.plain == "Fresh [just now]"
+
+        panel.query_one("#search-input", Input).value = "fresh"
+        _FrozenDateTime.current = base_time + timedelta(hours=2)
+        panel.refresh_relative_timestamps()
+        await pilot.pause()
+
+        assert isinstance(node.label, Text)
+        assert node.label.plain == "Fresh [just now]"
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_relative_timestamp_refresh_skips_missing_idea(
+    service: IdeaService,
+) -> None:
+    """Missing cached ideas should be ignored during relabel refresh."""
+    idea = service.create_idea("Fresh")
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        await pilot.pause()
+
+        node = panel._idea_nodes_by_pk[idea.pk]
+        original_label = node.label
+        del panel._ideas_by_pk[idea.pk]
+
+        panel.refresh_relative_timestamps()
+        await pilot.pause()
+
+        assert node.label == original_label
 
 
 @pytest.mark.asyncio

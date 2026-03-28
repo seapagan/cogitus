@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from textual.app import ComposeResult
+    from textual.events import AppFocus, ScreenResume
 
     from cogitus.models.group import Group
     from cogitus.models.idea import Idea
@@ -186,6 +187,21 @@ class MainScreen(Screen[None]):
         self.refresh_ideas(select_pk=self._initial_select_pk)
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         panel.browse_widget().focus()
+
+    def on_app_focus(self, _event: AppFocus) -> None:
+        """Refresh visible relative timestamps when the app regains focus."""
+        self._refresh_relative_timestamps()
+
+    def on_screen_resume(self, _event: ScreenResume) -> None:
+        """Refresh visible relative timestamps when this screen resumes."""
+        self._refresh_relative_timestamps()
+
+    def _refresh_relative_timestamps(self) -> None:
+        """Refresh in-place relative timestamps in the visible idea tree."""
+        self.query_one(
+            "#idea-list-panel",
+            IdeaListPanel,
+        ).refresh_relative_timestamps()
 
     def refresh_ideas(
         self,
