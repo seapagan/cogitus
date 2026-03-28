@@ -5,6 +5,26 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0](https://github.com/seapagan/cogitus/releases/tag/0.8.0) (March 28, 2026)
+
+**New Features**
+
+- Read `About` license from metadata instead of hardcoding ([#48](https://github.com/seapagan/cogitus/pull/48)) by [seapagan](https://github.com/seapagan)
+- Chore: update package metadata for PEP 639 ([#47](https://github.com/seapagan/cogitus/pull/47)) by [seapagan](https://github.com/seapagan)
+- Feat: add about dialog ([#46](https://github.com/seapagan/cogitus/pull/46)) by [seapagan](https://github.com/seapagan)
+- Add metadata-driven version display to CLI and TUI ([#45](https://github.com/seapagan/cogitus/pull/45)) by [seapagan](https://github.com/seapagan)
+
+**Bug Fixes**
+
+- Fix: refresh stale idea timestamps ([#49](https://github.com/seapagan/cogitus/pull/49)) by [seapagan](https://github.com/seapagan)
+
+**Dependency Updates**
+
+- Update deps to fix security alerts and bump others to latest versions ([#50](https://github.com/seapagan/cogitus/pull/50)) by [seapagan](https://github.com/seapagan)
+- Chore(deps): update dependency uv_build to >=0.11.1,<0.12.0 ([#43](https://github.com/seapagan/cogitus/pull/43)) by [renovate[bot]](https://github.com/apps/renovate)
+
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.7.0...0.8.0) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.7.0...0.8.0.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.7.0...0.8.0.patch)
+
 ## [0.7.0](https://github.com/seapagan/cogitus/releases/tag/0.7.0) (March 24, 2026)
 
 **New Features**
