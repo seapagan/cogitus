@@ -12,8 +12,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from cogitus.api.main import COGITUS_API_DB_PATH_ENV
-from cogitus.cli.commands import app
+from cogitus.cli.commands import COGITUS_API_DB_PATH_ENV, app
 from cogitus.cli.formatters import (
     format_idea_markdown,
     format_ideas_json,
@@ -258,28 +257,27 @@ class TestApiServeCommand:
     def test_api_serve_uses_uvicorn_factory(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        mocker: MockerFixture,
         tmp_path: Path,
     ) -> None:
         """Serve command should invoke uvicorn with the app factory."""
-        mock_run = mocker.patch("cogitus.cli.commands.uvicorn.run")
         monkeypatch.delenv(COGITUS_API_DB_PATH_ENV, raising=False)
         db_path = tmp_path / "cogitus-api.db"
 
-        result = runner.invoke(
-            app,
-            [
-                "api",
-                "serve",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "9001",
-                "--reload",
-                "--db-path",
-                str(db_path),
-            ],
-        )
+        with patch("uvicorn.run") as mock_run:
+            result = runner.invoke(
+                app,
+                [
+                    "api",
+                    "serve",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    "9001",
+                    "--reload",
+                    "--db-path",
+                    str(db_path),
+                ],
+            )
 
         assert result.exit_code == 0
         assert os.environ[COGITUS_API_DB_PATH_ENV] == str(db_path)
@@ -294,13 +292,12 @@ class TestApiServeCommand:
     def test_api_serve_clears_db_path_env_when_not_provided(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        mocker: MockerFixture,
     ) -> None:
         """Serve command should clear any prior API DB path override."""
-        mock_run = mocker.patch("cogitus.cli.commands.uvicorn.run")
         monkeypatch.setenv(COGITUS_API_DB_PATH_ENV, "stale-value")
 
-        result = runner.invoke(app, ["api", "serve"])
+        with patch("uvicorn.run") as mock_run:
+            result = runner.invoke(app, ["api", "serve"])
 
         assert result.exit_code == 0
         assert COGITUS_API_DB_PATH_ENV not in os.environ
@@ -311,6 +308,27 @@ class TestApiServeCommand:
             reload=False,
             factory=True,
         )
+
+    def test_api_serve_requires_api_extra(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Serve command should fail cleanly without the optional API deps."""
+
+        def fake_import_module(name: str) -> object:
+            if name == "uvicorn":
+                raise ModuleNotFoundError
+            return __import__(name)
+
+        monkeypatch.setattr(
+            "cogitus.cli.commands.importlib.import_module",
+            fake_import_module,
+        )
+
+        result = runner.invoke(app, ["api", "serve"])
+
+        assert result.exit_code == 1
+        assert "pip install cogitus[api]" in result.output
 
     def test_delete_confirm_yes(
         self,

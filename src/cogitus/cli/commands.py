@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 from contextlib import contextmanager
 from enum import Enum
 from typing import TYPE_CHECKING, Annotated
 
 import typer
-import uvicorn
 
-from cogitus.api.main import COGITUS_API_DB_PATH_ENV
 from cogitus.cli.formatters import (
     format_idea_markdown,
     format_ideas_json,
@@ -24,6 +23,8 @@ from cogitus.services.idea_service import IdeaService
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+
+COGITUS_API_DB_PATH_ENV = "COGITUS_API_DB_PATH"
 
 
 class ListFormat(str, Enum):
@@ -185,6 +186,16 @@ def serve_api(
     db_path: Annotated[str | None, typer.Option("--db-path")] = None,
 ) -> None:
     """Serve the FastAPI application."""
+    try:
+        uvicorn = importlib.import_module("uvicorn")
+    except ModuleNotFoundError as exc:
+        typer.secho(
+            "The API server requires the optional 'api' extra. "
+            "Install it with 'pip install cogitus[api]'.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1) from exc
+
     if db_path is None:
         os.environ.pop(COGITUS_API_DB_PATH_ENV, None)
     else:
