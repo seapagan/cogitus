@@ -11,6 +11,11 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 
+from cogitus.api.schemas.request.idea import (
+    IdeaCreateRequest,
+    IdeaUpdateRequest,
+)
+from cogitus.backends import api_client as api_client_module
 from cogitus.backends.api_client import RemoteAPIClient
 from cogitus.backends.remote_backend import RemoteIdeaBackend
 from cogitus.db import get_db
@@ -18,6 +23,7 @@ from cogitus.db import get_db
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from pytest_mock import MockerFixture
     from sqliter import SqliterDB
 
 _REMOTE_USERNAME = "api-user"
@@ -26,6 +32,11 @@ _REMOTE_USERNAME = "api-user"
 def _remote_secret() -> str:
     """Return the fixed test secret without a password-like assignment."""
     return "secret" + "-pass"
+
+
+def _wrong_remote_secret() -> str:
+    """Return an invalid secret without a password-like assignment."""
+    return "wrong" + "-secret"
 
 
 @dataclass
@@ -431,6 +442,138 @@ def test_remote_api_client_requires_complete_config() -> None:
         client.fetch_snapshot()
 
 
+def test_remote_api_client_crud_methods_cover_all_routes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Client CRUD helpers should hit all route wrappers correctly."""
+    api = _MockRemoteAPI()
+    api.groups[2] = _StoredGroup(
+        pk=2,
+        created_at=4,
+        updated_at=4,
+        name="backend",
+    )
+    api.ideas[2] = _StoredIdea(
+        pk=2,
+        created_at=5,
+        updated_at=5,
+        title="Second idea",
+        body="Second body",
+        group_pk=2,
+        tag_pks=[1],
+    )
+    api._next_group_pk = 3
+    api._next_idea_pk = 3
+    client = RemoteAPIClient(
+        base_url="http://remote.test",
+        username=_REMOTE_USERNAME,
+        password=_remote_secret(),
+        transport=api.transport(),
+    )
+    monkeypatch.setattr(api_client_module, "_IDEA_PAGE_SIZE", 1)
+
+    ideas = client.list_all_ideas()
+    created = client.create_idea(
+        IdeaCreateRequest(
+            title="Remote idea",
+            body="Serve remotely",
+            tags=["fastapi"],
+            group_pk=1,
+        )
+    )
+    updated = client.update_idea(
+        created.pk,
+        IdeaUpdateRequest(
+            title="Updated remote idea",
+            body="Changed body",
+            tags=["httpx"],
+            group_pk=1,
+            last_known_updated_at=created.updated_at,
+        ),
+    )
+    created_group = client.create_group("platform")
+    renamed_group = client.rename_group(created_group.pk, "services")
+    client.delete_group(renamed_group.pk, move_to_group_pk=1)
+    client.delete_idea(updated.pk)
+
+    assert [idea.title for idea in ideas] == ["Second idea", "Seed idea"]
+    assert updated.title == "Updated remote idea"
+    assert renamed_group.name == "services"
+    assert [group.name for group in client.list_groups()] == [
+        "backend",
+        "default",
+    ]
+
+
+def test_remote_api_client_raises_for_network_and_auth_failures() -> None:
+    """Client should surface transport and auth failures clearly."""
+
+    def failing_transport(request: httpx.Request) -> httpx.Response:
+        message = "boom"
+        if request.url.path == "/api/v1/auth/token":
+            raise httpx.ConnectError(message, request=request)
+        return httpx.Response(500)
+
+    network_client = RemoteAPIClient(
+        base_url="http://remote.test",
+        username=_REMOTE_USERNAME,
+        password=_remote_secret(),
+        transport=httpx.MockTransport(failing_transport),
+    )
+    with pytest.raises(ValueError, match="Could not reach the remote API"):
+        network_client.list_groups()
+
+    auth_client = RemoteAPIClient(
+        base_url="http://remote.test",
+        username=_REMOTE_USERNAME,
+        password=_wrong_remote_secret(),
+        transport=_MockRemoteAPI().transport(),
+    )
+    with pytest.raises(
+        ValueError,
+        match="Incorrect username or password",
+    ):
+        auth_client.list_groups()
+
+
+def test_remote_api_client_uses_generic_errors_for_bad_responses() -> None:
+    """Client should handle generic API failures and malformed payloads."""
+
+    def error_transport(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/auth/token":
+            return httpx.Response(
+                200,
+                json={"access_token": "token", "token_type": "bearer"},
+            )
+        return httpx.Response(500, json={})
+
+    client = RemoteAPIClient(
+        base_url="http://remote.test",
+        username=_REMOTE_USERNAME,
+        password=_remote_secret(),
+        transport=httpx.MockTransport(error_transport),
+    )
+    with pytest.raises(ValueError, match="Remote API request failed"):
+        client.list_groups()
+
+    response = httpx.Response(500, text="not-json")
+    assert RemoteAPIClient._detail_from_response(response) == ""
+    assert (
+        RemoteAPIClient._detail_from_response(
+            httpx.Response(500, json=["not-a-dict"])
+        )
+        == ""
+    )
+    with pytest.raises(
+        TypeError,
+        match="Remote API returned an unexpected response body",
+    ):
+        RemoteAPIClient._parse_model_list(
+            {"unexpected": True},
+            lambda payload: payload,
+        )
+
+
 def test_remote_backend_sync_populates_cache_and_preserves_cursor(
     db: SqliterDB,
 ) -> None:
@@ -455,6 +598,90 @@ def test_remote_backend_sync_populates_cache_and_preserves_cursor(
     assert synced is not None
     assert synced.title == "Seed idea"
     assert cache_service.get_idea_cursor_position(1) == 12
+
+
+def test_remote_backend_delegate_and_guard_paths(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Read delegates and missing-record guards should behave correctly."""
+    api_client = mocker.Mock()
+    backend = RemoteIdeaBackend(
+        db,
+        default_group_name="default",
+        api_client=api_client,
+    )
+    seed = backend._cache_service.create_idea("Seed idea", tags=["python"])
+
+    assert backend.update_idea(999, "Missing", "", tags=[], group_pk=1) is None
+    assert backend.rename_idea(999, "Missing") is None
+    assert backend.rename_group(999, "missing") is None
+    assert backend.get_idea(seed.pk) is not None
+    assert backend.get_group(seed.group.pk) is not None
+    assert backend.list_tags_in_use()[0].name == "python"
+    assert backend.list_tags_with_usage()[0][1] == 1
+    backend.set_idea_cursor_position(seed.pk, 7)
+    assert backend.get_idea_cursor_position(seed.pk) == 7
+    assert backend.has_ideas_in_group(seed.group.pk) is True
+    assert backend.list_groups()[0].name == "default"
+    assert backend.list_ideas_grouped()[0][1][0].pk == seed.pk
+    assert backend.search_results("Seed")[0].idea.pk == seed.pk
+
+    rename_update = mocker.patch.object(
+        backend, "update_idea", return_value=seed
+    )
+    assert backend.rename_idea(seed.pk, "Renamed") is seed
+    rename_update.assert_called_once_with(
+        seed.pk,
+        title="Renamed",
+        body="",
+        tags=["python"],
+        group_pk=seed.group.pk,
+    )
+
+    mocker.patch.object(backend._cache_service, "get_idea", return_value=seed)
+    mocker.patch.object(
+        backend._cache_service,
+        "get_idea_with_relations",
+        return_value=None,
+    )
+    assert backend.rename_idea(seed.pk, "Renamed") is None
+
+    backend.close()
+    api_client.close.assert_called_once_with()
+
+
+def test_remote_backend_internal_error_guards(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Internal cache guard helpers should raise clear runtime errors."""
+    backend = RemoteIdeaBackend(
+        db,
+        default_group_name="default",
+        api_client=mocker.Mock(),
+    )
+
+    mocker.patch.object(backend._cache_service, "get_group", return_value=None)
+    with pytest.raises(RuntimeError, match="Group 1 not found in cache"):
+        backend._require_cached_group(1)
+
+    mocker.patch.object(backend._cache_service, "get_idea", return_value=None)
+    with pytest.raises(RuntimeError, match="Idea 1 not found in cache"):
+        backend._require_cached_idea(1)
+
+    with pytest.raises(
+        RuntimeError,
+        match="Worker-thread sync requires a file-backed cache database",
+    ):
+        backend._build_worker_cache_db()
+
+    backend._cache_db = mocker.Mock(is_memory=False, filename=None)
+    with pytest.raises(
+        RuntimeError,
+        match="Remote cache database path is unavailable",
+    ):
+        backend._build_worker_cache_db()
 
 
 def test_remote_backend_create_update_and_delete_idea_updates_cache(

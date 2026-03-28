@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import datetime, timedelta, timezone, tzinfo
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import PropertyMock
@@ -1404,6 +1405,63 @@ async def test_backend_config_screen_returns_selected_config(
                 api_password=_remote_secret(),
             )
         )
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_backend_config_screen_button_routing_and_guard_paths(
+    mocker: MockerFixture,
+) -> None:
+    """Backend config modal should route buttons and guard invalid mode."""
+    screen = BackendConfigScreen(
+        BackendConfig(
+            mode=DataBackendMode.LOCAL,
+            api_base_url="",
+            api_username="",
+            api_password="",
+        )
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        save_action = mocker.patch.object(screen, "action_save")
+        cancel_action = mocker.patch.object(screen, "action_cancel")
+
+        await pilot.click("#save-backend-btn")
+        await pilot.click("#cancel-backend-btn")
+
+        save_action.assert_called_once_with()
+        cancel_action.assert_called_once_with()
+        await pilot.pause()
+
+    invalid_screen = BackendConfigScreen(
+        BackendConfig(
+            mode=DataBackendMode.LOCAL,
+            api_base_url="",
+            api_username="",
+            api_password="",
+        )
+    )
+    invalid_app = _SingleScreenApp(invalid_screen)
+
+    async with invalid_app.run_test() as pilot:
+        notify = mocker.patch.object(invalid_screen, "notify")
+        dismiss = mocker.patch.object(invalid_screen, "dismiss")
+        bad_select = mocker.Mock(value="bad-mode")
+        mocker.patch.object(
+            invalid_screen,
+            "query_one",
+            return_value=bad_select,
+        )
+
+        invalid_screen.action_save()
+        invalid_screen.action_cancel()
+
+        notify.assert_called_once_with(
+            "Select a backend mode",
+            severity="error",
+        )
+        dismiss.assert_called_once_with(None)
         await pilot.pause()
 
 
@@ -3601,6 +3659,26 @@ def test_cogitus_app_init_uses_remote_cache_db_when_api_mode(
         default_group_name="default",
     )
     assert app.title == "Cogitus [remote]"
+    assert app.get_backend_config() == BackendConfig(
+        mode=DataBackendMode.API,
+        api_base_url="http://127.0.0.1:8000",
+        api_username="api-user",
+        api_password=_remote_secret(),
+    )
+
+
+def test_cogitus_app_build_backend_raises_without_db(
+    db: SqliterDB,
+) -> None:
+    """Building a backend should fail clearly when no DB is available."""
+    app = CogitusApp(db=db, settings=_FakeSettings())
+    app._db = None
+
+    with pytest.raises(
+        RuntimeError,
+        match="Backend database is not initialized",
+    ):
+        app._build_backend()
 
 
 def test_cogitus_app_build_main_screen_includes_app_metadata(
@@ -3670,6 +3748,42 @@ async def test_cogitus_app_apply_backend_config_rebuilds_backend(
 
 
 @pytest.mark.asyncio
+async def test_cogitus_app_apply_backend_config_closes_remote_backend(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Switching away from a remote backend should close the old one."""
+    remote_backend = RemoteIdeaBackend(
+        db,
+        default_group_name="default",
+        api_client=mocker.Mock(),
+    )
+    mocker.patch.object(remote_backend, "sync_from_remote", return_value=None)
+    settings = _FakeSettings()
+    app = CogitusApp(db=db, settings=settings, backend=remote_backend)
+
+    async with app.run_test() as pilot:
+        close = mocker.patch.object(remote_backend, "close")
+        replace_service = mocker.patch.object(app.screen, "replace_service")
+
+        app.apply_backend_config(
+            BackendConfig(
+                mode=DataBackendMode.LOCAL,
+                api_base_url="",
+                api_username="",
+                api_password="",
+            )
+        )
+
+        close.assert_called_once_with()
+        replace_service.assert_called_once_with(app._service)
+        assert app.title == "Cogitus [local]"
+        assert app.screen.title == "Cogitus [local]"
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_sync_remote_before_edit_notifies_on_failure(
     service: IdeaService,
     mocker: MockerFixture,
@@ -3687,6 +3801,166 @@ async def test_main_screen_sync_remote_before_edit_notifies_on_failure(
         assert screen._sync_remote_before_edit() is False
         notify.assert_called_once_with("Remote sync failed", severity="error")
         assert app.sub_title == ""
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_replace_service_refreshes_and_reconfigures(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Replacing the backend should reconfigure sync and refresh selection."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        configure = mocker.patch.object(screen, "_configure_remote_sync")
+        refresh = mocker.patch.object(screen, "refresh_ideas")
+        screen._selected_idea_pk = 3
+
+        screen.replace_service(service)
+
+        configure.assert_called_once_with()
+        refresh.assert_called_once_with(select_pk=3)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_configure_remote_sync_branches(
+    service: IdeaService,
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Remote sync configuration should enable and disable polling cleanly."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+    remote_backend = RemoteIdeaBackend(
+        db,
+        default_group_name="default",
+        api_client=mocker.Mock(),
+    )
+
+    async with app.run_test() as pilot:
+        timer = mocker.Mock()
+        screen._remote_sync_timer = timer
+        request_sync = mocker.patch.object(screen, "_request_remote_sync")
+        set_interval = mocker.patch.object(
+            screen,
+            "set_interval",
+            return_value=mocker.Mock(),
+        )
+
+        mocker.patch.object(screen, "_syncing_backend", return_value=None)
+        screen._configure_remote_sync()
+        timer.stop.assert_called_once_with()
+        request_sync.assert_not_called()
+
+        request_sync.reset_mock()
+        mocker.patch.object(
+            screen,
+            "_syncing_backend",
+            return_value=remote_backend,
+        )
+        screen._configure_remote_sync()
+        request_sync.assert_called_once_with()
+        set_interval.assert_called_once_with(
+            screen.REMOTE_SYNC_INTERVAL_SECONDS,
+            screen._request_remote_sync,
+        )
+
+        assert screen._syncing_backend() is remote_backend
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_request_remote_sync_guard_and_schedule_paths(
+    service: IdeaService,
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Remote sync requests should honor modal and backend guard paths."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+    remote_backend = RemoteIdeaBackend(
+        db,
+        default_group_name="default",
+        api_client=mocker.Mock(),
+    )
+
+    async with app.run_test() as pilot:
+        set_indicator = mocker.patch.object(screen, "_set_sync_indicator")
+        run_remote_sync = mocker.patch.object(screen, "_run_remote_sync")
+
+        mocker.patch.object(screen, "_syncing_backend", return_value=None)
+        screen._request_remote_sync()
+        set_indicator.assert_not_called()
+        run_remote_sync.assert_not_called()
+
+        set_indicator.reset_mock()
+        run_remote_sync.reset_mock()
+        mocker.patch.object(
+            screen,
+            "_syncing_backend",
+            return_value=remote_backend,
+        )
+        screen._request_remote_sync()
+        set_indicator.assert_called_once_with()
+        run_remote_sync.assert_called_once_with()
+
+        set_indicator.reset_mock()
+        run_remote_sync.reset_mock()
+        app.push_screen(HelpScreen())
+        await pilot.pause()
+        screen._request_remote_sync()
+        set_indicator.assert_not_called()
+        run_remote_sync.assert_not_called()
+        app.pop_screen()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_remote_sync_helper_branches(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Remote sync helper methods should preserve state and ignore noise."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        refresh = mocker.patch.object(screen, "refresh_ideas")
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        mocker.patch.object(panel, "get_selected_group_pk", return_value=1)
+        screen._selected_idea_pk = 2
+        screen._refresh_after_remote_sync()
+        refresh.assert_called_once_with(select_pk=2, select_group_pk=1)
+
+        refresh.reset_mock()
+        sync_backend = mocker.Mock()
+        mocker.patch.object(
+            screen,
+            "_syncing_backend",
+            return_value=sync_backend,
+        )
+        assert screen._sync_remote_before_edit() is True
+        sync_backend.sync_from_remote.assert_called_once_with()
+        refresh.assert_called_once_with(select_pk=2)
+
+        refresh_after_sync = mocker.patch.object(
+            screen,
+            "_refresh_after_remote_sync",
+        )
+        notify = mocker.patch.object(screen, "notify")
+        screen._remote_sync_worker = mocker.Mock()
+        screen.on_worker_state_changed(
+            mocker.Mock(worker=mocker.Mock(), state=WorkerState.SUCCESS)
+        )
+        refresh_after_sync.assert_not_called()
+        notify.assert_not_called()
+
+        worker_runner = inspect.unwrap(MainScreen._run_remote_sync)
+        mocker.patch.object(screen, "_syncing_backend", return_value=None)
+        assert worker_runner(screen) is None
         await pilot.pause()
 
 
@@ -3748,6 +4022,35 @@ async def test_main_screen_worker_error_notifies_once(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_edit_and_rename_abort_when_sync_fails(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Edit-style flows should stop before opening modals when sync fails."""
+    group = service.create_group("backend")
+    idea = service.create_idea("Seed", group_pk=group.pk)
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        push_screen = mocker.patch.object(app, "push_screen")
+        mocker.patch.object(panel, "get_selected_idea", return_value=idea)
+        mocker.patch.object(
+            screen,
+            "_sync_remote_before_edit",
+            return_value=False,
+        )
+
+        screen.action_edit_idea()
+        screen._rename_selected_group(group.pk)
+        screen._rename_selected_idea(idea.pk)
+
+        push_screen.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_backend_config_flow(
     service: IdeaService,
     mocker: MockerFixture,
@@ -3790,6 +4093,43 @@ async def test_main_screen_backend_config_flow(
 
         assert app.applied == config
         notify.assert_called_once_with("Connection settings updated")
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_backend_config_unavailable_paths(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Settings action should fail cleanly when app helpers are unavailable."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+
+        screen.action_show_backend_config()
+        notify.assert_called_once_with(
+            "Backend settings are unavailable",
+            severity="error",
+        )
+
+        notify.reset_mock()
+        screen._on_backend_config_dismiss(None)
+        notify.assert_not_called()
+
+        screen._on_backend_config_dismiss(
+            BackendConfig(
+                mode=DataBackendMode.API,
+                api_base_url="http://127.0.0.1:8000",
+                api_username="api-user",
+                api_password=_remote_secret(),
+            )
+        )
+        notify.assert_called_once_with(
+            "Backend settings are unavailable",
+            severity="error",
+        )
         await pilot.pause()
 
 
