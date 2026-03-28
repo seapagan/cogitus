@@ -23,7 +23,11 @@ class _FakePackageMetadata(dict[str, str]):
         **kwargs: object,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self._repeated_fields = dict(repeated_fields or {})
+        # Copy caller-provided repeated metadata so tests don't share
+        # mutable state.
+        self._repeated_fields = {
+            key: list(values) for key, values in (repeated_fields or {}).items()
+        }
         if project_urls is not None:
             self._repeated_fields["Project-URL"] = list(project_urls)
 
@@ -124,6 +128,35 @@ def test_get_app_metadata_falls_back_to_author_email_name(
 
     assert result.author == "Grant Ramsay"
     assert result.author_email == "grant@example.com"
+
+
+def test_get_app_metadata_falls_back_to_license_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Metadata helper should fall back to the License metadata field."""
+    monkeypatch.setattr(
+        "cogitus.metadata.importlib_metadata.metadata",
+        lambda _: _FakePackageMetadata(
+            {
+                "Name": "cogitus",
+                "Summary": "Test summary",
+                "License": "BSD-3-Clause",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        "cogitus.metadata.importlib_metadata.version",
+        lambda _: "1.2.3",
+    )
+
+    result = metadata_module.get_app_metadata()
+
+    assert result == metadata_module.AppMetadata(
+        title="Cogitus",
+        version="1.2.3",
+        summary="Test summary",
+        license_name="BSD-3-Clause",
+    )
 
 
 def test_parse_project_urls_ignores_malformed_entries() -> None:
