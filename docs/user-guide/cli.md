@@ -71,7 +71,8 @@ The command prompts for the password, stores a password hash in config, and can
 optionally rotate the JWT signing secret. You can use any username you want, or
 omit `--username` and be prompted for it.
 
-See the [API guide](api.md) for routes, example output, and current warnings.
+See the [API guide](api.md) for routes, example output, remote-mode setup from
+the TUI, and current warnings.
 
 ## Help
 

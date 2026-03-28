@@ -20,6 +20,10 @@ pip install cogitus[api]
 If you are working from a local checkout, the existing development environment
 already includes the API dependencies.
 
+You only need the `api` extra on the machine that will *serve* the API.
+Using the normal Cogitus TUI against an already running remote server does not
+require the FastAPI server dependencies.
+
 ## Run the Server
 
 Start the server with:
@@ -99,6 +103,66 @@ curl http://127.0.0.1:8000/api/v1/ideas \
   -H "Authorization: Bearer eyJhbGciOi..."
 ```
 
+When the Cogitus TUI is using remote mode, it handles this token flow for you.
+If the access token expires, the client reauthenticates once and retries the
+request automatically.
+
+## Use Cogitus with a Remote Server
+
+Before switching a local Cogitus app into remote mode, make sure the remote API
+server is already configured and running.
+
+Recommended order:
+
+1. On the server machine, install the API extra with `pip install cogitus[api]`
+   if needed.
+2. Point the server at the correct SQLite file with `cogitus api serve
+   --db-path ...` if you are not using the default database.
+3. Configure API auth with `cogitus api set-auth`.
+4. Start the API with `cogitus api serve`.
+5. On the client machine, open Cogitus and press `Ctrl+P` to open the command
+   palette.
+6. Run `Backend settings`.
+7. Choose `Remote API` and enter the server URL, username, and password.
+8. Save the settings.
+
+Cogitus also keeps the existing hidden `c` shortcut for this dialog, but the
+command palette is now the primary entry point.
+
+After saving, the app title changes to `Cogitus [remote]`. Local mode shows
+`Cogitus [local]`.
+
+### Remote Mode Behavior
+
+- Cogitus keeps a local cache database at
+  `~/.config/cogitus/cogitus-remote-cache.db` while in remote mode.
+- It syncs the cache when the app starts, when the main screen regains focus or
+  resumes, and every 60 seconds while the main screen is active.
+- Opening edit-style flows refreshes from the server first, so you usually
+  start from the latest remote copy.
+- Background syncing is paused while a modal screen is open.
+- Writes update the local cache immediately after a successful API request.
+
+### Conflict Handling
+
+- Remote idea updates use optimistic locking based on the idea's last known
+  `updated_at` value.
+- If another client changes the same idea before you save, the server returns
+  `409 Conflict`.
+- Today Cogitus does not attempt automatic merges. Reopen or retry the edit
+  after reviewing the latest remote version.
+
+### Current Caveats
+
+!!! warning
+    Remote mode is still intentionally conservative:
+
+    - The server is still single-user and SQLite-backed.
+    - The client stores the remote API URL, username, and password in the
+      normal Cogitus config file for now.
+    - This is suitable for trusted, light-use environments today, not for
+      hardened internet-facing deployment.
+
 ## Available Routes
 
 The current API exposes:
@@ -169,5 +233,6 @@ curl http://127.0.0.1:8000/api/v1/ideas \
 - The ideas list endpoint also accepts `limit`, `offset`, and `query`
   parameters.
 - The API uses the same SQLite-backed data model as the local app.
-- Auth configuration is currently stored in the normal Cogitus config file.
+- Server auth configuration is currently stored in the normal Cogitus config
+  file.
 - This is still intended for light use today, not heavy multi-user deployment.
