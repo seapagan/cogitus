@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from textual.app import App
+from textual.app import App, SystemCommand
 
 from cogitus.backends import (
     BackendConfig,
@@ -30,10 +30,12 @@ from cogitus.services.idea_service import IdeaService
 from cogitus.ui.screens.main_screen import MainScreen
 
 if TYPE_CHECKING:
-    from typing import Protocol
+    from collections.abc import Iterable
+    from typing import Any, Protocol
 
     from rich.console import RenderableType
     from sqliter import SqliterDB
+    from textual.screen import Screen
 
     class SettingsLike(Protocol):
         """Settings interface required by the app."""
@@ -132,6 +134,19 @@ class CogitusApp(App[None]):
         """Push the main screen on mount."""
         self.push_screen(self._build_main_screen())
         self._notify_invalid_config()
+
+    def get_system_commands(
+        self,
+        screen: Screen[Any],
+    ) -> Iterable[SystemCommand]:
+        """Expose app-specific commands in the Textual command palette."""
+        yield from super().get_system_commands(screen)
+        if isinstance(screen, MainScreen):
+            yield SystemCommand(
+                "Backend settings",
+                "Configure the local or remote data backend",
+                screen.action_show_backend_config,
+            )
 
     def _backend_title_suffix(self) -> str:
         """Return the current backend mode label for the app title."""

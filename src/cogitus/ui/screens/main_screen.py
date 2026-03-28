@@ -93,7 +93,7 @@ class MainScreen(Screen[None]):
         Binding("e", "edit_idea", "Edit", key_display="e"),
         Binding("r", "rename_selected", "Rename", key_display="r"),
         Binding("d", "delete_idea", "Delete", key_display="d"),
-        Binding("c", "show_backend_config", "Settings", key_display="c"),
+        Binding("c", "show_backend_config", "Settings", show=False),
         Binding("slash", "focus_search", "Search", key_display="/"),
         Binding("escape", "cancel_search", "Back", show=False),
         Binding(

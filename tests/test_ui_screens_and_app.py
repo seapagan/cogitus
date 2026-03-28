@@ -2621,6 +2621,19 @@ async def test_main_screen_footer_shows_switch_pane_binding(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_footer_hides_backend_settings_binding(
+    service: IdeaService,
+) -> None:
+    """Settings should stay off the visible footer bindings."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert screen.active_bindings["c"].binding.show is False
+
+
+@pytest.mark.asyncio
 async def test_main_screen_search_mode_hides_switch_pane_binding(
     service: IdeaService,
 ) -> None:
@@ -3489,6 +3502,39 @@ async def test_cogitus_app_mount_and_exit(db: SqliterDB) -> None:
 
     assert settings.last_viewed_idea_pk == 7
     assert settings.saved is True
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_backend_settings_palette_and_shortcut(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Palette command and hidden shortcut should both open settings."""
+    app = CogitusApp(db=db, settings=_FakeSettings())
+
+    async with app.run_test() as pilot:
+        assert isinstance(app.screen, MainScreen)
+        push_screen = mocker.patch.object(app, "push_screen")
+
+        commands = list(app.get_system_commands(app.screen))
+        backend_command = next(
+            command
+            for command in commands
+            if command.title == "Backend settings"
+        )
+        assert backend_command.help == (
+            "Configure the local or remote data backend"
+        )
+
+        backend_command.callback()
+        assert isinstance(push_screen.call_args.args[0], BackendConfigScreen)
+
+        push_screen.reset_mock()
+        await pilot.press("c")
+        assert isinstance(push_screen.call_args.args[0], BackendConfigScreen)
+
+        app.exit()
+        await pilot.pause()
 
 
 @pytest.mark.asyncio
