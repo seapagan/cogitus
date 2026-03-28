@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 DISTRIBUTION_NAME = "cogitus"
 COPYRIGHT_HOLDER = "Grant Ramsay (seapagan)"
-LICENSE_NAME = "MIT"
+DEFAULT_LICENSE_NAME = "MIT"
 _ABOUT_PROJECT_URL_LABELS = (
     ("Repository", "Repository"),
     ("Homepage", "Docs"),
@@ -31,6 +31,16 @@ class AppMetadata:
     author: str | None = None
     author_email: str | None = None
     project_urls: dict[str, str] = field(default_factory=dict)
+    license_name: str | None = None
+
+
+def _get_repeated_metadata_values(
+    package_metadata: Message,
+    key: str,
+) -> list[str]:
+    """Return repeated metadata values for the requested key."""
+    get_all = getattr(package_metadata, "get_all", None)
+    return get_all(key, []) if callable(get_all) else []
 
 
 def _clean_optional_text(value: str | None) -> str | None:
@@ -43,11 +53,11 @@ def _clean_optional_text(value: str | None) -> str | None:
 
 def _parse_project_urls(package_metadata: Message) -> dict[str, str]:
     """Normalize repeated Project-URL metadata entries into a mapping."""
-    get_all = getattr(package_metadata, "get_all", None)
-    raw_values = get_all("Project-URL", []) if callable(get_all) else []
     project_urls: dict[str, str] = {}
 
-    for raw_value in raw_values:
+    for raw_value in _get_repeated_metadata_values(
+        package_metadata, "Project-URL"
+    ):
         label, separator, url = raw_value.partition(",")
         if not separator:
             continue
@@ -57,6 +67,13 @@ def _parse_project_urls(package_metadata: Message) -> dict[str, str]:
             project_urls[clean_label] = clean_url
 
     return project_urls
+
+
+def _resolve_license_name(package_metadata: Message) -> str | None:
+    """Return the declared license label from package metadata."""
+    return _clean_optional_text(
+        package_metadata.get("License-Expression")
+    ) or _clean_optional_text(package_metadata.get("License"))
 
 
 def get_app_metadata(
@@ -78,6 +95,7 @@ def get_app_metadata(
     author = raw_author or _clean_optional_text(parsed_author_name)
     author_email = _clean_optional_text(parsed_author_email)
     version = importlib_metadata.version(distribution_name)
+    license_name = _resolve_license_name(package_metadata)
     return AppMetadata(
         title=title,
         version=version,
@@ -85,6 +103,7 @@ def get_app_metadata(
         author=author,
         author_email=author_email,
         project_urls=_parse_project_urls(package_metadata),
+        license_name=license_name,
     )
 
 
@@ -112,5 +131,5 @@ def get_about_entries(app_metadata: AppMetadata) -> list[tuple[str, str]]:
         project_url = app_metadata.project_urls.get(project_url_label)
         if project_url:
             lines.append((display_label, project_url))
-    lines.append(("License", LICENSE_NAME))
+    lines.append(("License", app_metadata.license_name or DEFAULT_LICENSE_NAME))
     return lines

@@ -19,10 +19,13 @@ class _FakePackageMetadata(dict[str, str]):
         self,
         *args: object,
         project_urls: list[str] | None = None,
+        repeated_fields: dict[str, list[str]] | None = None,
         **kwargs: object,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self._project_urls = project_urls or []
+        self._repeated_fields = repeated_fields or {}
+        if project_urls is not None:
+            self._repeated_fields["Project-URL"] = project_urls
 
     def get_all(
         self,
@@ -30,9 +33,7 @@ class _FakePackageMetadata(dict[str, str]):
         default: list[str] | None = None,
     ) -> list[str] | None:
         """Return repeated metadata values for the requested key."""
-        if key == "Project-URL":
-            return self._project_urls
-        return default
+        return self._repeated_fields.get(key, default)
 
 
 def test_get_app_metadata_reads_installed_metadata(
@@ -47,12 +48,14 @@ def test_get_app_metadata_reads_installed_metadata(
                 "Summary": "Test summary",
                 "Author": "Grant Ramsay",
                 "Author-email": "Grant Ramsay <grant@example.com>",
+                "License-Expression": "MIT",
             },
             project_urls=[
                 "Homepage, https://example.com/docs",
                 "Repository, https://example.com/repo",
                 "Issues, https://example.com/issues",
             ],
+            repeated_fields={"License-File": ["LICENSE.txt"]},
         ),
     )
     monkeypatch.setattr(
@@ -73,6 +76,7 @@ def test_get_app_metadata_reads_installed_metadata(
             "Repository": "https://example.com/repo",
             "Issues": "https://example.com/issues",
         },
+        license_name="MIT",
     )
 
 
@@ -167,6 +171,7 @@ def test_get_about_entries_uses_selected_metadata_fields() -> None:
             "Issues": "https://example.com/issues",
             "Pull Requests": "https://example.com/pulls",
         },
+        license_name="MIT",
     )
 
     result = metadata_module.get_about_entries(app_metadata)

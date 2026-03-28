@@ -7,6 +7,7 @@ from unittest.mock import PropertyMock
 
 import pytest
 from rich.table import Table
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Container, VerticalScroll
 from textual.widgets import (
@@ -1354,6 +1355,7 @@ async def test_about_screen_shows_metadata_and_closes(
                 "Repository": "https://example.com/repo",
                 "Issues": "https://example.com/issues",
             },
+            license_name="MIT",
         ),
     )
     app = _StyledSingleScreenApp(about_screen)
@@ -1368,6 +1370,10 @@ async def test_about_screen_shows_metadata_and_closes(
         assert separator.orientation == "horizontal"
         assert str(summary.content) == "Test summary"
         assert isinstance(metadata.content, Table)
+        license_value = metadata.content.columns[1]._cells[-1]
+        assert isinstance(license_value, Text)
+        assert license_value.plain == "MIT"
+        assert not license_value.spans
 
         dismiss = mocker.patch.object(about_screen, "dismiss")
         about_screen.action_close()
