@@ -52,6 +52,16 @@ cogitus delete 42                 # Prompts for confirmation
 cogitus delete 42 --force         # Skip confirmation
 ```
 
+## Serve the API
+
+```bash
+cogitus api serve
+cogitus api serve --host 127.0.0.1 --port 8000
+cogitus api serve --db-path /path/to/cogitus.db
+```
+
+See the [API guide](api.md) for routes, example output, and current warnings.
+
 ## Help
 
 ```bash
@@ -59,4 +69,5 @@ cogitus --help
 cogitus list --help
 cogitus export --help
 cogitus delete --help
+cogitus api serve --help
 ```

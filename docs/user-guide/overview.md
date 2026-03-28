@@ -23,6 +23,7 @@ This guide covers day-to-day usage of Cogitus in the terminal UI.
 - [Ideas, Groups, and Tags](ideas-groups-tags.md)
 - [Search](search.md)
 - [CLI Reference](cli.md)
+- [API](api.md)
 - [Clipboard](clipboard.md)
 - [Settings](settings.md)
 - [Troubleshooting](troubleshooting.md)
