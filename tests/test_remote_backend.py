@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs
@@ -12,8 +13,11 @@ import pytest
 
 from cogitus.backends.api_client import RemoteAPIClient
 from cogitus.backends.remote_backend import RemoteIdeaBackend
+from cogitus.db import get_db
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from sqliter import SqliterDB
 
 _REMOTE_USERNAME = "api-user"
@@ -559,3 +563,31 @@ def test_remote_backend_group_operations_update_cache_and_search(
     assert moved is not None
     assert moved.group.pk == 1
     assert backend.get_group(created_group.pk) is None
+
+
+def test_remote_backend_sync_from_worker_thread_uses_fresh_db_connection(
+    tmp_path: Path,
+) -> None:
+    """Worker-thread sync should not reuse the main-thread SQLite connection."""
+    cache_db = get_db(str(tmp_path / "remote-cache.db"))
+    try:
+        backend = RemoteIdeaBackend(
+            cache_db,
+            default_group_name="default",
+            api_client=RemoteAPIClient(
+                base_url="http://remote.test",
+                username=_REMOTE_USERNAME,
+                password=_remote_secret(),
+                transport=_MockRemoteAPI().transport(),
+            ),
+        )
+        assert cache_db.is_connected is True
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(backend.sync_from_remote).result()
+
+        synced = backend.get_idea(1)
+        assert synced is not None
+        assert synced.title == "Seed idea"
+    finally:
+        cache_db.close()

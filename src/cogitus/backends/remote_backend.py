@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING
+
+from sqliter import SqliterDB
 
 from cogitus.api.schemas.request.idea import (
     IdeaCreateRequest,
@@ -13,8 +16,6 @@ from cogitus.search.backend import FtsSearchBackend
 from cogitus.services.idea_service import IdeaService
 
 if TYPE_CHECKING:
-    from sqliter import SqliterDB
-
     from cogitus.api.schemas.response.group import GroupResponse
     from cogitus.api.schemas.response.idea import IdeaResponse
     from cogitus.api.schemas.response.tag import TagResponse
@@ -39,6 +40,7 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         """Initialize the remote backend and its local cache service."""
         self._cache_db = cache_db
         self._api_client = api_client
+        self._owner_thread_id = threading.get_ident()
         self._cache_service = IdeaService(
             cache_db,
             default_group_name=default_group_name,
@@ -192,16 +194,50 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
 
     def sync_from_remote(self) -> None:
         """Replace the local cache with the latest remote snapshot."""
-        self._replace_cache(self._api_client.fetch_snapshot())
+        snapshot = self._api_client.fetch_snapshot()
+        if (
+            self._cache_db.is_memory
+            or threading.get_ident() == self._owner_thread_id
+        ):
+            self._replace_cache(
+                snapshot,
+                db=self._cache_db,
+                cache_service=self._cache_service,
+                search_backend=self._search_backend,
+            )
+            return
+
+        worker_db = self._build_worker_cache_db()
+        worker_service = IdeaService(
+            worker_db,
+            default_group_name=self.default_group_name,
+        )
+        worker_search_backend = FtsSearchBackend(worker_db)
+        try:
+            self._replace_cache(
+                snapshot,
+                db=worker_db,
+                cache_service=worker_service,
+                search_backend=worker_search_backend,
+            )
+        finally:
+            worker_db.close()
 
     def close(self) -> None:
         """Close the underlying HTTP client."""
         self._api_client.close()
 
-    def _replace_cache(self, snapshot: RemoteSnapshot) -> None:
+    def _replace_cache(
+        self,
+        snapshot: RemoteSnapshot,
+        *,
+        db: SqliterDB,
+        cache_service: IdeaService,
+        search_backend: FtsSearchBackend,
+    ) -> None:
         """Replace the entire local cache with the provided snapshot."""
-        cursor_positions = self._snapshot_cursor_positions()
-        with self._cache_db.connect() as conn:
+        cursor_positions = self._snapshot_cursor_positions(db)
+        with db.connect() as conn:
             conn.execute("DELETE FROM idea_cursor_states;")
             conn.execute("DELETE FROM ideas_tags;")
             conn.execute("DELETE FROM ideas;")
@@ -273,8 +309,9 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
                 ],
             )
             conn.commit()
-        self._search_backend.rebuild()
+        search_backend.rebuild()
         self._restore_cursor_positions(
+            cache_service,
             cursor_positions,
             valid_idea_pks={idea.pk for idea in snapshot.ideas},
         )
@@ -410,9 +447,9 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
             conn.commit()
         self._search_backend.rebuild()
 
-    def _snapshot_cursor_positions(self) -> dict[int, int]:
+    def _snapshot_cursor_positions(self, db: SqliterDB) -> dict[int, int]:
         """Capture client-local cursor positions before a full cache swap."""
-        rows = self._cache_db.connect().execute(
+        rows = db.connect().execute(
             """
             SELECT idea_id, body_cursor_position
             FROM idea_cursor_states;
@@ -422,6 +459,7 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
 
     def _restore_cursor_positions(
         self,
+        cache_service: IdeaService,
         cursor_positions: dict[int, int],
         *,
         valid_idea_pks: set[int],
@@ -429,7 +467,21 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         """Restore cursor positions for ideas that still exist remotely."""
         for idea_pk, position in cursor_positions.items():
             if idea_pk in valid_idea_pks:
-                self._cache_service.set_idea_cursor_position(idea_pk, position)
+                cache_service.set_idea_cursor_position(idea_pk, position)
+
+    def _build_worker_cache_db(self) -> SqliterDB:
+        """Open a fresh file-backed cache DB for worker-thread sync."""
+        if self._cache_db.is_memory:
+            msg = "Worker-thread sync requires a file-backed cache database"
+            raise RuntimeError(msg)
+        db_path = self._cache_db.filename
+        if db_path is None:
+            msg = "Remote cache database path is unavailable"
+            raise RuntimeError(msg)
+
+        worker_db = SqliterDB(db_path)
+        worker_db.connect().execute("PRAGMA journal_mode=WAL;")
+        return worker_db
 
     def _require_cached_group(self, group_pk: int) -> Group:
         """Return a cached group after an API write."""
