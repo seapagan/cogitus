@@ -15,6 +15,10 @@ Ideas to add to Cogitus
   node (`Ideas`) be locked so it cant be manually collapsed?
 - add a tag management dialog with usage counts, rename/edit support, and
   explicit stale-tag pruning (selected/all stale with confirmation).
+- ~~Add theming and a dark/light mode (also option to auto-detect latter from
+  the OS setting)~~ Textual does this natively
+- clicking on any of the tags above the body window should open the search
+  results as if `tag:<tag name>` was searched.
 
 ## CLI
 
@@ -46,6 +50,10 @@ Ideas to add to Cogitus
 - optimize advanced search query execution to reduce multi-pass PK collection
   and re-fetch overhead as dataset size grows.
 
+## Documentation
+
+- note the built in textual theming and how to use (via ctrl-p pallete)
+
 ## Export, Import, and Backup
 
 - add export to assorted file-types both on the tags, group and idea level.
@@ -54,6 +62,15 @@ Ideas to add to Cogitus
   todo from a github repo or local code)
 - Allow to export an Idea to a remote file (this would be more difficult and
   need assorted auth additions)
+
+## API
+
+- add an API using `FastAPI` to expose the ideas. This can be toggled on/off, or
+  started from the CLI in a headless mode (imagine getting your ideas from a
+  remote server?) Will need Auth etc. Note that this is prob not good for hard
+  usage as we are using SQLite. See also the MCP server item below. Perhaps
+  enable a local `cogitus` app to use a remote server instead of local SQLite
+  file?
 
 ## Undo and History
 
@@ -92,7 +109,12 @@ Ideas to add to Cogitus
   index validity/version check or other lightweight verification so rebuilds
   only happen when needed, while keeping an explicit/manual rebuild path.
 
-## AI Assistance
+## AI Assistance / MCP
 
+- include an MCP server (using `FastAPI` and `tadata-org/fastapi_mcp`, though
+  also look at `FastMCP`) so coding agents can read and write to the database.
+- Write a project info or skills file (check how FastAPI does it using
+  <https://agentskills.io>) so that Agents can understand how to use the server
+  and even the CLI export (JSON prob best?) to store memory.
 - explore optional AI-assisted idea expansion and prompt-to-structure
   workflows.
