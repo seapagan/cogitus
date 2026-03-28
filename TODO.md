@@ -7,16 +7,14 @@ Ideas to add to Cogitus
 - Allow key customization (using the `Textual` built-in functionality and the
   config file). eg Ctrl-S on my system is mapped to tmux
 - continue navigation and keybinding polish.
-- add in-place right-pane markdown edit mode (view/edit toggle).
-- add contextual dynamic toolbar/actions by mode.
+- add contextual dynamic toolbar/actions by mode. [mostly implemented]
 - add toggle and hotkey for the left tree to expand/collapse all. `space` does
   this for the individual nodes, but it would be good to have a toggle that does
-  all (only to the group level, not the root node). Similarly, should the root
-  node (`Ideas`) be locked so it cant be manually collapsed?
+  all (only to the group level, not the root node).
 - add a tag management dialog with usage counts, rename/edit support, and
   explicit stale-tag pruning (selected/all stale with confirmation).
 - ~~Add theming and a dark/light mode (also option to auto-detect latter from
-  the OS setting)~~ Textual does this natively
+  the OS setting)~~ Textual does this natively - document it.
 - clicking on any of the tags above the body window should open the search
   results as if `tag:<tag name>` was searched.
 
@@ -85,7 +83,8 @@ Ideas to add to Cogitus
 ## Profiles and Multi-Device
 
 - add profiles, link ideas to a profile, optionally password protected.
-- cloud database, allows reading/writing from multiple machines.
+- cloud database, allows reading/writing from multiple machines (can probably be
+  surplanted by the API idea).
 
 ## Relationships and Idea Graph
 
