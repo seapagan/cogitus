@@ -3916,6 +3916,9 @@ async def test_cogitus_app_apply_backend_config_rebuilds_backend(
     mocker: MockerFixture,
 ) -> None:
     """Applying backend config should save settings and replace the backend."""
+    mocker.patch.object(
+        RemoteIdeaBackend, "sync_from_remote", return_value=None
+    )
     settings = _FakeSettings()
     app = CogitusApp(db=db, settings=settings)
 
@@ -3981,8 +3984,12 @@ async def test_cogitus_app_apply_backend_config_closes_remote_backend(
 @pytest.mark.asyncio
 async def test_cogitus_app_cached_remote_mode_updates_titles(
     db: SqliterDB,
+    mocker: MockerFixture,
 ) -> None:
     """Runtime remote offline state should only affect the active title."""
+    mocker.patch.object(
+        RemoteIdeaBackend, "sync_from_remote", return_value=None
+    )
     settings = _FakeSettings(
         backend_config=BackendConfig(
             mode=DataBackendMode.API,
@@ -4029,6 +4036,9 @@ async def test_cogitus_app_session_local_fallback_is_not_persisted(
     mocker: MockerFixture,
 ) -> None:
     """Session-local fallback should not rewrite persisted backend settings."""
+    mocker.patch.object(
+        RemoteIdeaBackend, "sync_from_remote", return_value=None
+    )
     settings = _FakeSettings(
         backend_config=BackendConfig(
             mode=DataBackendMode.API,
