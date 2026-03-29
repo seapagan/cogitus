@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 import pytest
+from typing_extensions import Self
 
 from cogitus.backends.api_client import RemoteAPIClient
 from cogitus.backends.remote_backend import RemoteIdeaBackend
@@ -24,6 +24,93 @@ if TYPE_CHECKING:
 
     from pytest_mock import MockerFixture
     from sqliter import SqliterDB
+
+
+class _ObservedLock:
+    """Wrap a lock and signal when a second acquisition is attempted."""
+
+    def __init__(
+        self,
+        lock: _LockLike,
+        second_attempted: threading.Event,
+    ) -> None:
+        """Store the wrapped lock and contention signal."""
+        self._lock = lock
+        self._second_attempted = second_attempted
+        self._attempts = 0
+        self._attempts_lock = threading.Lock()
+
+    def __enter__(self) -> Self:
+        """Signal when a second caller tries to enter the lock."""
+        with self._attempts_lock:
+            self._attempts += 1
+            if self._attempts == 2:
+                self._second_attempted.set()
+        self._lock.acquire()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: object,
+        exc: object,
+        traceback: object,
+    ) -> None:
+        """Release the wrapped lock."""
+        del exc_type, exc, traceback
+        self._lock.release()
+
+
+class _LockLike(Protocol):
+    """Small protocol for the lock methods this test wrapper needs."""
+
+    def acquire(self) -> bool | None:
+        """Acquire the wrapped lock."""
+
+    def release(self) -> None:
+        """Release the wrapped lock."""
+
+
+def _patch_tracked_snapshot_replacement(
+    mocker: MockerFixture,
+    backend: RemoteIdeaBackend,
+    *,
+    first_started: threading.Event,
+    second_attempted: threading.Event,
+    allow_exit: threading.Event,
+) -> dict[str, int]:
+    """Patch sync internals and capture concurrent replacement attempts."""
+    active_state = {"current": 0, "max": 0}
+    active_lock = threading.Lock()
+    mocker.patch.object(
+        backend,
+        "_sync_lock",
+        _ObservedLock(backend._sync_lock, second_attempted),
+    )
+
+    def tracked_replace_snapshot(
+        _repo: RemoteCacheRepository,
+        _snapshot: object,
+    ) -> None:
+        with active_lock:
+            active_state["current"] += 1
+            active_state["max"] = max(
+                active_state["max"],
+                active_state["current"],
+            )
+            first_started.set()
+        try:
+            allow_exit.wait(timeout=1)
+        finally:
+            with active_lock:
+                active_state["current"] -= 1
+
+    mocker.patch.object(
+        RemoteCacheRepository,
+        "replace_snapshot",
+        autospec=True,
+        side_effect=tracked_replace_snapshot,
+    )
+    return active_state
 
 
 def test_remote_backend_sync_populates_cache_and_preserves_cursor(
@@ -294,30 +381,15 @@ def test_remote_backend_serializes_concurrent_snapshot_replacement(
     """Concurrent sync requests should not replace the cache in parallel."""
     backend = _build_remote_backend_for_file_cache(tmp_path)
     cache_db = backend._cache_db
-    active = max_active = 0
-    active_lock = threading.Lock()
-    first_started, allow_exit = threading.Event(), threading.Event()
-
-    def tracked_replace_snapshot(
-        _repo: RemoteCacheRepository,
-        _snapshot: object,
-    ) -> None:
-        nonlocal active, max_active
-        with active_lock:
-            active += 1
-            max_active = max(max_active, active)
-            first_started.set()
-        try:
-            allow_exit.wait(timeout=1)
-        finally:
-            with active_lock:
-                active -= 1
-
-    mocker.patch.object(
-        RemoteCacheRepository,
-        "replace_snapshot",
-        autospec=True,
-        side_effect=tracked_replace_snapshot,
+    first_started = threading.Event()
+    second_attempted = threading.Event()
+    allow_exit = threading.Event()
+    active_state = _patch_tracked_snapshot_replacement(
+        mocker,
+        backend,
+        first_started=first_started,
+        second_attempted=second_attempted,
+        allow_exit=allow_exit,
     )
 
     try:
@@ -326,8 +398,8 @@ def test_remote_backend_serializes_concurrent_snapshot_replacement(
             assert first_started.wait(timeout=1)
             future_two = executor.submit(backend.sync_from_remote)
 
-            time.sleep(0.05)
-            assert max_active == 1
+            assert second_attempted.wait(timeout=1)
+            assert active_state["max"] == 1
 
             allow_exit.set()
             future_one.result()
