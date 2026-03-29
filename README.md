@@ -80,6 +80,9 @@ Functionality available in the current release:
 - Rendered Markdown detail view with tags and timestamps
 - Copy & Paste support
 - CLI commands for scripting (`list`, `export`, `delete`)
+- **Optional FastAPI server for standalone access to ideas, groups, and tags**
+- **Remote mode so a Cogitus TUI can use a Cogitus API server instead of a
+  local SQLite database**
 
 > [!NOTE]
 >
