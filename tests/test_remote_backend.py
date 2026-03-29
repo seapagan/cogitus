@@ -178,7 +178,6 @@ def test_remote_backend_delegate_and_guard_paths(
         group_pk=seed.group.pk,
     )
 
-    mocker.patch.object(backend._cache_service, "get_idea", return_value=seed)
     mocker.patch.object(
         backend._cache_service,
         "get_idea_with_relations",

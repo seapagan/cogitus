@@ -100,9 +100,6 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
 
     def rename_idea(self, pk: int, title: str) -> Idea | None:
         """Rename a remote idea using the same stale-write protection."""
-        current = self._cache_service.get_idea(pk)
-        if current is None:
-            return None
         current_with_relations = self._cache_service.get_idea_with_relations(pk)
         if current_with_relations is None:
             return None
