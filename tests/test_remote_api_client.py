@@ -21,6 +21,20 @@ from tests.remote_api_support import (
 )
 
 
+def _authorized_headers(api: MockRemoteAPI) -> dict[str, str]:
+    """Return a valid authorization header for the fake API."""
+    token_response = api.transport().handle_request(
+        httpx.Request(
+            "POST",
+            "http://remote.test/api/v1/auth/token",
+            content=f"username={REMOTE_USERNAME}&password={remote_secret()}",
+        )
+    )
+    return {
+        "Authorization": (f"Bearer {token_response.json()['access_token']}")
+    }
+
+
 def _build_seeded_remote_client() -> tuple[MockRemoteAPI, RemoteAPIClient]:
     """Return a client backed by seeded remote state."""
     api = MockRemoteAPI()
@@ -227,3 +241,35 @@ def test_remote_api_client_uses_generic_errors_for_bad_responses() -> None:
             {"unexpected": True},
             lambda payload: payload,
         )
+
+
+def test_mock_remote_api_rejects_wrong_idea_method() -> None:
+    """Wrong verbs on idea detail routes should not mutate fake state."""
+    api = MockRemoteAPI()
+
+    response = api.transport().handle_request(
+        httpx.Request(
+            "PATCH",
+            "http://remote.test/api/v1/ideas/1",
+            headers=_authorized_headers(api),
+        )
+    )
+
+    assert response.status_code == 405
+    assert api.ideas[1].title == "Seed idea"
+
+
+def test_mock_remote_api_rejects_wrong_group_method() -> None:
+    """Wrong verbs on group detail routes should not mutate fake state."""
+    api = MockRemoteAPI()
+
+    response = api.transport().handle_request(
+        httpx.Request(
+            "GET",
+            "http://remote.test/api/v1/groups/1",
+            headers=_authorized_headers(api),
+        )
+    )
+
+    assert response.status_code == 405
+    assert api.groups[1].name == "default"

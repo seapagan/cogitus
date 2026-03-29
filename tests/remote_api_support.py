@@ -142,10 +142,16 @@ class MockRemoteAPI:
         if exact_handler is not None:
             return exact_handler(request)
 
-        for prefix, handler in self._protected_prefix_routes():
-            if request.url.path.startswith(prefix):
+        matched_prefix = False
+        for method, prefix, handler in self._protected_prefix_routes():
+            if not request.url.path.startswith(prefix):
+                continue
+            matched_prefix = True
+            if request.method == method:
                 return handler(request)
 
+        if matched_prefix:
+            return self._json_response(405, {"detail": "method not allowed"})
         return self._json_response(404, {"detail": "not found"})
 
     def _protected_exact_routes(
@@ -163,11 +169,13 @@ class MockRemoteAPI:
 
     def _protected_prefix_routes(
         self,
-    ) -> tuple[tuple[str, ProtectedRouteHandler], ...]:
+    ) -> tuple[tuple[str, str, ProtectedRouteHandler], ...]:
         """Return prefix handlers for authenticated fake API routes."""
         return (
-            ("/api/v1/ideas/", self._handle_idea_request),
-            ("/api/v1/groups/", self._handle_group_request),
+            ("PUT", "/api/v1/ideas/", self._handle_idea_request),
+            ("DELETE", "/api/v1/ideas/", self._handle_idea_request),
+            ("PUT", "/api/v1/groups/", self._handle_group_request),
+            ("DELETE", "/api/v1/groups/", self._handle_group_request),
         )
 
     def _handle_list_groups(self, request: httpx.Request) -> httpx.Response:
