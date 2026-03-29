@@ -265,31 +265,34 @@ class TestApiServeCommand:
         monkeypatch.delenv(COGITUS_API_DB_PATH_ENV, raising=False)
         db_path = tmp_path / "cogitus-api.db"
 
-        with patch("uvicorn.run") as mock_run:
-            result = runner.invoke(
-                app,
-                [
-                    "api",
-                    "serve",
-                    "--host",
-                    "127.0.0.1",
-                    "--port",
-                    "9001",
-                    "--reload",
-                    "--db-path",
-                    str(db_path),
-                ],
-            )
+        try:
+            with patch("uvicorn.run") as mock_run:
+                result = runner.invoke(
+                    app,
+                    [
+                        "api",
+                        "serve",
+                        "--host",
+                        "127.0.0.1",
+                        "--port",
+                        "9001",
+                        "--reload",
+                        "--db-path",
+                        str(db_path),
+                    ],
+                )
 
-        assert result.exit_code == 0
-        assert os.environ[COGITUS_API_DB_PATH_ENV] == str(db_path)
-        mock_run.assert_called_once_with(
-            "cogitus.api.main:create_api_app",
-            host="127.0.0.1",
-            port=9001,
-            reload=True,
-            factory=True,
-        )
+            assert result.exit_code == 0
+            assert os.environ[COGITUS_API_DB_PATH_ENV] == str(db_path)
+            mock_run.assert_called_once_with(
+                "cogitus.api.main:create_api_app",
+                host="127.0.0.1",
+                port=9001,
+                reload=True,
+                factory=True,
+            )
+        finally:
+            monkeypatch.delenv(COGITUS_API_DB_PATH_ENV, raising=False)
 
     def test_api_serve_clears_db_path_env_when_not_provided(
         self,
