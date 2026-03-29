@@ -277,8 +277,15 @@ class MainScreen(Screen[None]):
             return
         if self._remote_startup_modal_open:
             return
+        if self._remote_sync_in_progress():
+            return
         self._set_sync_indicator()
         self._remote_sync_worker = self._run_remote_sync()
+
+    def _remote_sync_in_progress(self) -> bool:
+        """Return whether a background remote sync is still running."""
+        worker = self._remote_sync_worker
+        return worker is not None and not worker.is_finished
 
     @work(thread=True, exclusive=True, exit_on_error=False)
     def _run_remote_sync(self) -> None:

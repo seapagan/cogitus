@@ -762,12 +762,12 @@ class RemoteStartupRecoveryScreen(
     def compose(self) -> ComposeResult:
         """Compose the startup recovery dialog."""
         with Vertical(id="remote-startup-container"):
-            yield Static("Remote API Unavailable", id="form-title")
+            yield Static("Remote Sync Failed", id="form-title")
             yield Static(
                 (
                     f"{self._message}\n\n"
                     "Using cached remote data puts Cogitus into "
-                    "READ-ONLY mode while the API is unavailable.\n"
+                    "READ-ONLY mode until remote sync succeeds again.\n"
                     "Cached remote data may be stale or empty.\n"
                     "Switching to local mode uses a separate local SQLite "
                     "database, which may differ from the remote data.\n"

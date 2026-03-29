@@ -1315,8 +1315,11 @@ async def test_remote_startup_recovery_screen_mentions_read_only_cache() -> (
     app = _SingleScreenApp(screen)
 
     async with app.run_test() as pilot:
+        title = screen.query_one("#form-title", Static)
         message = screen.query_one("#remote-startup-message", Static)
+        assert str(title.content) == "Remote Sync Failed"
         assert "READ-ONLY mode" in str(message.content)
+        assert "until remote sync succeeds again" in str(message.content)
         await pilot.pause()
 
 
@@ -4185,12 +4188,12 @@ async def test_main_screen_configure_remote_sync_branches(
 
 
 @pytest.mark.asyncio
-async def test_main_screen_request_remote_sync_guard_and_schedule_paths(
+async def test_main_screen_request_remote_sync_guards_missing_or_busy_backend(
     service: IdeaService,
     db: SqliterDB,
     mocker: MockerFixture,
 ) -> None:
-    """Remote sync requests should honor modal and backend guard paths."""
+    """Remote sync requests should skip missing or already-running backends."""
     screen = MainScreen(service)
     app = _SingleScreenApp(screen)
     remote_backend = RemoteIdeaBackend(
@@ -4215,6 +4218,44 @@ async def test_main_screen_request_remote_sync_guard_and_schedule_paths(
             "_syncing_backend",
             return_value=remote_backend,
         )
+        screen._remote_sync_worker = mocker.Mock(is_finished=False)
+        screen._request_remote_sync()
+        set_indicator.assert_not_called()
+        run_remote_sync.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_request_remote_sync_schedules_when_idle_and_visible(
+    service: IdeaService,
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Remote sync requests should schedule only when the screen is ready."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+    remote_backend = RemoteIdeaBackend(
+        db,
+        default_group_name="default",
+        api_client=mocker.Mock(),
+    )
+
+    async with app.run_test() as pilot:
+        set_indicator = mocker.patch.object(screen, "_set_sync_indicator")
+        run_remote_sync = mocker.patch.object(screen, "_run_remote_sync")
+
+        mocker.patch.object(
+            screen,
+            "_syncing_backend",
+            return_value=remote_backend,
+        )
+        screen._request_remote_sync()
+        set_indicator.assert_called_once_with()
+        run_remote_sync.assert_called_once_with()
+
+        set_indicator.reset_mock()
+        run_remote_sync.reset_mock()
+        screen._remote_sync_worker = mocker.Mock(is_finished=True)
         screen._request_remote_sync()
         set_indicator.assert_called_once_with()
         run_remote_sync.assert_called_once_with()

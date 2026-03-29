@@ -38,6 +38,7 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         self._cache_db = cache_db
         self._api_client = api_client
         self._owner_thread_id = threading.get_ident()
+        self._sync_lock = threading.Lock()
         self._cache_service = IdeaService(
             cache_db,
             default_group_name=default_group_name,
@@ -194,23 +195,24 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
 
     def sync_from_remote(self) -> None:
         """Replace the local cache with the latest remote snapshot."""
-        snapshot = self._api_client.fetch_snapshot()
-        if (
-            self._cache_db.is_memory
-            or threading.get_ident() == self._owner_thread_id
-        ):
-            self._cache_repo.replace_snapshot(snapshot)
-            return
+        with self._sync_lock:
+            snapshot = self._api_client.fetch_snapshot()
+            if (
+                self._cache_db.is_memory
+                or threading.get_ident() == self._owner_thread_id
+            ):
+                self._cache_repo.replace_snapshot(snapshot)
+                return
 
-        worker_db = self._build_worker_cache_db()
-        worker_repo = RemoteCacheRepository(
-            worker_db,
-            default_group_name=self.default_group_name,
-        )
-        try:
-            worker_repo.replace_snapshot(snapshot)
-        finally:
-            worker_db.close()
+            worker_db = self._build_worker_cache_db()
+            worker_repo = RemoteCacheRepository(
+                worker_db,
+                default_group_name=self.default_group_name,
+            )
+            try:
+                worker_repo.replace_snapshot(snapshot)
+            finally:
+                worker_db.close()
 
     def close(self) -> None:
         """Close the underlying HTTP client."""

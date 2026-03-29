@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
@@ -10,6 +12,7 @@ import pytest
 from cogitus.backends.api_client import RemoteAPIClient
 from cogitus.backends.remote_backend import RemoteIdeaBackend
 from cogitus.db import get_db
+from cogitus.repositories.remote_cache_repo import RemoteCacheRepository
 from tests.remote_api_support import (
     REMOTE_USERNAME,
     MockRemoteAPI,
@@ -267,3 +270,89 @@ def test_remote_backend_sync_from_worker_thread_uses_fresh_db_connection(
         assert synced.title == "Seed idea"
     finally:
         cache_db.close()
+
+
+def _build_remote_backend_for_file_cache(tmp_path: Path) -> RemoteIdeaBackend:
+    """Create a file-backed remote backend for thread-sync tests."""
+    cache_db = get_db(str(tmp_path / "remote-cache.db"))
+    return RemoteIdeaBackend(
+        cache_db,
+        default_group_name="default",
+        api_client=RemoteAPIClient(
+            base_url="http://remote.test",
+            username=REMOTE_USERNAME,
+            password=remote_secret(),
+            transport=MockRemoteAPI().transport(),
+        ),
+    )
+
+
+def test_remote_backend_serializes_concurrent_snapshot_replacement(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    """Concurrent sync requests should not replace the cache in parallel."""
+    backend = _build_remote_backend_for_file_cache(tmp_path)
+    cache_db = backend._cache_db
+    active = max_active = 0
+    active_lock = threading.Lock()
+    first_started, allow_exit = threading.Event(), threading.Event()
+
+    def tracked_replace_snapshot(
+        _repo: RemoteCacheRepository,
+        _snapshot: object,
+    ) -> None:
+        nonlocal active, max_active
+        with active_lock:
+            active += 1
+            max_active = max(max_active, active)
+            first_started.set()
+        try:
+            allow_exit.wait(timeout=1)
+        finally:
+            with active_lock:
+                active -= 1
+
+    mocker.patch.object(
+        RemoteCacheRepository,
+        "replace_snapshot",
+        autospec=True,
+        side_effect=tracked_replace_snapshot,
+    )
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_one = executor.submit(backend.sync_from_remote)
+            assert first_started.wait(timeout=1)
+            future_two = executor.submit(backend.sync_from_remote)
+
+            time.sleep(0.05)
+            assert max_active == 1
+
+            allow_exit.set()
+            future_one.result()
+            future_two.result()
+    finally:
+        cache_db.close()
+
+
+def test_remote_backend_allows_follow_up_sync_after_serialized_run(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    """A second sync should still run after the first serialized sync exits."""
+    backend = _build_remote_backend_for_file_cache(tmp_path)
+    cache_db = backend._cache_db
+    replace_snapshot = mocker.patch.object(
+        RemoteCacheRepository,
+        "replace_snapshot",
+        autospec=True,
+    )
+
+    try:
+        backend.sync_from_remote()
+        backend.sync_from_remote()
+    finally:
+        cache_db.close()
+
+    assert replace_snapshot.call_count == 2
