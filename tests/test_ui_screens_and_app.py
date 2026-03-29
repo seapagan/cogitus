@@ -4103,18 +4103,41 @@ async def test_main_screen_sync_remote_before_edit_notifies_on_failure(
     service: IdeaService,
     mocker: MockerFixture,
 ) -> None:
-    """Edit preparation should notify when remote sync fails."""
+    """Edit preparation should notify on expected remote sync failures."""
     screen = MainScreen(service)
     app = _SingleScreenApp(screen)
 
     async with app.run_test() as pilot:
         notify = mocker.patch.object(screen, "notify")
         backend = mocker.Mock()
-        backend.sync_from_remote.side_effect = ValueError("Remote sync failed")
+        backend.sync_from_remote.side_effect = RuntimeError(
+            "Remote sync failed"
+        )
         mocker.patch.object(screen, "_syncing_backend", return_value=backend)
 
         assert screen._sync_remote_before_edit() is False
         notify.assert_called_once_with("Remote sync failed", severity="error")
+        assert app.sub_title == ""
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_sync_remote_before_edit_clears_indicator_on_bug(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Unexpected sync failures should still clear the indicator."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        backend = mocker.Mock()
+        backend.sync_from_remote.side_effect = KeyError("boom")
+        mocker.patch.object(screen, "_syncing_backend", return_value=backend)
+
+        with pytest.raises(KeyError, match="boom"):
+            screen._sync_remote_before_edit()
+
         assert app.sub_title == ""
         await pilot.pause()
 

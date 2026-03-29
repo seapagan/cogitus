@@ -798,11 +798,11 @@ class MainScreen(Screen[None]):
         self._set_sync_indicator()
         try:
             backend.sync_from_remote()
-        except ValueError as exc:
-            self._clear_sync_indicator()
+        except (RuntimeError, ValueError) as exc:
             self.notify(str(exc), severity="error")
             return False
-        self._clear_sync_indicator()
+        finally:
+            self._clear_sync_indicator()
         self.refresh_ideas(select_pk=self._selected_idea_pk)
         return True
 
