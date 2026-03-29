@@ -234,7 +234,6 @@ def test_upsert_idea_updates_existing_rows_and_links(
         timestamps=(3, 12),
     )
     repo.upsert_idea(updated)
-    repo.rebuild_search_index()
 
     cached = service.get_idea_with_relations(1)
     assert cached is not None
@@ -243,6 +242,51 @@ def test_upsert_idea_updates_existing_rows_and_links(
     assert cached.updated_at == 12
     assert cached.group.name == "platform"
     assert [tag.name for tag in cached.tags.fetch_all()] == ["httpx"]
+
+
+def test_upsert_idea_rebuilds_search_index_with_updated_group(
+    db: SqliterDB,
+) -> None:
+    """Rebuilding search after an idea upsert should reflect the new group."""
+    service = IdeaService(db)
+    repo = RemoteCacheRepository(db, default_group_name="default")
+    default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
+
+    repo.upsert_idea(
+        _idea(
+            pk=1,
+            title="Remote idea",
+            body="Initial body",
+            group=default_group,
+            tags=[],
+            timestamps=(3, 3),
+        )
+    )
+    repo.upsert_group(
+        _group(
+            pk=2,
+            name="platform",
+            created_at=4,
+            updated_at=9,
+        )
+    )
+    repo.upsert_idea(
+        _idea(
+            pk=1,
+            title="Updated remote idea",
+            body="Changed body",
+            group=_group(
+                pk=2,
+                name="platform",
+                created_at=4,
+                updated_at=9,
+            ),
+            tags=[],
+            timestamps=(3, 12),
+        )
+    )
+    repo.rebuild_search_index()
+
     assert service.search_results("group:platform")[0].idea.pk == 1
 
 
