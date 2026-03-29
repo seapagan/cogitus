@@ -13,24 +13,6 @@ if TYPE_CHECKING:
     from typing import Protocol
 
     from sqliter import SqliterDB
-    from sqliter.query.query import FilterValue
-
-    class M2MSQLMetadata(Protocol):
-        """Typing surface used from sqliter's public M2M SQL metadata."""
-
-        junction_table: str
-        from_column: str
-        to_column: str
-        source_table: str
-        target_table: str
-        symmetrical: bool
-
-    class SupportsM2MSQLMetadata(Protocol):
-        """Descriptor protocol exposing SQL metadata for an M2M relation."""
-
-        @property
-        def sql_metadata(self) -> M2MSQLMetadata | None:
-            """Return SQL metadata for the relationship, if available."""
 
     class SupportsM2MRelatedName(Protocol):
         """Descriptor protocol exposing the configured reverse name."""
@@ -57,16 +39,6 @@ if TYPE_CHECKING:
             """Fetch projection query results as dictionaries."""
 
 
-def _idea_tags_sql_metadata() -> M2MSQLMetadata:
-    """Return resolved SQL metadata for the Idea.tags relationship."""
-    descriptor = cast("SupportsM2MSQLMetadata", Idea.tags)
-    metadata = descriptor.sql_metadata
-    if metadata is None:
-        msg = "Idea.tags SQL metadata is unavailable."
-        raise RuntimeError(msg)
-    return metadata
-
-
 def _idea_tags_related_name() -> str:
     """Return the reverse relation name for Idea.tags."""
     descriptor = cast("SupportsM2MRelatedName", Idea.tags)
@@ -87,7 +59,6 @@ class TagRepository:
             db: The SqliterDB instance.
         """
         self._db = db
-        self._idea_tags_metadata = _idea_tags_sql_metadata()
         self._idea_tags_related_name = _idea_tags_related_name()
 
     def create(self, name: str) -> Tag:
@@ -188,26 +159,7 @@ class TagRepository:
         Returns:
             List of linked tags ordered alphabetically.
         """
-        # SQL is assembled from trusted relationship metadata, not user input.
-        meta = self._idea_tags_metadata
-        query = (
-            "SELECT DISTINCT "  # noqa: S608
-            f'"{meta.to_column}" '
-            "FROM "
-            f'"{meta.junction_table}";'
-        )
-        rows = self._db.connect().execute(query)
-        tag_pks: list[int] = [int(row[0]) for row in rows.fetchall()]
-        if not tag_pks:
-            return []
-        # sqliter's FilterValue uses an invariant list union for __in values.
-        pk_filter = cast("FilterValue", tag_pks)
-        return (
-            self._db.select(Tag)
-            .filter(pk__in=pk_filter)
-            .order("name")
-            .fetch_all()
-        )
+        return [tag for tag, usage in self.list_with_usage() if usage > 0]
 
     def list_with_usage(self) -> list[tuple[Tag, int]]:
         """Return all tags and their linked-idea counts.

@@ -397,23 +397,6 @@ class TestTagRepository:
         with pytest.raises(KeyError, match="Missing projected field: name"):
             tag_repo.list_with_usage()
 
-    def test_metadata_helper_raises_when_descriptor_metadata_missing(
-        self,
-        mocker: MockerFixture,
-    ) -> None:
-        """Metadata helper should fail clearly when sql_metadata is missing."""
-        mocker.patch.object(
-            tag_repo_module,
-            "Idea",
-            SimpleNamespace(tags=SimpleNamespace(sql_metadata=None)),
-        )
-
-        with pytest.raises(
-            RuntimeError,
-            match=r"Idea\.tags SQL metadata is unavailable",
-        ):
-            tag_repo_module._idea_tags_sql_metadata()
-
     def test_related_name_helper_raises_when_descriptor_name_missing(
         self,
         mocker: MockerFixture,
@@ -1043,6 +1026,56 @@ class TestIdeaCursorStateRepository:
         """Missing idea should no-op when setting cursor position."""
         idea_cursor_state_repo.set_position(99999, 4)
         assert idea_cursor_state_repo.get_position(99999) is None
+
+    def test_list_positions_and_delete_for_idea(
+        self,
+        idea_cursor_state_repo: IdeaCursorStateRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Cursor positions should list and delete persisted state."""
+        idea = idea_repo.create("Cursor")
+        idea_cursor_state_repo.set_position(idea.pk, 9)
+
+        assert idea_cursor_state_repo.list_positions() == {idea.pk: 9}
+
+        idea_cursor_state_repo.delete_for_idea(idea.pk)
+        assert idea_cursor_state_repo.list_positions() == {}
+
+    def test_list_positions_raises_for_non_int_idea_id(
+        self,
+        idea_cursor_state_repo: IdeaCursorStateRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Unexpected non-int idea IDs should fail clearly."""
+
+        class _FakeCursorStateQuery:
+            def order(
+                self,
+                field: str,
+            ) -> _FakeCursorStateQuery:
+                assert field == "updated_at"
+                return self
+
+            @staticmethod
+            def fetch_all() -> list[SimpleNamespace]:
+                return [
+                    SimpleNamespace(
+                        idea_id="oops",
+                        body_cursor_position=1,
+                    )
+                ]
+
+        mocker.patch.object(
+            idea_cursor_state_repo._db,
+            "select",
+            return_value=_FakeCursorStateQuery(),
+        )
+
+        with pytest.raises(
+            TypeError,
+            match=r"Expected IdeaCursorState\.idea_id",
+        ):
+            idea_cursor_state_repo.list_positions()
 
 
 class TestGroupRepository:

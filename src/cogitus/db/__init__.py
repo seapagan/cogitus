@@ -1,4 +1,9 @@
-"""Database connection factory for Cogitus."""
+"""Database connection factory for Cogitus.
+
+Raw SQL remains intentional in this module for SQLite-specific PRAGMA,
+schema-inspection, and migration operations that are outside sqliter-py's
+documented ORM/query surface.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +28,13 @@ def _ensure_default_group(db: SqliterDB, default_group_name: str) -> int:
     if group is None:
         group = db.insert(Group(name=default_group_name))
     return group.pk
+
+
+def enable_wal_mode(db: SqliterDB) -> None:
+    """Enable WAL journaling for file-backed SQLite databases."""
+    if db.is_memory:
+        return
+    db.connect().execute("PRAGMA journal_mode=WAL;")
 
 
 def _column_exists(db: SqliterDB, table_name: str, column_name: str) -> bool:
@@ -120,7 +132,7 @@ def get_db(
         expanded = Path(db_path).expanduser()
         expanded.parent.mkdir(parents=True, exist_ok=True)
         db = SqliterDB(str(expanded))
-        db.connect().execute("PRAGMA journal_mode=WAL;")
+        enable_wal_mode(db)
 
     normalized_default_group_name = normalize_default_group_name(
         default_group_name

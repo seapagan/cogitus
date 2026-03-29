@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from cogitus.db import _column_exists, get_db
+from cogitus.db import _column_exists, enable_wal_mode, get_db
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.idea_cursor_state import IdeaCursorState
@@ -183,6 +183,18 @@ def test_get_db_file_enables_wal_mode(tmp_path: Path) -> None:
         result = db.connect().execute("PRAGMA journal_mode;").fetchone()
         assert result is not None
         assert str(result[0]).lower() == "wal"
+    finally:
+        db.close()
+
+
+def test_enable_wal_mode_is_noop_for_memory_db() -> None:
+    """In-memory databases should skip the WAL PRAGMA helper."""
+    db = get_db(memory=True)
+    try:
+        enable_wal_mode(db)
+        result = db.connect().execute("PRAGMA journal_mode;").fetchone()
+        assert result is not None
+        assert str(result[0]).lower() == "memory"
     finally:
         db.close()
 

@@ -53,6 +53,20 @@ class IdeaCursorStateRepository:
         existing.body_cursor_position = clamped_position
         self._db.update(existing)
 
+    def list_positions(self) -> dict[int, int]:
+        """Return the latest saved cursor position for each idea."""
+        states = (
+            self._db.select(IdeaCursorState).order("updated_at").fetch_all()
+        )
+        positions: dict[int, int] = {}
+        for state in states:
+            idea_id = state.idea_id
+            if not isinstance(idea_id, int):
+                msg = "Expected IdeaCursorState.idea_id to be an int"
+                raise TypeError(msg)
+            positions[idea_id] = max(0, state.body_cursor_position)
+        return positions
+
     def delete_for_idea(self, idea_pk: int) -> None:
         """Delete persisted cursor positions for an idea."""
         states = (

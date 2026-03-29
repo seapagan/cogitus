@@ -1,4 +1,9 @@
-"""SQLite FTS5-backed search backend."""
+"""SQLite FTS5-backed search backend.
+
+Raw SQL remains intentional in this module because SQLite FTS5 virtual tables,
+ranking functions, snippets, and MATCH queries are outside sqliter-py's
+documented ORM/query surface.
+"""
 
 from __future__ import annotations
 

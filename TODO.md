@@ -69,6 +69,10 @@ Ideas to add to Cogitus
   usage as we are using SQLite. See also the MCP server item below. Perhaps
   enable a local `cogitus` app to use a remote server instead of local SQLite
   file?
+- reevaluate the remote API cache design once there is less planned work and
+  technical debt: can we simplify from the current file-backed local cache to a
+  memory-backed cache without losing the needed sync, worker-thread, startup,
+  and cursor-state behavior?
 
 ## Undo and History
 
