@@ -111,27 +111,28 @@ class IdeaRepository:
 
     def list_all(
         self,
-        limit: int = 100,
+        limit: int | None = None,
         offset: int = 0,
     ) -> list[Idea]:
         """Fetch ideas ordered by most recently updated.
 
         Args:
-            limit: Maximum number of ideas to return.
+            limit: Maximum number of ideas to return, or all when None.
             offset: Number of ideas to skip.
 
         Returns:
             List of ideas sorted by updated_at descending.
         """
-        return (
+        query = (
             self._db.select(Idea)
             .select_related("group")
             .prefetch_related("tags")
             .order("updated_at", reverse=True)
-            .limit(limit)
             .offset(offset)
-            .fetch_all()
         )
+        if limit is not None:
+            query = query.limit(limit)
+        return query.fetch_all()
 
     def list_snapshot_ideas(self) -> list[Idea]:
         """Fetch all ideas with relations for a full snapshot export."""

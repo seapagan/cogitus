@@ -150,10 +150,11 @@ class TestIdeaService:
 
     def test_list_ideas(self, service: IdeaService) -> None:
         """All ideas are returned by list_ideas."""
-        service.create_idea("First")
-        service.create_idea("Second")
+        for i in range(105):
+            service.create_idea(f"Idea {i}")
+
         ideas = service.list_ideas()
-        assert len(ideas) == 2
+        assert len(ideas) == 105
 
     def test_list_tags(self, service: IdeaService) -> None:
         """All tags are returned alphabetically."""

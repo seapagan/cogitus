@@ -478,12 +478,11 @@ class TestIdeaRepository:
 
     def test_list_all(self, idea_repo: IdeaRepository) -> None:
         """All ideas are returned ordered by updated_at."""
-        idea_repo.create("First")
-        idea_repo.create("Second")
-        idea_repo.create("Third")
+        for i in range(105):
+            idea_repo.create(f"Idea {i}")
 
         ideas = idea_repo.list_all()
-        assert len(ideas) == 3
+        assert len(ideas) == 105
 
     def test_list_all_with_limit(self, idea_repo: IdeaRepository) -> None:
         """Limit parameter restricts result count."""

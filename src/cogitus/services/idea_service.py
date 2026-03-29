@@ -170,7 +170,7 @@ class IdeaService:
 
     def list_ideas(
         self,
-        limit: int = 100,
+        limit: int | None = None,
         offset: int = 0,
     ) -> list[Idea]:
         """List all ideas, most recently updated first.
