@@ -70,8 +70,11 @@ class TagRepository:
         try:
             return self._db.insert(Tag(name=normalized))
         except RecordInsertionError as exc:
-            msg = f'Tag "{normalized}" already exists'
-            raise ValueError(msg) from exc
+            existing = self.find_by_name(normalized)
+            if existing is not None:
+                msg = f'Tag "{normalized}" already exists'
+                raise ValueError(msg) from exc
+            raise
 
     def get(self, pk: int) -> Tag | None:
         """Return a tag by primary key."""

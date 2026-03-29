@@ -92,6 +92,24 @@ class TestTagRepository:
         with pytest.raises(ValueError, match='Tag "python" already exists'):
             tag_repo.create("Python")
 
+    def test_create_tag_preserves_non_duplicate_insert_errors(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Non-duplicate insert failures should not be rewritten."""
+        mocker.patch.object(
+            tag_repo._db,
+            "insert",
+            side_effect=RecordInsertionError("database is locked"),
+        )
+
+        with pytest.raises(
+            RecordInsertionError,
+            match="database is locked",
+        ):
+            tag_repo.create("python")
+
     def test_get_or_create_existing(self, tag_repo: TagRepository) -> None:
         """Existing tag is returned without duplication."""
         t1 = tag_repo.get_or_create("python")
@@ -219,7 +237,7 @@ class TestTagRepository:
         find_mock = mocker.patch.object(
             tag_repo,
             "find_by_name",
-            side_effect=[None, existing],
+            side_effect=[None, existing, existing],
         )
         mocker.patch.object(
             tag_repo._db,
@@ -230,7 +248,7 @@ class TestTagRepository:
         found = tag_repo.get_or_create("python")
 
         assert found.pk == existing.pk
-        assert find_mock.call_count == 2
+        assert find_mock.call_count == 3
 
     def test_list_in_use(
         self,
