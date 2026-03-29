@@ -380,6 +380,10 @@ def test_group_missing_and_validation_paths(api_client: TestClient) -> None:
 
     created = api_client.post("/api/v1/groups", json={"name": "source"})
     assert created.status_code == 201
+    update_duplicate = api_client.put(
+        f"/api/v1/groups/{created.json()['pk']}",
+        json={"name": "backend"},
+    )
     delete_bad_target = api_client.delete(
         f"/api/v1/groups/{created.json()['pk']}",
         params={"move_to_group_pk": 99999},
@@ -388,6 +392,9 @@ def test_group_missing_and_validation_paths(api_client: TestClient) -> None:
 
     assert create_invalid.status_code == 422
     assert update_invalid.status_code == 422
+    assert update_duplicate.status_code == 409
+    assert create_invalid.json()["detail"][0]["type"] == "string_too_short"
+    assert update_invalid.json()["detail"][0]["type"] == "string_too_short"
     assert get_missing.status_code == 404
     assert update_missing.status_code == 404
     assert delete_bad_target.status_code == 404

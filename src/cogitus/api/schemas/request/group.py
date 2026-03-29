@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class GroupCreateRequest(BaseModel):
     """Payload for creating a group."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
 
-    name: str
+    name: str = Field(min_length=1)
 
 
 class GroupUpdateRequest(BaseModel):
     """Payload for renaming a group."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
 
-    name: str
+    name: str = Field(min_length=1)
