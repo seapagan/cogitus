@@ -72,6 +72,77 @@ def _idea(
     )
 
 
+def _upsert_initial_idea(
+    repo: RemoteCacheRepository,
+    *,
+    with_tags: bool,
+) -> None:
+    """Insert the initial remote idea used in update-path tests."""
+    default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
+    initial_tags = (
+        [_tag(pk=1, name="python", created_at=2, updated_at=2)]
+        if with_tags
+        else []
+    )
+
+    repo.upsert_idea(
+        _idea(
+            pk=1,
+            title="Remote idea",
+            body="Initial body",
+            group=default_group,
+            tags=initial_tags,
+            timestamps=(3, 3),
+        )
+    )
+
+
+def _upsert_updated_idea(
+    repo: RemoteCacheRepository,
+    *,
+    with_tags: bool,
+) -> None:
+    """Insert the refreshed remote group/tag state and updated idea."""
+    updated_tags = (
+        [_tag(pk=2, name="httpx", created_at=5, updated_at=11)]
+        if with_tags
+        else []
+    )
+
+    repo.upsert_group(
+        _group(
+            pk=2,
+            name="platform",
+            created_at=4,
+            updated_at=9,
+        )
+    )
+    if with_tags:
+        repo.upsert_tag(
+            _tag(
+                pk=2,
+                name="httpx",
+                created_at=5,
+                updated_at=11,
+            )
+        )
+    repo.upsert_idea(
+        _idea(
+            pk=1,
+            title="Updated remote idea",
+            body="Changed body",
+            group=_group(
+                pk=2,
+                name="platform",
+                created_at=4,
+                updated_at=9,
+            ),
+            tags=updated_tags,
+            timestamps=(3, 12),
+        )
+    )
+
+
 def test_replace_snapshot_preserves_cursor_and_tags(
     db: SqliterDB,
 ) -> None:
@@ -191,49 +262,8 @@ def test_upsert_idea_updates_existing_rows_and_links(
     """Idea upserts should preserve remote timestamps and replace links."""
     service = IdeaService(db)
     repo = RemoteCacheRepository(db, default_group_name="default")
-    default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
-    python_tag = _tag(pk=1, name="python", created_at=2, updated_at=2)
-    initial = _idea(
-        pk=1,
-        title="Remote idea",
-        body="Initial body",
-        group=default_group,
-        tags=[python_tag],
-        timestamps=(3, 3),
-    )
-
-    repo.upsert_idea(initial)
-    repo.upsert_group(
-        _group(
-            pk=2,
-            name="platform",
-            created_at=4,
-            updated_at=9,
-        )
-    )
-    repo.upsert_tag(
-        _tag(
-            pk=2,
-            name="httpx",
-            created_at=5,
-            updated_at=11,
-        )
-    )
-
-    updated = _idea(
-        pk=1,
-        title="Updated remote idea",
-        body="Changed body",
-        group=_group(
-            pk=2,
-            name="platform",
-            created_at=4,
-            updated_at=9,
-        ),
-        tags=[_tag(pk=2, name="httpx", created_at=5, updated_at=11)],
-        timestamps=(3, 12),
-    )
-    repo.upsert_idea(updated)
+    _upsert_initial_idea(repo, with_tags=True)
+    _upsert_updated_idea(repo, with_tags=True)
 
     cached = service.get_idea_with_relations(1)
     assert cached is not None
@@ -250,41 +280,8 @@ def test_upsert_idea_rebuilds_search_index_with_updated_group(
     """Rebuilding search after an idea upsert should reflect the new group."""
     service = IdeaService(db)
     repo = RemoteCacheRepository(db, default_group_name="default")
-    default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
-
-    repo.upsert_idea(
-        _idea(
-            pk=1,
-            title="Remote idea",
-            body="Initial body",
-            group=default_group,
-            tags=[],
-            timestamps=(3, 3),
-        )
-    )
-    repo.upsert_group(
-        _group(
-            pk=2,
-            name="platform",
-            created_at=4,
-            updated_at=9,
-        )
-    )
-    repo.upsert_idea(
-        _idea(
-            pk=1,
-            title="Updated remote idea",
-            body="Changed body",
-            group=_group(
-                pk=2,
-                name="platform",
-                created_at=4,
-                updated_at=9,
-            ),
-            tags=[],
-            timestamps=(3, 12),
-        )
-    )
+    _upsert_initial_idea(repo, with_tags=False)
+    _upsert_updated_idea(repo, with_tags=False)
     repo.rebuild_search_index()
 
     assert service.search_results("group:platform")[0].idea.pk == 1
