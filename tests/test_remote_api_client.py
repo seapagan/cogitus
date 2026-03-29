@@ -21,6 +21,35 @@ from tests.remote_api_support import (
 )
 
 
+def _build_seeded_remote_client() -> tuple[MockRemoteAPI, RemoteAPIClient]:
+    """Return a client backed by seeded remote state."""
+    api = MockRemoteAPI()
+    api.groups[2] = StoredGroup(
+        pk=2,
+        created_at=4,
+        updated_at=4,
+        name="backend",
+    )
+    api.ideas[2] = StoredIdea(
+        pk=2,
+        created_at=5,
+        updated_at=5,
+        title="Second idea",
+        body="Second body",
+        group_pk=2,
+        tag_pks=[1],
+    )
+    api._next_group_pk = 3
+    api._next_idea_pk = 3
+    client = RemoteAPIClient(
+        base_url="http://remote.test",
+        username=REMOTE_USERNAME,
+        password=remote_secret(),
+        transport=api.transport(),
+    )
+    return api, client
+
+
 def test_remote_api_client_fetch_snapshot_reauths_after_unauthorized() -> None:
     """The remote client should reauthenticate once after a 401."""
     api = MockRemoteAPI()
@@ -52,37 +81,22 @@ def test_remote_api_client_requires_complete_config() -> None:
         client.fetch_snapshot()
 
 
-def test_remote_api_client_crud_methods_cover_all_routes(
+def test_remote_api_client_lists_all_ideas_with_pagination(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Client CRUD helpers should hit all route wrappers correctly."""
-    api = MockRemoteAPI()
-    api.groups[2] = StoredGroup(
-        pk=2,
-        created_at=4,
-        updated_at=4,
-        name="backend",
-    )
-    api.ideas[2] = StoredIdea(
-        pk=2,
-        created_at=5,
-        updated_at=5,
-        title="Second idea",
-        body="Second body",
-        group_pk=2,
-        tag_pks=[1],
-    )
-    api._next_group_pk = 3
-    api._next_idea_pk = 3
-    client = RemoteAPIClient(
-        base_url="http://remote.test",
-        username=REMOTE_USERNAME,
-        password=remote_secret(),
-        transport=api.transport(),
-    )
+    """The client should fetch paginated idea results across all pages."""
+    _, client = _build_seeded_remote_client()
     monkeypatch.setattr(api_client_module, "_IDEA_PAGE_SIZE", 1)
 
     ideas = client.list_all_ideas()
+
+    assert [idea.title for idea in ideas] == ["Second idea", "Seed idea"]
+
+
+def test_remote_api_client_idea_crud_helpers() -> None:
+    """Client idea helpers should create, update, and delete ideas."""
+    api, client = _build_seeded_remote_client()
+
     created = client.create_idea(
         IdeaCreateRequest(
             title="Remote idea",
@@ -101,13 +115,22 @@ def test_remote_api_client_crud_methods_cover_all_routes(
             last_known_updated_at=created.updated_at,
         ),
     )
+    client.delete_idea(updated.pk)
+
+    assert updated.title == "Updated remote idea"
+    assert updated.body == "Changed body"
+    assert updated.tags[0].name == "httpx"
+    assert created.pk not in api.ideas
+
+
+def test_remote_api_client_group_crud_helpers() -> None:
+    """Client group helpers should create, rename, and delete groups."""
+    _, client = _build_seeded_remote_client()
+
     created_group = client.create_group("platform")
     renamed_group = client.rename_group(created_group.pk, "services")
     client.delete_group(renamed_group.pk, move_to_group_pk=1)
-    client.delete_idea(updated.pk)
 
-    assert [idea.title for idea in ideas] == ["Second idea", "Seed idea"]
-    assert updated.title == "Updated remote idea"
     assert renamed_group.name == "services"
     assert [group.name for group in client.list_groups()] == [
         "backend",
