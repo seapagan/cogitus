@@ -1,0 +1,5 @@
+secret:
+  ignored_matches:
+  - match: cbbe2b0e6c7c266868c1822f3192d6be96d58a026a13edb0fc56da62bfd7e0c1
+    name: Username Password - commit://26b666b0a68e966609fa208b5add5d5e8cf99923/tests/conftest.py
+version: 2

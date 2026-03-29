@@ -31,3 +31,6 @@ site
 
 # local dev python version
 .python-version
+
+# Added by ggshield
+.cache_ggshield
