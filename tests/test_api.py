@@ -61,10 +61,44 @@ def test_protected_routes_require_auth(
     ideas = unauthenticated_api_client.get("/api/v1/ideas")
     groups = unauthenticated_api_client.get("/api/v1/groups")
     tags = unauthenticated_api_client.get("/api/v1/tags")
+    snapshot = unauthenticated_api_client.get("/api/v1/snapshot")
 
     assert ideas.status_code == 401
     assert groups.status_code == 401
     assert tags.status_code == 401
+    assert snapshot.status_code == 401
+
+
+def test_snapshot_returns_full_remote_dataset(api_client: TestClient) -> None:
+    """Snapshot endpoint should return groups, tags, and ideas together."""
+    group = api_client.post("/api/v1/groups", json={"name": "backend"})
+    assert group.status_code == 201
+    group_pk = group.json()["pk"]
+
+    created = api_client.post(
+        "/api/v1/ideas",
+        json={
+            "title": "Snapshot idea",
+            "body": "Serve one consistent payload",
+            "tags": ["remote", "snapshot"],
+            "group_pk": group_pk,
+        },
+    )
+    assert created.status_code == 201
+
+    response = api_client.get("/api/v1/snapshot")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [group["name"] for group in body["groups"]] == [
+        "backend",
+        "default",
+    ]
+    assert [tag["name"] for tag in body["tags"]] == [
+        "remote",
+        "snapshot",
+    ]
+    assert [idea["title"] for idea in body["ideas"]] == ["Snapshot idea"]
 
 
 def test_protected_routes_reject_invalid_tokens(

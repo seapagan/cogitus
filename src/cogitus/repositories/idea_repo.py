@@ -133,6 +133,16 @@ class IdeaRepository:
             .fetch_all()
         )
 
+    def list_snapshot_ideas(self) -> list[Idea]:
+        """Fetch all ideas with relations for a full snapshot export."""
+        return (
+            self._db.select(Idea)
+            .select_related("group")
+            .prefetch_related("tags")
+            .order("updated_at", reverse=True)
+            .fetch_all()
+        )
+
     def update(
         self,
         pk: int,

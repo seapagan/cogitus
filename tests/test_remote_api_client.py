@@ -69,6 +69,26 @@ def test_remote_api_client_fetch_snapshot_reauths_after_unauthorized() -> None:
     assert [idea.title for idea in snapshot.ideas] == ["Seed idea"]
 
 
+def test_remote_api_client_fetch_snapshot_uses_snapshot_route() -> None:
+    """Full snapshot refresh should use the dedicated snapshot endpoint."""
+    api, client = _build_seeded_remote_client()
+
+    snapshot = client.fetch_snapshot()
+
+    assert [group.name for group in snapshot.groups] == [
+        "backend",
+        "default",
+    ]
+    assert [idea.title for idea in snapshot.ideas] == [
+        "Second idea",
+        "Seed idea",
+    ]
+    assert api.snapshot_requests == 1
+    assert api.list_group_requests == 0
+    assert api.list_tag_requests == 0
+    assert api.list_idea_requests == 0
+
+
 def test_remote_api_client_requires_complete_config() -> None:
     """The remote client should reject incomplete remote configuration."""
     client = RemoteAPIClient(
@@ -130,12 +150,14 @@ def test_remote_api_client_group_crud_helpers() -> None:
     created_group = client.create_group("platform")
     renamed_group = client.rename_group(created_group.pk, "services")
     client.delete_group(renamed_group.pk, move_to_group_pk=1)
+    tags = client.list_tags()
 
     assert renamed_group.name == "services"
     assert [group.name for group in client.list_groups()] == [
         "backend",
         "default",
     ]
+    assert [tag.name for tag in tags] == ["python"]
 
 
 def test_remote_api_client_raises_for_network_and_auth_failures() -> None:

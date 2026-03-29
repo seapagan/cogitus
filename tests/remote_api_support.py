@@ -66,6 +66,10 @@ class MockRemoteAPI:
         self._next_group_pk = 2
         self._next_tag_pk = 2
         self._next_idea_pk = 2
+        self.snapshot_requests = 0
+        self.list_group_requests = 0
+        self.list_tag_requests = 0
+        self.list_idea_requests = 0
         self.token_requests = 0
         self.fail_next_protected_request = False
         self._current_token = ""
@@ -149,6 +153,7 @@ class MockRemoteAPI:
     ) -> dict[tuple[str, str], ProtectedRouteHandler]:
         """Return exact-match handlers for authenticated fake API routes."""
         return {
+            ("GET", "/api/v1/snapshot"): self._handle_snapshot,
             ("GET", "/api/v1/groups"): self._handle_list_groups,
             ("GET", "/api/v1/tags"): self._handle_list_tags,
             ("GET", "/api/v1/ideas"): self._handle_list_ideas,
@@ -168,6 +173,7 @@ class MockRemoteAPI:
     def _handle_list_groups(self, request: httpx.Request) -> httpx.Response:
         """Return all groups sorted by name."""
         del request
+        self.list_group_requests += 1
         return self._json_response(
             200,
             [
@@ -182,6 +188,7 @@ class MockRemoteAPI:
     def _handle_list_tags(self, request: httpx.Request) -> httpx.Response:
         """Return all tags sorted by name."""
         del request
+        self.list_tag_requests += 1
         return self._json_response(
             200,
             [
@@ -191,6 +198,38 @@ class MockRemoteAPI:
                     key=lambda item: item.name,
                 )
             ],
+        )
+
+    def _handle_snapshot(self, request: httpx.Request) -> httpx.Response:
+        """Return one consistent full dataset payload."""
+        del request
+        self.snapshot_requests += 1
+        return self._json_response(
+            200,
+            {
+                "groups": [
+                    self._group_payload(group)
+                    for group in sorted(
+                        self.groups.values(),
+                        key=lambda item: item.name,
+                    )
+                ],
+                "tags": [
+                    self._tag_payload(tag)
+                    for tag in sorted(
+                        self.tags.values(),
+                        key=lambda item: item.name,
+                    )
+                ],
+                "ideas": [
+                    self._idea_payload(idea)
+                    for idea in sorted(
+                        self.ideas.values(),
+                        key=lambda item: item.updated_at,
+                        reverse=True,
+                    )
+                ],
+            },
         )
 
     def _handle_token_request(self, request: httpx.Request) -> httpx.Response:
@@ -220,6 +259,7 @@ class MockRemoteAPI:
 
     def _handle_list_ideas(self, request: httpx.Request) -> httpx.Response:
         """Return paginated ideas sorted by most recent update."""
+        self.list_idea_requests += 1
         limit = int(request.url.params.get("limit", "1000"))
         offset = int(request.url.params.get("offset", "0"))
         ideas = sorted(

@@ -10,6 +10,7 @@ from fastapi.security import OAuth2PasswordBearer
 from cogitus.api.managers.auth_manager import AuthManager
 from cogitus.api.managers.group_manager import GroupManager
 from cogitus.api.managers.idea_manager import IdeaManager
+from cogitus.api.managers.snapshot_manager import SnapshotManager
 from cogitus.api.managers.tag_manager import TagManager
 from cogitus.config import get_settings
 from cogitus.services.idea_service import IdeaService
@@ -48,6 +49,13 @@ def get_tag_manager(
 ) -> TagManager:
     """Return a tag manager bound to the current service."""
     return TagManager(service)
+
+
+def get_snapshot_manager(
+    service: Annotated[IdeaService, Depends(get_service)],
+) -> SnapshotManager:
+    """Return a snapshot manager bound to the current service."""
+    return SnapshotManager(service)
 
 
 def get_auth_manager() -> AuthManager:

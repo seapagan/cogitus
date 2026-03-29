@@ -65,6 +65,10 @@ class IdeaService:
         """Return the canonical fallback group name."""
         return self._default_group_name
 
+    def transaction(self) -> SqliterDB:
+        """Return the service-owned DB for explicit transaction scopes."""
+        return self._db
+
     def create_idea(
         self,
         title: str,
@@ -175,6 +179,10 @@ class IdeaService:
             List of all ideas.
         """
         return self._idea_repo.list_all(limit=limit, offset=offset)
+
+    def list_snapshot_ideas(self) -> list[Idea]:
+        """List all ideas with relations for a full snapshot response."""
+        return self._idea_repo.list_snapshot_ideas()
 
     def search_ideas(self, query: str) -> list[Idea]:
         """Search ideas by visible text and optional structured filters.

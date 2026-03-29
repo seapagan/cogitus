@@ -13,6 +13,7 @@ from cogitus.api.schemas.request.group import (
 from cogitus.api.schemas.response.auth import TokenResponse
 from cogitus.api.schemas.response.group import GroupResponse
 from cogitus.api.schemas.response.idea import IdeaResponse
+from cogitus.api.schemas.response.snapshot import SnapshotResponse
 from cogitus.api.schemas.response.tag import TagResponse
 from cogitus.backends.types import RemoteSnapshot
 from cogitus.config import (
@@ -62,11 +63,14 @@ class RemoteAPIClient:
         self._client.close()
 
     def fetch_snapshot(self) -> RemoteSnapshot:
-        """Fetch groups, tags, and ideas for a full local-cache refresh."""
+        """Fetch one server-side snapshot for a full local-cache refresh."""
+        snapshot = SnapshotResponse.model_validate(
+            self._request("GET", "/api/v1/snapshot").json()
+        )
         return RemoteSnapshot(
-            groups=self.list_groups(),
-            tags=self.list_tags(),
-            ideas=self.list_all_ideas(),
+            groups=snapshot.groups,
+            tags=snapshot.tags,
+            ideas=snapshot.ideas,
         )
 
     def list_groups(self) -> list[GroupResponse]:

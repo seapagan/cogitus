@@ -73,6 +73,12 @@ Ideas to add to Cogitus
   technical debt: can we simplify from the current file-backed local cache to a
   memory-backed cache without losing the needed sync, worker-thread, startup,
   and cursor-state behavior?
+- split API database startup initialization from per-request connection
+  creation, then revisit changing synchronous API handlers from `async def` to
+  `def` so FastAPI can safely use a threadpool with request-scoped `SqliterDB`
+  / `IdeaService` instances.
+- replace pre-edit full remote sync with a targeted single-idea refresh so
+  editing one idea does not require pulling the whole remote snapshot first.
 
 ## Undo and History
 

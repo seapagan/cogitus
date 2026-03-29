@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from cogitus.api.resources.auth import router as auth_router
 from cogitus.api.resources.groups import router as groups_router
 from cogitus.api.resources.ideas import router as ideas_router
+from cogitus.api.resources.snapshot import router as snapshot_router
 from cogitus.api.resources.tags import router as tags_router
 from cogitus.config import get_settings
 from cogitus.db import get_db
@@ -73,6 +74,7 @@ def create_api_app(
     app.include_router(ideas_router)
     app.include_router(groups_router)
     app.include_router(tags_router)
+    app.include_router(snapshot_router)
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
