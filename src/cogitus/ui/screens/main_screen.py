@@ -293,39 +293,48 @@ class MainScreen(Screen[None]):
         if event.worker is not self._remote_sync_worker:
             return
         if event.state == WorkerState.SUCCESS:
-            was_read_only = self._remote_cached_read_only
-            self._initial_remote_sync_pending = False
-            self._remote_sync_error = None
-            self._clear_sync_indicator()
-            if was_read_only:
-                self._set_remote_cached_read_only(read_only=False)
-                restore_remote_mode = getattr(
-                    self.app,
-                    "restore_remote_mode",
-                    None,
-                )
-                if callable(restore_remote_mode):
-                    restore_remote_mode()
-                self.notify("Remote API reconnected")
+            self._handle_remote_sync_success()
             self._refresh_after_remote_sync()
             return
         if event.state == WorkerState.ERROR:
-            self._clear_sync_indicator()
-            message = (
-                str(event.worker.error)
-                if event.worker.error is not None
-                else "Remote sync failed"
-            )
-            if self._initial_remote_sync_pending:
-                self._initial_remote_sync_pending = False
-                self._show_remote_startup_recovery(message)
-                return
-            if self._remote_cached_read_only:
-                self._remote_sync_error = message
-                return
-            if message != self._remote_sync_error:
-                self.notify(message, severity="error")
+            self._handle_remote_sync_error(event.worker)
+
+    def _handle_remote_sync_success(self) -> None:
+        """Apply UI state updates after a successful remote sync."""
+        was_read_only = self._remote_cached_read_only
+        self._initial_remote_sync_pending = False
+        self._remote_sync_error = None
+        self._clear_sync_indicator()
+        if not was_read_only:
+            return
+        self._set_remote_cached_read_only(read_only=False)
+        restore_remote_mode = getattr(
+            self.app,
+            "restore_remote_mode",
+            None,
+        )
+        if callable(restore_remote_mode):
+            restore_remote_mode()
+        self.notify("Remote API reconnected")
+
+    def _handle_remote_sync_error(self, worker: Worker[None]) -> None:
+        """Apply UI state updates after a failed remote sync."""
+        self._clear_sync_indicator()
+        message = (
+            str(worker.error)
+            if worker.error is not None
+            else "Remote sync failed"
+        )
+        if self._initial_remote_sync_pending:
+            self._initial_remote_sync_pending = False
+            self._show_remote_startup_recovery(message)
+            return
+        if self._remote_cached_read_only:
             self._remote_sync_error = message
+            return
+        if message != self._remote_sync_error:
+            self.notify(message, severity="error")
+        self._remote_sync_error = message
 
     def _show_remote_startup_recovery(self, message: str) -> None:
         """Open the startup recovery modal for an initial remote failure."""

@@ -11,6 +11,7 @@ from cogitus.api.schemas.response.idea import IdeaResponse
 from cogitus.api.schemas.response.tag import TagResponse
 from cogitus.backends.types import RemoteSnapshot
 from cogitus.models.group import Group
+from cogitus.models.tag import Tag
 from cogitus.repositories.remote_cache_repo import RemoteCacheRepository
 from cogitus.services.idea_service import IdeaService
 
@@ -133,24 +134,11 @@ def test_replace_snapshot_handles_empty_tag_and_idea_lists(
     assert service.list_tags() == []
 
 
-def test_upsert_group_tag_and_idea_update_existing_rows(
+def test_upsert_group_and_tag_update_existing_rows(
     db: SqliterDB,
 ) -> None:
-    """Per-record upserts should preserve remote timestamps and links."""
-    service = IdeaService(db)
+    """Group and tag upserts should preserve remote timestamps."""
     repo = RemoteCacheRepository(db, default_group_name="default")
-    default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
-    python_tag = _tag(pk=1, name="python", created_at=2, updated_at=2)
-    initial = _idea(
-        pk=1,
-        title="Remote idea",
-        body="Initial body",
-        group=default_group,
-        tags=[python_tag],
-        timestamps=(3, 3),
-    )
-
-    repo.upsert_idea(initial)
     repo.upsert_group(
         _group(
             pk=2,
@@ -173,6 +161,54 @@ def test_upsert_group_tag_and_idea_update_existing_rows(
             name="http",
             created_at=5,
             updated_at=5,
+        )
+    )
+    repo.upsert_tag(
+        _tag(
+            pk=2,
+            name="httpx",
+            created_at=5,
+            updated_at=11,
+        )
+    )
+
+    cached_group = repo._db.select(Group).filter(pk=2).fetch_one()
+    cached_tag = repo._db.select(Tag).filter(pk=2).fetch_one()
+
+    assert cached_group is not None
+    assert cached_group.name == "platform"
+    assert cached_group.created_at == 4
+    assert cached_group.updated_at == 9
+    assert cached_tag is not None
+    assert cached_tag.name == "httpx"
+    assert cached_tag.created_at == 5
+    assert cached_tag.updated_at == 11
+
+
+def test_upsert_idea_updates_existing_rows_and_links(
+    db: SqliterDB,
+) -> None:
+    """Idea upserts should preserve remote timestamps and replace links."""
+    service = IdeaService(db)
+    repo = RemoteCacheRepository(db, default_group_name="default")
+    default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
+    python_tag = _tag(pk=1, name="python", created_at=2, updated_at=2)
+    initial = _idea(
+        pk=1,
+        title="Remote idea",
+        body="Initial body",
+        group=default_group,
+        tags=[python_tag],
+        timestamps=(3, 3),
+    )
+
+    repo.upsert_idea(initial)
+    repo.upsert_group(
+        _group(
+            pk=2,
+            name="platform",
+            created_at=4,
+            updated_at=9,
         )
     )
     repo.upsert_tag(

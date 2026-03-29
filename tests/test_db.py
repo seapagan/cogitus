@@ -14,6 +14,7 @@ from cogitus.models.idea_cursor_state import IdeaCursorState
 from cogitus.models.tag import Tag
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
 
@@ -25,6 +26,52 @@ def _index_names(db_path: Path, table_name: str) -> set[str]:
     finally:
         conn.close()
     return {str(row[1]) for row in rows}
+
+
+def _create_legacy_ideas_db(
+    db_path: Path,
+    *,
+    idea_rows: Sequence[tuple[str, str, int | None]],
+    group_rows: Sequence[tuple[int, str]] = (),
+) -> None:
+    """Create a legacy ideas schema with optional groups and seeded rows."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        if group_rows:
+            conn.execute(
+                """
+                CREATE TABLE groups (
+                    pk INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                    name TEXT NOT NULL UNIQUE
+                );
+                """
+            )
+            conn.executemany(
+                "INSERT INTO groups (pk, name) VALUES (?, ?)",
+                group_rows,
+            )
+        conn.execute(
+            """
+            CREATE TABLE ideas (
+                pk INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                title TEXT NOT NULL,
+                body TEXT NOT NULL DEFAULT '',
+                group_id INTEGER
+            );
+            """
+        )
+        conn.executemany(
+            "INSERT INTO ideas (title, body, group_id) VALUES (?, ?, ?)",
+            idea_rows,
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def test_get_db_memory_creates_tables() -> None:
@@ -154,28 +201,10 @@ def test_get_db_backfills_null_group_id_for_existing_column(
 ) -> None:
     """Rows with NULL group_id should be repaired to default group."""
     db_file = tmp_path / "legacy-null-group" / "cogitus.db"
-    db_file.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_file))
-    try:
-        conn.execute(
-            """
-            CREATE TABLE ideas (
-                pk INTEGER PRIMARY KEY AUTOINCREMENT,
-                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-                title TEXT NOT NULL,
-                body TEXT NOT NULL DEFAULT '',
-                group_id INTEGER
-            );
-            """
-        )
-        conn.execute(
-            "INSERT INTO ideas (title, body, group_id) VALUES (?, ?, ?)",
-            ("Legacy NULL group", "", None),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    _create_legacy_ideas_db(
+        db_file,
+        idea_rows=(("Legacy NULL group", "", None),),
+    )
 
     migrated = get_db(str(db_file))
     try:
@@ -195,42 +224,11 @@ def test_get_db_ensures_group_index_when_legacy_rows_need_no_repair(
 ) -> None:
     """Legacy ideas with valid group IDs should still get the FK index."""
     db_file = tmp_path / "legacy-valid-group" / "cogitus.db"
-    db_file.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_file))
-    try:
-        conn.execute(
-            """
-            CREATE TABLE groups (
-                pk INTEGER PRIMARY KEY AUTOINCREMENT,
-                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-                name TEXT NOT NULL UNIQUE
-            );
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE ideas (
-                pk INTEGER PRIMARY KEY AUTOINCREMENT,
-                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-                title TEXT NOT NULL,
-                body TEXT NOT NULL DEFAULT '',
-                group_id INTEGER
-            );
-            """
-        )
-        conn.execute(
-            "INSERT INTO groups (pk, name) VALUES (?, ?)",
-            (1, "existing"),
-        )
-        conn.execute(
-            "INSERT INTO ideas (title, body, group_id) VALUES (?, ?, ?)",
-            ("Legacy valid group", "", 1),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    _create_legacy_ideas_db(
+        db_file,
+        group_rows=((1, "existing"),),
+        idea_rows=(("Legacy valid group", "", 1),),
+    )
 
     migrated = get_db(str(db_file))
     try:
@@ -252,28 +250,10 @@ def test_get_db_backfills_legacy_ideas_to_configured_default_group(
 ) -> None:
     """Legacy rows should be repaired into configured fallback group."""
     db_file = tmp_path / "legacy-custom-default" / "cogitus.db"
-    db_file.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_file))
-    try:
-        conn.execute(
-            """
-            CREATE TABLE ideas (
-                pk INTEGER PRIMARY KEY AUTOINCREMENT,
-                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-                title TEXT NOT NULL,
-                body TEXT NOT NULL DEFAULT '',
-                group_id INTEGER
-            );
-            """
-        )
-        conn.execute(
-            "INSERT INTO ideas (title, body, group_id) VALUES (?, ?, ?)",
-            ("Legacy NULL group", "", None),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    _create_legacy_ideas_db(
+        db_file,
+        idea_rows=(("Legacy NULL group", "", None),),
+    )
 
     migrated = get_db(str(db_file), default_group_name="inbox")
     try:
