@@ -221,7 +221,14 @@ def test_idea_list_supports_query_limit_and_offset(
 def test_create_idea_with_missing_group_returns_not_found(
     api_client: TestClient,
 ) -> None:
-    """Idea creation should reject unknown groups."""
+    """Idea creation should reject invalid titles and unknown groups."""
+    invalid = api_client.post(
+        "/api/v1/ideas",
+        json={"title": "   ", "body": "", "tags": []},
+    )
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"][0]["type"] == "string_too_short"
+
     response = api_client.post(
         "/api/v1/ideas",
         json={
@@ -258,12 +265,19 @@ def test_update_and_delete_missing_idea_return_not_found(
 def test_update_idea_with_missing_group_returns_not_found(
     api_client: TestClient,
 ) -> None:
-    """Idea updates should reject unknown group targets."""
+    """Idea updates should reject invalid titles and unknown groups."""
     created = api_client.post(
         "/api/v1/ideas",
         json={"title": "Idea", "body": "", "tags": []},
     )
     assert created.status_code == 201
+
+    invalid = api_client.put(
+        f"/api/v1/ideas/{created.json()['pk']}",
+        json={"title": "   ", "body": "", "tags": [], "group_pk": None},
+    )
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"][0]["type"] == "string_too_short"
 
     response = api_client.put(
         f"/api/v1/ideas/{created.json()['pk']}",

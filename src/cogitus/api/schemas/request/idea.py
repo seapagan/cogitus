@@ -8,9 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class IdeaCreateRequest(BaseModel):
     """Payload for creating an idea."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    title: str
+    title: str = Field(min_length=1)
     body: str = ""
     tags: list[str] = Field(default_factory=list)
     group_pk: int | None = None
@@ -19,9 +19,9 @@ class IdeaCreateRequest(BaseModel):
 class IdeaUpdateRequest(BaseModel):
     """Payload for replacing an idea."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    title: str
+    title: str = Field(min_length=1)
     body: str = ""
     tags: list[str] = Field(default_factory=list)
     group_pk: int | None = None
