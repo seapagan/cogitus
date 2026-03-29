@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from rich.table import Table
@@ -730,6 +731,108 @@ class ConfirmDialog(ModalScreen[bool]):
     def action_cancel(self) -> None:
         """Cancel the action."""
         self.dismiss(False)
+
+
+class RemoteStartupRecoveryAction(str, Enum):
+    """Actions offered when the initial remote sync fails."""
+
+    RETRY = "retry"
+    USE_CACHE = "use_cache"
+    SWITCH_LOCAL = "switch_local"
+    QUIT = "quit"
+
+
+class RemoteStartupRecoveryScreen(
+    ModalScreen[RemoteStartupRecoveryAction],
+):
+    """Recovery modal shown when remote mode fails during startup."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("r", "retry", "Retry", show=False),
+        Binding("c", "use_cache", "Use Cache", show=False),
+        Binding("l", "switch_local", "Local Mode", show=False),
+        Binding("q,escape", "quit_app", "Quit", show=False),
+    ]
+
+    def __init__(self, message: str) -> None:
+        """Initialize the recovery modal with the sync failure message."""
+        super().__init__()
+        self._message = message
+
+    def compose(self) -> ComposeResult:
+        """Compose the startup recovery dialog."""
+        with Vertical(id="remote-startup-container"):
+            yield Static("Remote API Unavailable", id="form-title")
+            yield Static(
+                (
+                    f"{self._message}\n\n"
+                    "Using cached remote data puts Cogitus into "
+                    "READ-ONLY mode while the API is unavailable.\n"
+                    "Cached remote data may be stale or empty.\n"
+                    "Switching to local mode uses a separate local SQLite "
+                    "database, which may differ from the remote data.\n"
+                    "Local fallback only applies to this session and does "
+                    "not sync changes back automatically."
+                ),
+                id="remote-startup-message",
+            )
+            with Horizontal(id="remote-startup-buttons"):
+                yield Button(
+                    "Retry [R]",
+                    variant="primary",
+                    id="retry-remote-btn",
+                )
+                yield Button(
+                    "Use Cache [C]",
+                    variant="default",
+                    id="use-cache-btn",
+                )
+                yield Button(
+                    "Use Local [L]",
+                    variant="default",
+                    id="use-local-btn",
+                )
+                yield Button(
+                    "Quit [Q]",
+                    variant="error",
+                    id="quit-startup-btn",
+                )
+
+    @on(Button.Pressed, "#retry-remote-btn")
+    def _handle_retry_button(self) -> None:
+        """Retry the remote connection when requested."""
+        self.action_retry()
+
+    @on(Button.Pressed, "#use-cache-btn")
+    def _handle_use_cache_button(self) -> None:
+        """Continue with cached remote data when requested."""
+        self.action_use_cache()
+
+    @on(Button.Pressed, "#use-local-btn")
+    def _handle_use_local_button(self) -> None:
+        """Switch to session-local mode when requested."""
+        self.action_switch_local()
+
+    @on(Button.Pressed, "#quit-startup-btn")
+    def _handle_quit_button(self) -> None:
+        """Quit the application when requested."""
+        self.action_quit_app()
+
+    def action_retry(self) -> None:
+        """Dismiss with the retry action."""
+        self.dismiss(RemoteStartupRecoveryAction.RETRY)
+
+    def action_use_cache(self) -> None:
+        """Dismiss with the cached remote action."""
+        self.dismiss(RemoteStartupRecoveryAction.USE_CACHE)
+
+    def action_switch_local(self) -> None:
+        """Dismiss with the session-local fallback action."""
+        self.dismiss(RemoteStartupRecoveryAction.SWITCH_LOCAL)
+
+    def action_quit_app(self) -> None:
+        """Dismiss with the quit action."""
+        self.dismiss(RemoteStartupRecoveryAction.QUIT)
 
 
 class GroupFormScreen(ModalScreen[int | None]):

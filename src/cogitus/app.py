@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from textual.app import App, SystemCommand
+from textual.app import App, ScreenStackError, SystemCommand
 
 from cogitus.backends import (
     BackendConfig,
@@ -85,6 +85,8 @@ class CogitusApp(App[None]):
         self._injected_db = db
         self._settings = settings if settings is not None else get_settings()
         self._load_settings_state()
+        self._session_backend_mode_override: DataBackendMode | None = None
+        self._remote_runtime_offline = False
         self._update_title()
         last_viewed = self._settings.last_viewed_idea_pk
         self._last_viewed_idea_pk = last_viewed if last_viewed > 0 else None
@@ -150,15 +152,29 @@ class CogitusApp(App[None]):
 
     def _backend_title_suffix(self) -> str:
         """Return the current backend mode label for the app title."""
-        if self._data_backend_mode == DataBackendMode.API:
+        if self._active_backend_mode() == DataBackendMode.API:
+            if self._remote_runtime_offline:
+                return "remote: offline"
             return "remote"
         return "local"
+
+    def _active_backend_mode(self) -> DataBackendMode:
+        """Return the active runtime backend mode."""
+        if self._session_backend_mode_override is not None:
+            return self._session_backend_mode_override
+        return self._data_backend_mode
 
     def _update_title(self) -> None:
         """Refresh the visible app title for the active backend mode."""
         self.title = (
             f"{self._app_metadata.title} [{self._backend_title_suffix()}]"
         )
+        try:
+            screen = self.screen
+        except ScreenStackError:
+            return
+        if isinstance(screen, MainScreen):
+            screen.title = self.title
 
     def _build_local_db(
         self,
@@ -198,18 +214,25 @@ class CogitusApp(App[None]):
         *,
         db_path: str | None,
         db: SqliterDB | None,
+        mode: DataBackendMode | None = None,
     ) -> SqliterDB:
         """Build the backing SQLite database for the selected mode."""
-        if self._data_backend_mode == DataBackendMode.API:
+        resolved_mode = self._active_backend_mode() if mode is None else mode
+        if resolved_mode == DataBackendMode.API:
             return self._build_remote_cache_db(db_path=db_path, db=db)
         return self._build_local_db(db_path=db_path, db=db)
 
-    def _build_backend(self) -> IdeaBackend:
+    def _build_backend(
+        self,
+        *,
+        mode: DataBackendMode | None = None,
+    ) -> IdeaBackend:
         """Build the configured local or remote backend implementation."""
         if self._db is None:
             msg = "Backend database is not initialized"
             raise RuntimeError(msg)
-        if self._data_backend_mode == DataBackendMode.API:
+        resolved_mode = self._active_backend_mode() if mode is None else mode
+        if resolved_mode == DataBackendMode.API:
             client = RemoteAPIClient(
                 base_url=self._remote_api_base_url,
                 username=self._remote_api_username,
@@ -228,7 +251,7 @@ class CogitusApp(App[None]):
     def get_backend_config(self) -> BackendConfig:
         """Return the current backend configuration snapshot."""
         return BackendConfig(
-            mode=self._data_backend_mode,
+            mode=self._active_backend_mode(),
             api_base_url=self._remote_api_base_url,
             api_username=self._remote_api_username,
             api_password=self._remote_api_password,
@@ -244,16 +267,48 @@ class CogitusApp(App[None]):
         self._settings.remote_api_password = config.api_password
         self._settings.save()
         self._load_settings_state()
+        self._session_backend_mode_override = None
+        self._remote_runtime_offline = False
         self._update_title()
         self._db = self._build_backend_db(
             db_path=self._db_path,
             db=self._injected_db,
+            mode=self._data_backend_mode,
         )
-        self._service = self._build_backend()
+        self._service = self._build_backend(mode=self._data_backend_mode)
         if isinstance(self.screen, MainScreen):
             self.screen.replace_service(self._service)
-            self.screen.title = self.title
         self._notify_invalid_config()
+
+    def activate_cached_remote_mode(self) -> None:
+        """Mark the active remote backend as temporarily offline."""
+        if self._active_backend_mode() != DataBackendMode.API:
+            return
+        self._remote_runtime_offline = True
+        self._update_title()
+
+    def restore_remote_mode(self) -> None:
+        """Clear the temporary offline state for the remote backend."""
+        if self._active_backend_mode() != DataBackendMode.API:
+            return
+        self._remote_runtime_offline = False
+        self._update_title()
+
+    def activate_session_local_fallback(self) -> None:
+        """Switch to local mode for the current session only."""
+        if isinstance(self._service, RemoteIdeaBackend):
+            self._service.close()
+        self._session_backend_mode_override = DataBackendMode.LOCAL
+        self._remote_runtime_offline = False
+        self._db = self._build_backend_db(
+            db_path=self._db_path,
+            db=self._injected_db,
+            mode=DataBackendMode.LOCAL,
+        )
+        self._service = self._build_backend(mode=DataBackendMode.LOCAL)
+        self._update_title()
+        if isinstance(self.screen, MainScreen):
+            self.screen.replace_service(self._service)
 
     def _build_main_screen(self) -> MainScreen:
         """Build the main application screen."""

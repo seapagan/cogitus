@@ -12,9 +12,10 @@ from rich.table import Table
 from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
-from textual.containers import Container, VerticalScroll
+from textual.containers import Container, Vertical, VerticalScroll
 from textual.widgets import (
     Button,
+    Footer,
     Header,
     Input,
     Markdown,
@@ -41,9 +42,12 @@ from cogitus.ui.screens.idea_form_screen import (
     HelpScreen,
     IdeaFormScreen,
     NameInputScreen,
+    RemoteStartupRecoveryAction,
+    RemoteStartupRecoveryScreen,
 )
 from cogitus.ui.screens.main_screen import MainScreen
 from cogitus.ui.widgets import idea_list as idea_list_module
+from cogitus.ui.widgets.footer import CogitusStatusBar, FooterNotice
 from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
 from cogitus.ui.widgets.search_results import SearchResultsList
@@ -1240,6 +1244,79 @@ async def test_confirm_dialog_actions(mocker: MockerFixture) -> None:
         dismiss.reset_mock()
         await pilot.click("#confirm-no-btn")
         dismiss.assert_called_once_with(False)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_remote_startup_recovery_screen_actions(
+    mocker: MockerFixture,
+) -> None:
+    """Startup recovery modal should dismiss with the selected action."""
+    screen = RemoteStartupRecoveryScreen("Could not reach the remote API")
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+
+        await pilot.click("#retry-remote-btn")
+        dismiss.assert_called_once_with(RemoteStartupRecoveryAction.RETRY)
+
+        dismiss.reset_mock()
+        await pilot.click("#use-cache-btn")
+        dismiss.assert_called_once_with(RemoteStartupRecoveryAction.USE_CACHE)
+
+        dismiss.reset_mock()
+        await pilot.click("#use-local-btn")
+        dismiss.assert_called_once_with(
+            RemoteStartupRecoveryAction.SWITCH_LOCAL
+        )
+
+        dismiss.reset_mock()
+        await pilot.click("#quit-startup-btn")
+        dismiss.assert_called_once_with(RemoteStartupRecoveryAction.QUIT)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_remote_startup_recovery_screen_layout() -> None:
+    """Recovery modal should be centered and wide enough for its contents."""
+    screen = RemoteStartupRecoveryScreen("Could not reach the remote API")
+    app = _StyledSingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        container = screen.query_one("#remote-startup-container", Vertical)
+        center_x = container.region.x + (container.region.width // 2)
+        center_y = container.region.y + (container.region.height // 2)
+
+        assert abs(center_x - (app.size.width // 2)) <= 2
+        assert abs(center_y - (app.size.height // 2)) <= 2
+        assert container.region.width >= 70
+
+        for button_id in (
+            "#retry-remote-btn",
+            "#use-cache-btn",
+            "#use-local-btn",
+            "#quit-startup-btn",
+        ):
+            button = screen.query_one(button_id, Button)
+            leftover = button.region.width - len(str(button.label))
+            assert leftover % 2 == 0
+            assert leftover >= 4
+
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_remote_startup_recovery_screen_mentions_read_only_cache() -> (
+    None
+):
+    """Recovery modal should make cached mode read-only explicit."""
+    screen = RemoteStartupRecoveryScreen("Could not reach the remote API")
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        message = screen.query_one("#remote-startup-message", Static)
+        assert "READ-ONLY mode" in str(message.content)
         await pilot.pause()
 
 
@@ -2634,6 +2711,78 @@ async def test_main_screen_footer_hides_backend_settings_binding(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_footer_shows_cached_remote_warning(
+    service: IdeaService,
+) -> None:
+    """Cached remote mode should show warning without blanking bindings."""
+    screen = MainScreen(service)
+    app = _StyledSingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        service.create_idea("Seed")
+        await pilot.pause()
+
+        screen._set_remote_cached_read_only(read_only=True)
+        await pilot.pause()
+
+        footer = screen.query_one(CogitusStatusBar)
+        warning = screen.query_one("#footer-cache-warning", FooterNotice)
+        bindings_footer = screen.query_one("#bindings-footer", Footer)
+
+        assert footer.show_cache_warning is True
+        assert warning.description == "READ-ONLY CACHE"
+        assert warning.region.width >= len("READ-ONLY CACHE") + 2
+        assert warning.display is True
+        assert bindings_footer.display is True
+        assert any(
+            child.__class__.__name__ == "FooterKey"
+            for child in bindings_footer.children
+        )
+
+
+def test_cogitus_status_bar_handles_disabled_command_palette(
+    mocker: MockerFixture,
+) -> None:
+    """Status bar should omit the palette hint when the app disables it."""
+    status_bar = CogitusStatusBar()
+    fake_app = mocker.Mock(ENABLE_COMMAND_PALETTE=False)
+    mocker.patch.object(
+        type(status_bar),
+        "app",
+        new_callable=PropertyMock,
+        return_value=fake_app,
+    )
+
+    assert status_bar._build_palette_hint() is None
+
+
+def test_cogitus_status_bar_handles_missing_palette_binding(
+    mocker: MockerFixture,
+) -> None:
+    """Status bar should omit the palette hint when no binding is active."""
+    status_bar = CogitusStatusBar()
+    fake_app = mocker.Mock(
+        ENABLE_COMMAND_PALETTE=True,
+        COMMAND_PALETTE_BINDING="ctrl+p",
+    )
+    fake_screen = mocker.Mock(active_bindings={})
+    mocker.patch.object(
+        type(status_bar),
+        "app",
+        new_callable=PropertyMock,
+        return_value=fake_app,
+    )
+    mocker.patch.object(
+        type(status_bar),
+        "screen",
+        new_callable=PropertyMock,
+        return_value=fake_screen,
+    )
+
+    assert status_bar._build_palette_hint() is None
+
+
+@pytest.mark.asyncio
 async def test_main_screen_search_mode_hides_switch_pane_binding(
     service: IdeaService,
 ) -> None:
@@ -3830,6 +3979,83 @@ async def test_cogitus_app_apply_backend_config_closes_remote_backend(
 
 
 @pytest.mark.asyncio
+async def test_cogitus_app_cached_remote_mode_updates_titles(
+    db: SqliterDB,
+) -> None:
+    """Runtime remote offline state should only affect the active title."""
+    settings = _FakeSettings(
+        backend_config=BackendConfig(
+            mode=DataBackendMode.API,
+            api_base_url="http://127.0.0.1:8000",
+            api_username="api-user",
+            api_password=_remote_secret(),
+        )
+    )
+    app = CogitusApp(db=db, settings=settings)
+
+    async with app.run_test() as pilot:
+        app.activate_cached_remote_mode()
+        assert app.title == "Cogitus [remote: offline]"
+        assert app.screen.title == "Cogitus [remote: offline]"
+        assert settings.data_backend_mode == DataBackendMode.API.value
+
+        app.restore_remote_mode()
+        assert app.title == "Cogitus [remote]"
+        assert app.screen.title == "Cogitus [remote]"
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_remote_runtime_title_helpers_are_noops_in_local_mode(
+    db: SqliterDB,
+) -> None:
+    """Remote runtime title helpers should no-op when local mode is active."""
+    app = CogitusApp(db=db, settings=_FakeSettings())
+
+    async with app.run_test() as pilot:
+        app.activate_cached_remote_mode()
+        assert app.title == "Cogitus [local]"
+
+        app.restore_remote_mode()
+        assert app.title == "Cogitus [local]"
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_session_local_fallback_is_not_persisted(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Session-local fallback should not rewrite persisted backend settings."""
+    settings = _FakeSettings(
+        backend_config=BackendConfig(
+            mode=DataBackendMode.API,
+            api_base_url="http://127.0.0.1:8000",
+            api_username="api-user",
+            api_password=_remote_secret(),
+        )
+    )
+    app = CogitusApp(db=db, settings=settings)
+
+    async with app.run_test() as pilot:
+        assert isinstance(app._service, RemoteIdeaBackend)
+        close = mocker.patch.object(app._service, "close")
+
+        app.activate_session_local_fallback()
+
+        close.assert_called_once_with()
+        assert settings.data_backend_mode == DataBackendMode.API.value
+        assert not isinstance(app._service, RemoteIdeaBackend)
+        assert app.get_backend_config().mode == DataBackendMode.LOCAL
+        assert app.title == "Cogitus [local]"
+        assert app.screen.title == "Cogitus [local]"
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_sync_remote_before_edit_notifies_on_failure(
     service: IdeaService,
     mocker: MockerFixture,
@@ -4038,6 +4264,56 @@ async def test_main_screen_worker_success_refreshes_after_remote_sync(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_worker_success_recovers_remote_cached_mode(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """A successful retry should restore normal remote mode from cache mode."""
+
+    class _RecoveryApp(_SingleScreenApp):
+        def __init__(self, screen: MainScreen) -> None:
+            super().__init__(screen)
+            self.restore_calls = 0
+
+        def restore_remote_mode(self) -> None:
+            self.restore_calls += 1
+
+    screen = MainScreen(service)
+    app = _RecoveryApp(screen)
+
+    async with app.run_test() as pilot:
+        service.create_idea("Seed")
+        await pilot.pause()
+        notify = mocker.patch.object(screen, "notify")
+        refresh_after_sync = mocker.patch.object(
+            screen,
+            "_refresh_after_remote_sync",
+        )
+        worker = mocker.Mock()
+        screen._remote_sync_worker = worker
+        screen._remote_cached_read_only = True
+        screen._set_sync_indicator()
+
+        screen.on_worker_state_changed(
+            mocker.Mock(worker=worker, state=WorkerState.SUCCESS)
+        )
+
+        assert screen._remote_cached_read_only is False
+        assert app.restore_calls == 1
+        notify.assert_called_once_with("Remote API reconnected")
+        refresh_after_sync.assert_called_once_with()
+        assert app.sub_title == ""
+        await pilot.pause()
+        footer = screen.query_one("#bindings-footer", Footer)
+        assert "n" in screen.active_bindings
+        assert screen.active_bindings["n"].binding.description == "New"
+        assert any(
+            child.__class__.__name__ == "FooterKey" for child in footer.children
+        )
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_worker_error_notifies_once(
     service: IdeaService,
     mocker: MockerFixture,
@@ -4068,6 +4344,200 @@ async def test_main_screen_worker_error_notifies_once(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_worker_error_is_suppressed_in_cached_mode(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Cached offline mode should suppress repeated remote-failure toasts."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+        worker = mocker.Mock(error=ValueError("Could not reach the remote API"))
+        screen._remote_sync_worker = worker
+        screen._set_remote_cached_read_only(read_only=True)
+        screen._set_sync_indicator()
+
+        screen.on_worker_state_changed(
+            mocker.Mock(worker=worker, state=WorkerState.ERROR)
+        )
+
+        notify.assert_not_called()
+        assert screen._remote_sync_error == "Could not reach the remote API"
+        assert app.sub_title == ""
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_startup_remote_error_shows_recovery_modal(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Initial remote sync failures should open the recovery modal."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        push_screen = mocker.patch.object(app, "push_screen")
+        notify = mocker.patch.object(screen, "notify")
+        worker = mocker.Mock(error=ValueError("Could not reach the remote API"))
+        screen._remote_sync_worker = worker
+        screen._initial_remote_sync_pending = True
+        screen._set_sync_indicator()
+
+        screen.on_worker_state_changed(
+            mocker.Mock(worker=worker, state=WorkerState.ERROR)
+        )
+
+        assert isinstance(
+            push_screen.call_args.args[0],
+            RemoteStartupRecoveryScreen,
+        )
+        assert push_screen.call_args.kwargs["callback"] == (
+            screen._on_remote_startup_recovery_dismiss
+        )
+        assert screen._remote_startup_modal_open is True
+        notify.assert_not_called()
+        assert app.sub_title == ""
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_startup_recovery_ignores_duplicate_or_invalid_input(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Recovery helpers should no-op for duplicate show and invalid results."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        push_screen = mocker.patch.object(app, "push_screen")
+
+        screen._remote_startup_modal_open = True
+        screen._show_remote_startup_recovery("Remote sync failed")
+        push_screen.assert_not_called()
+
+        screen._remote_startup_modal_open = True
+        screen._on_remote_startup_recovery_dismiss(None)
+        assert screen._remote_startup_modal_open is False
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_startup_modal_actions(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Recovery actions should retry, cache, switch local, and quit cleanly."""
+
+    class _RecoveryApp(_SingleScreenApp):
+        def __init__(self, screen: MainScreen) -> None:
+            super().__init__(screen)
+            self.cached_calls = 0
+            self.restore_calls = 0
+            self.local_calls = 0
+
+        def activate_cached_remote_mode(self) -> None:
+            self.cached_calls += 1
+
+        def restore_remote_mode(self) -> None:
+            self.restore_calls += 1
+
+        def activate_session_local_fallback(self) -> None:
+            self.local_calls += 1
+
+    screen = MainScreen(service)
+    app = _RecoveryApp(screen)
+
+    async with app.run_test() as pilot:
+        request_sync = mocker.patch.object(screen, "_request_remote_sync")
+        refresh_ideas = mocker.patch.object(screen, "refresh_ideas")
+        notify = mocker.patch.object(screen, "notify")
+        exit_app = mocker.patch.object(app, "exit")
+
+        screen._remote_startup_modal_open = True
+        screen._on_remote_startup_recovery_dismiss(
+            RemoteStartupRecoveryAction.RETRY
+        )
+        assert screen._remote_startup_modal_open is False
+        assert screen._initial_remote_sync_pending is True
+        assert app.restore_calls == 1
+        request_sync.assert_called_once_with()
+
+        request_sync.reset_mock()
+        screen._remote_startup_modal_open = True
+        screen._on_remote_startup_recovery_dismiss(
+            RemoteStartupRecoveryAction.USE_CACHE
+        )
+        assert screen._remote_cached_read_only is True
+        assert app.cached_calls == 1
+        refresh_ideas.assert_called_once_with(
+            select_pk=screen._selected_idea_pk
+        )
+
+        screen._remote_startup_modal_open = True
+        screen._on_remote_startup_recovery_dismiss(
+            RemoteStartupRecoveryAction.SWITCH_LOCAL
+        )
+        assert app.local_calls == 1
+        notify.assert_called_once_with("Using local mode for this session")
+
+        screen._remote_startup_modal_open = True
+        screen._on_remote_startup_recovery_dismiss(
+            RemoteStartupRecoveryAction.QUIT
+        )
+        exit_app.assert_called_once_with()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_startup_modal_local_fallback_unavailable(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Recovery should notify if session-local fallback support is missing."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+
+        screen._remote_startup_modal_open = True
+        screen._on_remote_startup_recovery_dismiss(
+            RemoteStartupRecoveryAction.SWITCH_LOCAL
+        )
+
+        notify.assert_called_once_with(
+            "Local fallback is unavailable",
+            severity="error",
+        )
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_remote_startup_modal_pauses_sync_requests(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """No new remote sync worker should start while recovery modal is open."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        run_remote_sync = mocker.patch.object(screen, "_run_remote_sync")
+        backend = mocker.Mock()
+        screen._remote_startup_modal_open = True
+        mocker.patch.object(screen, "_syncing_backend", return_value=backend)
+
+        screen._request_remote_sync()
+
+        run_remote_sync.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_edit_and_rename_abort_when_sync_fails(
     service: IdeaService,
     mocker: MockerFixture,
@@ -4093,6 +4563,146 @@ async def test_main_screen_edit_and_rename_abort_when_sync_fails(
         screen._rename_selected_idea(idea.pk)
 
         push_screen.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_cached_remote_mode_is_read_only(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Cached remote mode should block mutating actions and edit refreshes."""
+    group = service.create_group("backend")
+    idea = service.create_idea("Seed", group_pk=group.pk)
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+        push_screen = mocker.patch.object(app, "push_screen")
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        mocker.patch.object(panel, "get_selected_idea", return_value=idea)
+        mocker.patch.object(
+            panel,
+            "get_selected_group_pk",
+            return_value=group.pk,
+        )
+        screen._remote_cached_read_only = True
+
+        screen.action_new_idea()
+        screen.action_new_group()
+        screen.action_edit_idea()
+        screen.action_delete_idea()
+        screen.action_rename_selected()
+        screen.action_delete_group()
+
+        assert screen._sync_remote_before_edit() is False
+        assert screen.check_action("new_idea", ()) is False
+        assert screen.check_action("edit_idea", ()) is False
+        push_screen.assert_not_called()
+        assert notify.call_count == 7
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_cached_remote_mode_blocks_mutation_callbacks(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Read-only cached mode should also guard direct mutation callbacks."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+        delete_idea = mocker.patch.object(service, "delete_idea")
+        rename_group = mocker.patch.object(service, "rename_group")
+        rename_idea = mocker.patch.object(service, "rename_idea")
+        delete_group = mocker.patch.object(service, "delete_group")
+        screen._remote_cached_read_only = True
+
+        screen._on_delete_confirm(1, confirmed=True)
+        screen._on_group_rename_dismiss(1, "renamed")
+        screen._on_idea_rename_dismiss(1, "renamed")
+        screen._on_delete_group_confirm(1, confirmed=True)
+        screen._on_delete_group_reassign(1, 2)
+
+        delete_idea.assert_not_called()
+        rename_group.assert_not_called()
+        rename_idea.assert_not_called()
+        delete_group.assert_not_called()
+        assert notify.call_count == 5
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_check_action_and_bindings_cover_runtime_branches(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Action gating and footer bindings should cover runtime branches."""
+    group = service.create_group("backend")
+    service.create_idea("Seed", group_pk=group.pk)
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        screen._remote_cached_read_only = True
+        assert screen.check_action("new_idea", ()) is False
+
+        screen._remote_cached_read_only = False
+        mocker.patch.object(
+            panel,
+            "is_search_input_focused",
+            return_value=False,
+        )
+        mocker.patch.object(
+            panel,
+            "get_selected_group_pk",
+            return_value=group.pk,
+        )
+        assert screen.check_action("rename_selected", ()) is True
+        assert screen.check_action("toggle_focus", ()) is True
+
+        mocker.patch.object(panel, "is_search_input_focused", return_value=True)
+        mocker.patch.object(panel, "search_is_active", return_value=False)
+        bindings = screen.active_bindings
+        assert list(bindings) == ["escape"]
+
+        mocker.patch.object(panel, "search_is_active", return_value=True)
+        mocker.patch.object(
+            panel,
+            "is_search_results_focused",
+            return_value=False,
+        )
+        bindings = screen.active_bindings
+        assert all(
+            binding.binding.action in screen._SEARCH_INPUT_FOOTER_ACTIONS
+            for binding in bindings.values()
+        )
+
+        mocker.patch.object(
+            panel,
+            "is_search_input_focused",
+            return_value=False,
+        )
+        mocker.patch.object(
+            panel,
+            "is_search_results_focused",
+            return_value=True,
+        )
+        bindings = screen.active_bindings
+        assert all(
+            binding.binding.action in screen._SEARCH_RESULTS_FOOTER_ACTIONS
+            for binding in bindings.values()
+        )
+
+        seen: list[int | None] = []
+        screen._on_selected_idea_changed = seen.append
+        screen._set_selected_idea(group.pk)
+        assert screen._selected_idea_pk == group.pk
+        assert seen == [group.pk]
         await pilot.pause()
 
 
