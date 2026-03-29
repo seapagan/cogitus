@@ -17,6 +17,16 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+def _index_names(db_path: Path, table_name: str) -> set[str]:
+    """Return all index names currently defined for a table."""
+    conn = sqlite3.connect(str(db_path))
+    try:
+        rows = conn.execute(f"PRAGMA index_list({table_name});").fetchall()
+    finally:
+        conn.close()
+    return {str(row[1]) for row in rows}
+
+
 def test_get_db_memory_creates_tables() -> None:
     """In-memory database should be initialized with required tables."""
     db = get_db(memory=True)
@@ -134,6 +144,7 @@ def test_get_db_backfills_group_id_for_existing_ideas(tmp_path: Path) -> None:
         ideas = migrated.select(Idea).fetch_all()
         assert len(ideas) == 1
         assert ideas[0].group.pk == migrated_default.pk
+        assert "idx_ideas_group_id" in _index_names(db_file, "ideas")
     finally:
         migrated.close()
 
@@ -175,6 +186,63 @@ def test_get_db_backfills_null_group_id_for_existing_column(
         ideas = migrated.select(Idea).fetch_all()
         assert len(ideas) == 1
         assert ideas[0].group.pk == migrated_default.pk
+    finally:
+        migrated.close()
+
+
+def test_get_db_ensures_group_index_when_legacy_rows_need_no_repair(
+    tmp_path: Path,
+) -> None:
+    """Legacy ideas with valid group IDs should still get the FK index."""
+    db_file = tmp_path / "legacy-valid-group" / "cogitus.db"
+    db_file.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_file))
+    try:
+        conn.execute(
+            """
+            CREATE TABLE groups (
+                pk INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                name TEXT NOT NULL UNIQUE
+            );
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE ideas (
+                pk INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                title TEXT NOT NULL,
+                body TEXT NOT NULL DEFAULT '',
+                group_id INTEGER
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO groups (pk, name) VALUES (?, ?)",
+            (1, "existing"),
+        )
+        conn.execute(
+            "INSERT INTO ideas (title, body, group_id) VALUES (?, ?, ?)",
+            ("Legacy valid group", "", 1),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    migrated = get_db(str(db_file))
+    try:
+        groups = migrated.select(Group).fetch_all()
+        group_names = {group.name for group in groups}
+        ideas = migrated.select(Idea).fetch_all()
+
+        assert len(ideas) == 1
+        assert ideas[0].group is not None
+        assert ideas[0].group.name == "existing"
+        assert group_names == {"default", "existing"}
+        assert "idx_ideas_group_id" in _index_names(db_file, "ideas")
     finally:
         migrated.close()
 
