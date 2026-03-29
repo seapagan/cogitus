@@ -178,30 +178,23 @@ class RemoteAPIClient:
         retry_on_auth: bool = True,
     ) -> httpx.Response:
         """Send one authenticated request, retrying once after reauth."""
-        if path != "/api/v1/auth/token":
+        is_auth_request = path == "/api/v1/auth/token"
+        if not is_auth_request:
             self._ensure_access_token()
 
-        headers: dict[str, str] = {}
-        if self._access_token is not None and path != "/api/v1/auth/token":
-            headers["Authorization"] = f"Bearer {self._access_token}"
+        response = self._send_request_once(
+            method,
+            path,
+            json=json,
+            data=data,
+            params=params,
+            is_auth_request=is_auth_request,
+        )
 
-        try:
-            response = self._client.request(
-                method,
-                path,
-                json=json,
-                data=data,
-                params=params,
-                headers=headers,
-            )
-        except httpx.HTTPError as exc:
-            msg = "Could not reach the remote API"
-            raise ValueError(msg) from exc
-
-        if (
-            response.status_code == httpx.codes.UNAUTHORIZED
-            and path != "/api/v1/auth/token"
-            and retry_on_auth
+        if self._should_retry_on_auth(
+            response,
+            is_auth_request=is_auth_request,
+            retry_on_auth=retry_on_auth,
         ):
             self._access_token = None
             self._authenticate()
@@ -214,16 +207,71 @@ class RemoteAPIClient:
                 retry_on_auth=False,
             )
 
-        if response.status_code == httpx.codes.CONFLICT:
-            detail = self._detail_from_response(response)
-            raise ValueError(detail or "Remote data changed on the server")
-        if response.status_code == httpx.codes.UNAUTHORIZED:
-            detail = self._detail_from_response(response)
-            raise ValueError(detail or "Remote API authentication failed")
-        if response.status_code >= httpx.codes.BAD_REQUEST:
-            detail = self._detail_from_response(response)
-            raise ValueError(detail or "Remote API request failed")
+        self._raise_for_error_response(response)
         return response
+
+    def _send_request_once(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: object | None = None,
+        data: dict[str, str] | None = None,
+        params: dict[str, int] | None = None,
+        is_auth_request: bool,
+    ) -> httpx.Response:
+        """Send one HTTP request and normalize transport failures."""
+        try:
+            return self._client.request(
+                method,
+                path,
+                json=json,
+                data=data,
+                params=params,
+                headers=self._build_headers(is_auth_request=is_auth_request),
+            )
+        except httpx.HTTPError as exc:
+            msg = "Could not reach the remote API"
+            raise ValueError(msg) from exc
+
+    def _build_headers(self, *, is_auth_request: bool) -> dict[str, str]:
+        """Build request headers for one API request."""
+        if self._access_token is None or is_auth_request:
+            return {}
+        return {"Authorization": f"Bearer {self._access_token}"}
+
+    @staticmethod
+    def _should_retry_on_auth(
+        response: httpx.Response,
+        *,
+        is_auth_request: bool,
+        retry_on_auth: bool,
+    ) -> bool:
+        """Return whether a failed request should retry after reauth."""
+        if not retry_on_auth or is_auth_request:
+            return False
+        return response.status_code == httpx.codes.UNAUTHORIZED
+
+    def _raise_for_error_response(self, response: httpx.Response) -> None:
+        """Raise a consistent error for non-success API responses."""
+        if response.status_code == httpx.codes.CONFLICT:
+            msg = "Remote data changed on the server"
+            raise ValueError(self._error_message(response, default=msg))
+        if response.status_code == httpx.codes.UNAUTHORIZED:
+            msg = "Remote API authentication failed"
+            raise ValueError(self._error_message(response, default=msg))
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            msg = "Remote API request failed"
+            raise ValueError(self._error_message(response, default=msg))
+
+    def _error_message(
+        self,
+        response: httpx.Response,
+        *,
+        default: str,
+    ) -> str:
+        """Return a response detail message or the supplied default."""
+        return self._detail_from_response(response) or default
 
     def _ensure_access_token(self) -> None:
         """Authenticate if the client has no current access token."""
