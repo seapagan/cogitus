@@ -32,7 +32,7 @@ Start the server with:
 cogitus api serve
 ```
 
-By default this binds to `127.0.0.1:8000`, so it is only reachable locally.
+By default, this binds to `127.0.0.1:8000`, so it is only reachable locally.
 
 Common options:
 
@@ -149,7 +149,7 @@ After saving, the app title changes to `Cogitus [remote]`. Local mode shows
   `updated_at` value.
 - If another client changes the same idea before you save, the server returns
   `409 Conflict`.
-- Today Cogitus does not attempt automatic merges. Reopen or retry the edit
+- Today, Cogitus does not attempt automatic merges. Reopen or retry the edit
   after reviewing the latest remote version.
 
 ### Current Caveats
