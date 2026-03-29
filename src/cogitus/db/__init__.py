@@ -34,7 +34,14 @@ def enable_wal_mode(db: SqliterDB) -> None:
     """Enable WAL journaling for file-backed SQLite databases."""
     if db.is_memory:
         return
-    db.connect().execute("PRAGMA journal_mode=WAL;")
+    result = db.connect().execute("PRAGMA journal_mode=WAL;").fetchone()
+    mode = "" if result is None else str(result[0]).lower()
+    if mode != "wal":
+        msg = (
+            "Failed to enable WAL mode; "
+            f"SQLite reported {mode or 'unknown'} instead"
+        )
+        raise RuntimeError(msg)
 
 
 def _column_exists(db: SqliterDB, table_name: str, column_name: str) -> bool:

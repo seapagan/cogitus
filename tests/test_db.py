@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
+    from pytest_mock import MockerFixture
+
 
 def _index_names(db_path: Path, table_name: str) -> set[str]:
     """Return all index names currently defined for a table."""
@@ -288,6 +290,26 @@ def test_enable_wal_mode_is_noop_for_memory_db() -> None:
         result = db.connect().execute("PRAGMA journal_mode;").fetchone()
         assert result is not None
         assert str(result[0]).lower() == "memory"
+    finally:
+        db.close()
+
+
+def test_enable_wal_mode_raises_when_sqlite_keeps_prior_mode(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    """File-backed DBs should fail clearly when WAL setup is refused."""
+    db = get_db(str(tmp_path / "wal-refused.db"))
+    try:
+        fake_connection = mocker.Mock()
+        fake_connection.execute.return_value.fetchone.return_value = ("delete",)
+        mocker.patch.object(db, "connect", return_value=fake_connection)
+
+        with pytest.raises(
+            RuntimeError,
+            match="Failed to enable WAL mode; SQLite reported delete instead",
+        ):
+            enable_wal_mode(db)
     finally:
         db.close()
 
