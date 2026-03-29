@@ -55,6 +55,51 @@ def test_get_db_file_path_creates_parent(tmp_path: Path) -> None:
         db.close()
 
 
+def test_get_db_initializes_missing_ideas_table_in_partial_schema(
+    tmp_path: Path,
+) -> None:
+    """Partial legacy schemas without ideas should still initialize cleanly."""
+    db_file = tmp_path / "partial-schema" / "cogitus.db"
+    db_file.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_file))
+    try:
+        conn.execute(
+            """
+            CREATE TABLE groups (
+                pk INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                name TEXT NOT NULL UNIQUE
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO groups (name) VALUES (?)",
+            ("existing",),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    migrated = get_db(str(db_file))
+    try:
+        default_group = (
+            migrated.select(Group).filter(name="default").fetch_one()
+        )
+        assert default_group is not None
+        idea = migrated.insert(
+            Idea(title="Partial schema works", group=default_group)
+        )
+        groups = migrated.select(Group).fetch_all()
+        group_names = {group.name for group in groups}
+
+        assert idea.group is not None
+        assert idea.group.name == "default"
+        assert group_names == {"default", "existing"}
+    finally:
+        migrated.close()
+
+
 def test_get_db_backfills_group_id_for_existing_ideas(tmp_path: Path) -> None:
     """Existing ideas should be migrated into default group."""
     db_file = tmp_path / "legacy" / "cogitus.db"

@@ -46,19 +46,6 @@ def _column_exists(db: SqliterDB, table_name: str, column_name: str) -> bool:
     return any(str(row[1]) == column_name for row in result.fetchall())
 
 
-def _table_exists(db: SqliterDB, table_name: str) -> bool:
-    """Return True if the table exists."""
-    row = (
-        db.connect()
-        .execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?;",
-            (table_name,),
-        )
-        .fetchone()
-    )
-    return row is not None
-
-
 def _index_exists(db: SqliterDB, index_name: str) -> bool:
     """Return True if the index exists."""
     row = (
@@ -144,7 +131,7 @@ def get_db(
         db,
         normalized_default_group_name,
     )
-    ideas_existed = _table_exists(db, "ideas")
+    ideas_existed = "ideas" in db.table_names
     if ideas_existed:
         _migrate_ideas_group_fk(db, default_group_pk)
     db.create_table(Idea)
