@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -14,12 +14,17 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class BackendConfig:
-    """Persisted backend configuration used by the app."""
+    """Persisted backend configuration used by the app.
+
+    `api_password` is held here as plaintext runtime configuration for remote
+    authentication. BackendConfig instances must not be logged, printed, or
+    serialized in a way that exposes this value.
+    """
 
     mode: DataBackendMode
     api_base_url: str
     api_username: str
-    api_password: str
+    api_password: str = field(repr=False)
 
 
 @dataclass(frozen=True)
