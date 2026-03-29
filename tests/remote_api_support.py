@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import parse_qs
 
 import httpx
+
+ProtectedRouteHandler = Callable[[httpx.Request], httpx.Response]
 
 REMOTE_USERNAME = "api-user"
 
@@ -129,43 +132,66 @@ class MockRemoteAPI:
         request: httpx.Request,
     ) -> httpx.Response:
         """Dispatch one authenticated request to the relevant handler."""
-        response: httpx.Response | None = None
-        if request.method == "GET" and request.url.path == "/api/v1/groups":
-            response = self._json_response(
-                200,
-                [
-                    self._group_payload(group)
-                    for group in sorted(
-                        self.groups.values(),
-                        key=lambda item: item.name,
-                    )
-                ],
-            )
-        elif request.method == "GET" and request.url.path == "/api/v1/tags":
-            response = self._json_response(
-                200,
-                [
-                    self._tag_payload(tag)
-                    for tag in sorted(
-                        self.tags.values(),
-                        key=lambda item: item.name,
-                    )
-                ],
-            )
-        elif request.method == "GET" and request.url.path == "/api/v1/ideas":
-            response = self._handle_list_ideas(request)
-        elif request.method == "POST" and request.url.path == "/api/v1/ideas":
-            response = self._handle_create_idea(request)
-        elif request.url.path.startswith("/api/v1/ideas/"):
-            response = self._handle_idea_request(request)
-        elif request.method == "POST" and request.url.path == "/api/v1/groups":
-            response = self._handle_create_group(request)
-        elif request.url.path.startswith("/api/v1/groups/"):
-            response = self._handle_group_request(request)
+        exact_handler = self._protected_exact_routes().get(
+            (request.method, request.url.path)
+        )
+        if exact_handler is not None:
+            return exact_handler(request)
 
-        if response is None:
-            return self._json_response(404, {"detail": "not found"})
-        return response
+        for prefix, handler in self._protected_prefix_routes():
+            if request.url.path.startswith(prefix):
+                return handler(request)
+
+        return self._json_response(404, {"detail": "not found"})
+
+    def _protected_exact_routes(
+        self,
+    ) -> dict[tuple[str, str], ProtectedRouteHandler]:
+        """Return exact-match handlers for authenticated fake API routes."""
+        return {
+            ("GET", "/api/v1/groups"): self._handle_list_groups,
+            ("GET", "/api/v1/tags"): self._handle_list_tags,
+            ("GET", "/api/v1/ideas"): self._handle_list_ideas,
+            ("POST", "/api/v1/ideas"): self._handle_create_idea,
+            ("POST", "/api/v1/groups"): self._handle_create_group,
+        }
+
+    def _protected_prefix_routes(
+        self,
+    ) -> tuple[tuple[str, ProtectedRouteHandler], ...]:
+        """Return prefix handlers for authenticated fake API routes."""
+        return (
+            ("/api/v1/ideas/", self._handle_idea_request),
+            ("/api/v1/groups/", self._handle_group_request),
+        )
+
+    def _handle_list_groups(self, request: httpx.Request) -> httpx.Response:
+        """Return all groups sorted by name."""
+        del request
+        return self._json_response(
+            200,
+            [
+                self._group_payload(group)
+                for group in sorted(
+                    self.groups.values(),
+                    key=lambda item: item.name,
+                )
+            ],
+        )
+
+    def _handle_list_tags(self, request: httpx.Request) -> httpx.Response:
+        """Return all tags sorted by name."""
+        del request
+        return self._json_response(
+            200,
+            [
+                self._tag_payload(tag)
+                for tag in sorted(
+                    self.tags.values(),
+                    key=lambda item: item.name,
+                )
+            ],
+        )
 
     def _handle_token_request(self, request: httpx.Request) -> httpx.Response:
         """Authenticate the fixed test user."""

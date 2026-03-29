@@ -16,6 +16,8 @@ from cogitus.search.backend import FtsSearchBackend
 from cogitus.services.idea_service import IdeaService
 
 if TYPE_CHECKING:
+    import sqlite3
+
     from cogitus.api.schemas.response.group import GroupResponse
     from cogitus.api.schemas.response.idea import IdeaResponse
     from cogitus.api.schemas.response.tag import TagResponse
@@ -238,82 +240,115 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         """Replace the entire local cache with the provided snapshot."""
         cursor_positions = self._snapshot_cursor_positions(db)
         with db.connect() as conn:
-            conn.execute("DELETE FROM idea_cursor_states;")
-            conn.execute("DELETE FROM ideas_tags;")
-            conn.execute("DELETE FROM ideas;")
-            conn.execute("DELETE FROM groups;")
-            conn.execute("DELETE FROM tags;")
-            conn.executemany(
-                """
-                INSERT INTO groups (pk, created_at, updated_at, name)
-                VALUES (?, ?, ?, ?);
-                """,
-                [
-                    (
-                        group.pk,
-                        group.created_at,
-                        group.updated_at,
-                        group.name,
-                    )
-                    for group in snapshot.groups
-                ],
-            )
-            conn.executemany(
-                """
-                INSERT INTO tags (pk, created_at, updated_at, name)
-                VALUES (?, ?, ?, ?);
-                """,
-                [
-                    (
-                        tag.pk,
-                        tag.created_at,
-                        tag.updated_at,
-                        tag.name,
-                    )
-                    for tag in snapshot.tags
-                ],
-            )
-            conn.executemany(
-                """
-                INSERT INTO ideas (
-                    pk,
-                    created_at,
-                    updated_at,
-                    title,
-                    body,
-                    group_id
-                )
-                VALUES (?, ?, ?, ?, ?, ?);
-                """,
-                [
-                    (
-                        idea.pk,
-                        idea.created_at,
-                        idea.updated_at,
-                        idea.title,
-                        idea.body,
-                        idea.group.pk,
-                    )
-                    for idea in snapshot.ideas
-                ],
-            )
-            conn.executemany(
-                """
-                INSERT INTO ideas_tags (ideas_pk, tags_pk)
-                VALUES (?, ?);
-                """,
-                [
-                    (idea.pk, tag.pk)
-                    for idea in snapshot.ideas
-                    for tag in idea.tags
-                ],
-            )
+            self._clear_cache_tables(conn)
+            self._insert_snapshot_groups(conn, snapshot)
+            self._insert_snapshot_tags(conn, snapshot)
+            self._insert_snapshot_ideas(conn, snapshot)
+            self._insert_snapshot_idea_tags(conn, snapshot)
             conn.commit()
         search_backend.rebuild()
         self._restore_cursor_positions(
             cache_service,
             cursor_positions,
             valid_idea_pks={idea.pk for idea in snapshot.ideas},
+        )
+
+    @staticmethod
+    def _clear_cache_tables(conn: sqlite3.Connection) -> None:
+        """Delete all cached rows before repopulating the local snapshot."""
+        conn.execute("DELETE FROM idea_cursor_states;")
+        conn.execute("DELETE FROM ideas_tags;")
+        conn.execute("DELETE FROM ideas;")
+        conn.execute("DELETE FROM groups;")
+        conn.execute("DELETE FROM tags;")
+
+    @staticmethod
+    def _insert_snapshot_groups(
+        conn: sqlite3.Connection,
+        snapshot: RemoteSnapshot,
+    ) -> None:
+        """Insert all groups from a remote snapshot."""
+        conn.executemany(
+            """
+            INSERT INTO groups (pk, created_at, updated_at, name)
+            VALUES (?, ?, ?, ?);
+            """,
+            [
+                (
+                    group.pk,
+                    group.created_at,
+                    group.updated_at,
+                    group.name,
+                )
+                for group in snapshot.groups
+            ],
+        )
+
+    @staticmethod
+    def _insert_snapshot_tags(
+        conn: sqlite3.Connection,
+        snapshot: RemoteSnapshot,
+    ) -> None:
+        """Insert all tags from a remote snapshot."""
+        conn.executemany(
+            """
+            INSERT INTO tags (pk, created_at, updated_at, name)
+            VALUES (?, ?, ?, ?);
+            """,
+            [
+                (
+                    tag.pk,
+                    tag.created_at,
+                    tag.updated_at,
+                    tag.name,
+                )
+                for tag in snapshot.tags
+            ],
+        )
+
+    @staticmethod
+    def _insert_snapshot_ideas(
+        conn: sqlite3.Connection,
+        snapshot: RemoteSnapshot,
+    ) -> None:
+        """Insert all ideas from a remote snapshot."""
+        conn.executemany(
+            """
+            INSERT INTO ideas (
+                pk,
+                created_at,
+                updated_at,
+                title,
+                body,
+                group_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?);
+            """,
+            [
+                (
+                    idea.pk,
+                    idea.created_at,
+                    idea.updated_at,
+                    idea.title,
+                    idea.body,
+                    idea.group.pk,
+                )
+                for idea in snapshot.ideas
+            ],
+        )
+
+    @staticmethod
+    def _insert_snapshot_idea_tags(
+        conn: sqlite3.Connection,
+        snapshot: RemoteSnapshot,
+    ) -> None:
+        """Insert all idea-to-tag links from a remote snapshot."""
+        conn.executemany(
+            """
+            INSERT INTO ideas_tags (ideas_pk, tags_pk)
+            VALUES (?, ?);
+            """,
+            [(idea.pk, tag.pk) for idea in snapshot.ideas for tag in idea.tags],
         )
 
     def _upsert_group(self, group: GroupResponse) -> None:
