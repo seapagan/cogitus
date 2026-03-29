@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from enum import Enum
 
+from jwt.algorithms import get_default_algorithms
 from simple_toml_settings import TOMLSettings
 
 from cogitus.constants import DEFAULT_GROUP_NAME
@@ -49,6 +50,11 @@ VALID_DATA_BACKEND_MODES: tuple[str, ...] = tuple(
 DEFAULT_DATA_BACKEND_MODE = DataBackendMode.LOCAL
 DEFAULT_API_AUTH_JWT_ALGORITHM = "HS256"
 DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES = 30
+VALID_API_AUTH_JWT_ALGORITHMS: frozenset[str] = frozenset(
+    algorithm
+    for algorithm in get_default_algorithms()
+    if algorithm.lower() != "none"
+)
 
 
 class AppSettings(TOMLSettings):
@@ -114,7 +120,7 @@ def normalize_remote_api_base_url(url: str) -> str:
 def normalize_api_auth_jwt_algorithm(algorithm: str) -> str:
     """Normalize configured JWT algorithm with safe default."""
     normalized = algorithm.strip().upper()
-    if normalized:
+    if normalized in VALID_API_AUTH_JWT_ALGORITHMS:
         return normalized
     return DEFAULT_API_AUTH_JWT_ALGORITHM
 

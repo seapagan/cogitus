@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from pydantic import BaseModel, ConfigDict
 
-if TYPE_CHECKING:
-    from cogitus.api.schemas.response.group import GroupResponse
-    from cogitus.api.schemas.response.idea import IdeaResponse
-    from cogitus.api.schemas.response.tag import TagResponse
+from cogitus.api.schemas.response.group import GroupResponse
+from cogitus.api.schemas.response.idea import IdeaResponse
+from cogitus.api.schemas.response.tag import TagResponse
 
 
 class SnapshotResponse(BaseModel):
@@ -20,3 +17,12 @@ class SnapshotResponse(BaseModel):
     groups: list[GroupResponse]
     tags: list[TagResponse]
     ideas: list[IdeaResponse]
+
+
+SnapshotResponse.model_rebuild(
+    _types_namespace={
+        "GroupResponse": GroupResponse,
+        "IdeaResponse": IdeaResponse,
+        "TagResponse": TagResponse,
+    }
+)
