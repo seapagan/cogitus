@@ -1446,6 +1446,36 @@ async def test_backend_config_screen_validates_remote_requirements(
 
 
 @pytest.mark.asyncio
+async def test_backend_config_screen_is_centered_modal() -> None:
+    """Backend config should render as a centered modal, not fullscreen."""
+    screen = BackendConfigScreen(
+        BackendConfig(
+            mode=DataBackendMode.LOCAL,
+            api_base_url="",
+            api_username="",
+            api_password="",
+        )
+    )
+    app = _StyledSingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        container = screen.query_one(
+            "#backend-config-container",
+            VerticalScroll,
+        )
+        center_x = container.region.x + (container.region.width // 2)
+        center_y = container.region.y + (container.region.height // 2)
+
+        assert abs(center_x - (app.size.width // 2)) <= 2
+        assert abs(center_y - (app.size.height // 2)) <= 2
+        assert container.region.width < app.size.width
+        assert container.region.height < app.size.height
+        assert container.region.width >= 60
+
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_backend_config_screen_returns_selected_config(
     mocker: MockerFixture,
 ) -> None:

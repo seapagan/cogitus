@@ -1008,7 +1008,7 @@ class BackendConfigScreen(ModalScreen[BackendConfig | None]):
 
     def compose(self) -> ComposeResult:
         """Compose the backend settings form."""
-        with Vertical(id="backend-config-container"):
+        with VerticalScroll(id="backend-config-container"):
             yield Static("Connection Settings", id="form-title")
             yield Label("Backend")
             yield Select[DataBackendMode](
