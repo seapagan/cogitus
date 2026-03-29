@@ -252,6 +252,46 @@ class TestDeleteCommand:
             remaining = json.loads(verify_result.output)
             assert pk not in [idea["pk"] for idea in remaining]
 
+    def test_delete_confirm_yes(
+        self,
+        db: SqliterDB,
+        cli_ideas: list[Idea],
+    ) -> None:
+        """Delete with confirmation accepts yes."""
+        pk = cli_ideas[0].pk
+        with (
+            patch("cogitus.cli.commands.get_db", return_value=db),
+            patch.object(db, "close"),
+        ):
+            result = runner.invoke(app, ["delete", str(pk)], input="y")
+            assert result.exit_code == 0
+            assert "Deleted" in result.output
+
+            # Verify deletion by checking pk not in results
+            verify_result = runner.invoke(app, ["list", "--format", "json"])
+            remaining = json.loads(verify_result.output)
+            assert pk not in [idea["pk"] for idea in remaining]
+
+    def test_delete_confirm_no(
+        self,
+        db: SqliterDB,
+        cli_ideas: list[Idea],
+    ) -> None:
+        """Delete with confirmation respects no."""
+        pk = cli_ideas[0].pk
+        with patch("cogitus.cli.commands.get_db", return_value=db):
+            result = runner.invoke(app, ["delete", str(pk)], input="n")
+            assert result.exit_code == 0
+            assert "Aborted" in result.output
+            assert "Deleted" not in result.output
+
+    def test_delete_not_found(self, db: SqliterDB) -> None:
+        """Delete with non-existent PK shows error."""
+        with patch("cogitus.cli.commands.get_db", return_value=db):
+            result = runner.invoke(app, ["delete", "999", "--force"])
+            assert result.exit_code == 1
+            assert "not found" in result.output
+
 
 class TestApiServeCommand:
     """Tests for the API serve command."""
@@ -334,46 +374,6 @@ class TestApiServeCommand:
 
         assert result.exit_code == 1
         assert "pip install cogitus[api]" in result.output
-
-    def test_delete_confirm_yes(
-        self,
-        db: SqliterDB,
-        cli_ideas: list[Idea],
-    ) -> None:
-        """Delete with confirmation accepts yes."""
-        pk = cli_ideas[0].pk
-        with (
-            patch("cogitus.cli.commands.get_db", return_value=db),
-            patch.object(db, "close"),
-        ):
-            result = runner.invoke(app, ["delete", str(pk)], input="y")
-            assert result.exit_code == 0
-            assert "Deleted" in result.output
-
-            # Verify deletion by checking pk not in results
-            verify_result = runner.invoke(app, ["list", "--format", "json"])
-            remaining = json.loads(verify_result.output)
-            assert pk not in [idea["pk"] for idea in remaining]
-
-    def test_delete_confirm_no(
-        self,
-        db: SqliterDB,
-        cli_ideas: list[Idea],
-    ) -> None:
-        """Delete with confirmation respects no."""
-        pk = cli_ideas[0].pk
-        with patch("cogitus.cli.commands.get_db", return_value=db):
-            result = runner.invoke(app, ["delete", str(pk)], input="n")
-            assert result.exit_code == 0
-            assert "Aborted" in result.output
-            assert "Deleted" not in result.output
-
-    def test_delete_not_found(self, db: SqliterDB) -> None:
-        """Delete with non-existent PK shows error."""
-        with patch("cogitus.cli.commands.get_db", return_value=db):
-            result = runner.invoke(app, ["delete", "999", "--force"])
-            assert result.exit_code == 1
-            assert "not found" in result.output
 
 
 class TestApiAuthCommand:
