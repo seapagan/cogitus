@@ -168,13 +168,13 @@ class TestIdeaService:
 
     def test_standalone_tag_crud(self, service: IdeaService) -> None:
         """Standalone tags can be created, renamed, fetched, and deleted."""
-        created = service.create_tag("python")
+        created = service.create_tag("  PyThOn  ")
 
         fetched = service.get_tag(created.pk)
         assert fetched is not None
         assert fetched.name == "python"
 
-        renamed = service.rename_tag(created.pk, "fastapi")
+        renamed = service.rename_tag(created.pk, "  FastAPI  ")
         assert renamed is not None
         assert renamed.name == "fastapi"
 

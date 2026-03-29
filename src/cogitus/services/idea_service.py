@@ -219,11 +219,11 @@ class IdeaService:
 
     def create_tag(self, name: str) -> Tag:
         """Create a standalone tag."""
-        return self._tag_repo.create(name)
+        return self._tag_repo.create(self._normalize_tag_name(name))
 
     def rename_tag(self, pk: int, name: str) -> Tag | None:
         """Rename an existing tag and refresh search data."""
-        tag = self._tag_repo.rename(pk, name)
+        tag = self._tag_repo.rename(pk, self._normalize_tag_name(name))
         if tag is not None:
             self._idea_repo.rebuild_search_index()
         return tag
@@ -444,3 +444,8 @@ class IdeaService:
                 seen.add(normalized)
                 result.append(normalized)
         return result
+
+    @staticmethod
+    def _normalize_tag_name(name: str) -> str:
+        """Normalize one standalone tag name."""
+        return name.strip().lower()
