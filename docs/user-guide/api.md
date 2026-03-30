@@ -169,11 +169,12 @@ The current API exposes:
 
 - `/api/v1/auth/token` for bearer-token login
 
-Protected CRUD routes for:
+Protected authenticated routes include:
 
 - `/api/v1/ideas`
 - `/api/v1/groups`
 - `/api/v1/tags`
+- `/api/v1/snapshot` for remote cache bootstrap
 
 It also exposes:
 
