@@ -259,6 +259,21 @@ def test_mock_remote_api_rejects_wrong_idea_method() -> None:
     assert api.ideas[1].title == "Seed idea"
 
 
+def test_mock_remote_api_rejects_wrong_token_method() -> None:
+    """Wrong verbs on auth token route should not mint tokens."""
+    api = MockRemoteAPI()
+
+    response = api.transport().handle_request(
+        httpx.Request(
+            "GET",
+            "http://remote.test/api/v1/auth/token",
+        )
+    )
+
+    assert response.status_code == 405
+    assert api.token_requests == 0
+
+
 def test_mock_remote_api_rejects_wrong_group_method() -> None:
     """Wrong verbs on group detail routes should not mutate fake state."""
     api = MockRemoteAPI()

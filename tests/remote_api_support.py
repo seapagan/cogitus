@@ -121,7 +121,9 @@ class MockRemoteAPI:
     def _handle_request(self, request: httpx.Request) -> httpx.Response:
         """Serve one HTTPX request from the in-memory remote state."""
         if request.url.path == "/api/v1/auth/token":
-            return self._handle_token_request(request)
+            if request.method == "POST":
+                return self._handle_token_request(request)
+            return self._json_response(405, {"detail": "method not allowed"})
         if not self._authorize_request(request):
             return self._json_response(
                 401,
