@@ -4,7 +4,7 @@ Cogitus includes an optional FastAPI server that exposes ideas, groups, and
 tags over HTTP.
 
 !!! warning
-    This API is still a work in progress. Basic authentication is now
+    This API is still a work in progress. Bearer-token authentication is now
     available, but the current design is still single-user, SQLite-backed, and
     intended for trusted or local environments. It is not yet hardened for
     serious multi-user or internet-facing deployment.
