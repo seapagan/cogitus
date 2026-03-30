@@ -7,9 +7,11 @@ documented ORM/query surface.
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from sqliter import SqliterDB
+from sqliter.exceptions import SqliterError
 
 from cogitus.config import normalize_default_group_name
 from cogitus.constants import DEFAULT_GROUP_NAME
@@ -98,7 +100,11 @@ def get_db(
         expanded = Path(db_path).expanduser()
         expanded.parent.mkdir(parents=True, exist_ok=True)
         db = SqliterDB(str(expanded))
-        enable_wal_mode(db)
+        try:
+            enable_wal_mode(db)
+        except (RuntimeError, SqliterError, sqlite3.Error):
+            db.close()
+            raise
 
     normalized_default_group_name = normalize_default_group_name(
         default_group_name

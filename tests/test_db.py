@@ -314,6 +314,23 @@ def test_enable_wal_mode_raises_when_sqlite_keeps_prior_mode(
         db.close()
 
 
+def test_get_db_closes_db_when_wal_initialization_fails(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    """File-backed DBs should close when WAL setup fails during init."""
+    close_spy = mocker.patch("cogitus.db.SqliterDB.close", autospec=True)
+    mocker.patch(
+        "cogitus.db.enable_wal_mode",
+        side_effect=RuntimeError("wal init failed"),
+    )
+
+    with pytest.raises(RuntimeError, match="wal init failed"):
+        get_db(str(tmp_path / "wal-init-failed.db"))
+
+    close_spy.assert_called_once()
+
+
 def test_column_exists_rejects_invalid_identifier() -> None:
     """Invalid table names should be rejected before SQL execution."""
     db = get_db(memory=True)
