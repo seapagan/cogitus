@@ -4103,19 +4103,29 @@ async def test_main_screen_sync_remote_before_edit_notifies_on_failure(
     service: IdeaService,
     mocker: MockerFixture,
 ) -> None:
-    """Edit preparation should notify on expected remote sync failures."""
+    """Edit preparation should report worker failures on the UI thread."""
     screen = MainScreen(service)
     app = _SingleScreenApp(screen)
 
     async with app.run_test() as pilot:
         notify = mocker.patch.object(screen, "notify")
-        backend = mocker.Mock()
-        backend.sync_from_remote.side_effect = RuntimeError(
-            "Remote sync failed"
+        worker = mocker.Mock(error=RuntimeError("Remote sync failed"))
+        run_remote_sync = mocker.patch.object(
+            screen,
+            "_run_remote_sync",
+            return_value=worker,
         )
-        mocker.patch.object(screen, "_syncing_backend", return_value=backend)
+        mocker.patch.object(
+            screen,
+            "_syncing_backend",
+            return_value=mocker.Mock(),
+        )
 
         assert screen._sync_remote_before_edit() is False
+        run_remote_sync.assert_called_once_with()
+        screen.on_worker_state_changed(
+            mocker.Mock(worker=worker, state=WorkerState.ERROR)
+        )
         notify.assert_called_once_with("Remote sync failed", severity="error")
         assert app.sub_title == ""
         await pilot.pause()
@@ -4126,18 +4136,30 @@ async def test_main_screen_sync_remote_before_edit_clears_indicator_on_bug(
     service: IdeaService,
     mocker: MockerFixture,
 ) -> None:
-    """Unexpected sync failures should still clear the indicator."""
+    """Unexpected worker failures should still clear the indicator."""
     screen = MainScreen(service)
     app = _SingleScreenApp(screen)
 
     async with app.run_test() as pilot:
-        backend = mocker.Mock()
-        backend.sync_from_remote.side_effect = KeyError("boom")
-        mocker.patch.object(screen, "_syncing_backend", return_value=backend)
+        notify = mocker.patch.object(screen, "notify")
+        worker = mocker.Mock(error=KeyError("boom"))
+        mocker.patch.object(
+            screen,
+            "_run_remote_sync",
+            return_value=worker,
+        )
+        mocker.patch.object(
+            screen,
+            "_syncing_backend",
+            return_value=mocker.Mock(),
+        )
 
-        with pytest.raises(KeyError, match="boom"):
-            screen._sync_remote_before_edit()
+        assert screen._sync_remote_before_edit() is False
+        screen.on_worker_state_changed(
+            mocker.Mock(worker=worker, state=WorkerState.ERROR)
+        )
 
+        notify.assert_called_once_with("'boom'", severity="error")
         assert app.sub_title == ""
         await pilot.pause()
 
@@ -4312,19 +4334,35 @@ async def test_main_screen_remote_sync_helper_branches(
         refresh.assert_called_once_with(select_pk=2, select_group_pk=1)
 
         refresh.reset_mock()
-        sync_backend = mocker.Mock()
+        worker = mocker.Mock(is_finished=False)
+        continuation = mocker.Mock()
         mocker.patch.object(
             screen,
             "_syncing_backend",
-            return_value=sync_backend,
+            return_value=mocker.Mock(),
         )
-        assert screen._sync_remote_before_edit() is True
-        sync_backend.sync_from_remote.assert_called_once_with()
-        refresh.assert_called_once_with(select_pk=2)
+        run_remote_sync = mocker.patch.object(
+            screen,
+            "_run_remote_sync",
+            return_value=worker,
+        )
+        assert screen._sync_remote_before_edit(continuation) is False
+        run_remote_sync.assert_called_once_with()
+        refresh.assert_not_called()
+        assert screen._pending_pre_edit_action is continuation
+
+        second_continuation = mocker.Mock()
+        screen._sync_remote_before_edit(second_continuation)
+        run_remote_sync.assert_called_once_with()
+        assert screen._pending_pre_edit_action is second_continuation
 
         refresh_after_sync = mocker.patch.object(
             screen,
             "_refresh_after_remote_sync",
+        )
+        run_pending_pre_edit = mocker.patch.object(
+            screen,
+            "_run_pending_pre_edit_action",
         )
         notify = mocker.patch.object(screen, "notify")
         screen._remote_sync_worker = mocker.Mock()
@@ -4332,11 +4370,51 @@ async def test_main_screen_remote_sync_helper_branches(
             mocker.Mock(worker=mocker.Mock(), state=WorkerState.SUCCESS)
         )
         refresh_after_sync.assert_not_called()
+        run_pending_pre_edit.assert_not_called()
         notify.assert_not_called()
 
         worker_runner = inspect.unwrap(MainScreen._run_remote_sync)
         mocker.patch.object(screen, "_syncing_backend", return_value=None)
         assert worker_runner(screen) is None
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_pre_edit_sync_runs_pending_action_on_success(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Deferred edit actions should run after the worker succeeds."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        refresh_after_sync = mocker.patch.object(
+            screen,
+            "_refresh_after_remote_sync",
+        )
+        continuation = mocker.Mock()
+        worker = mocker.Mock()
+        mocker.patch.object(
+            screen,
+            "_run_remote_sync",
+            return_value=worker,
+        )
+        mocker.patch.object(
+            screen,
+            "_syncing_backend",
+            return_value=mocker.Mock(),
+        )
+
+        assert screen._sync_remote_before_edit(continuation) is False
+        screen.on_worker_state_changed(
+            mocker.Mock(worker=worker, state=WorkerState.SUCCESS)
+        )
+
+        refresh_after_sync.assert_called_once_with()
+        continuation.assert_called_once_with()
+        assert screen._pending_pre_edit_action is None
+        assert app.sub_title == ""
         await pilot.pause()
 
 

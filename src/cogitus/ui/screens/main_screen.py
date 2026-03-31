@@ -202,6 +202,7 @@ class MainScreen(Screen[None]):
         self._initial_remote_sync_pending = False
         self._remote_startup_modal_open = False
         self._remote_cached_read_only = False
+        self._pending_pre_edit_action: Callable[[], None] | None = None
         self._base_sub_title = ""
 
     def compose(self) -> ComposeResult:
@@ -244,6 +245,7 @@ class MainScreen(Screen[None]):
         self._remote_sync_error = None
         self._initial_remote_sync_pending = False
         self._remote_startup_modal_open = False
+        self._pending_pre_edit_action = None
         self._clear_sync_indicator()
         if not self._syncing_backend():
             self._set_remote_cached_read_only(read_only=False)
@@ -302,8 +304,10 @@ class MainScreen(Screen[None]):
         if event.state == WorkerState.SUCCESS:
             self._handle_remote_sync_success()
             self._refresh_after_remote_sync()
+            self._run_pending_pre_edit_action()
             return
         if event.state == WorkerState.ERROR:
+            self._pending_pre_edit_action = None
             self._handle_remote_sync_error(event.worker)
 
     def _handle_remote_sync_success(self) -> None:
@@ -691,9 +695,11 @@ class MainScreen(Screen[None]):
         if idea is None:
             self.notify("No idea selected", severity="warning")
             return
-        if not self._sync_remote_before_edit():
-            return
-        fresh = self._service.get_idea(idea.pk)
+        self._sync_remote_before_edit(lambda: self._open_edit_idea(idea.pk))
+
+    def _open_edit_idea(self, idea_pk: int) -> None:
+        """Open the edit form using freshly synced data."""
+        fresh = self._service.get_idea(idea_pk)
         if fresh is None:
             self.notify("Idea not found", severity="error")
             return
@@ -740,8 +746,10 @@ class MainScreen(Screen[None]):
 
     def _rename_selected_group(self, group_pk: int) -> None:
         """Open rename flow for a selected group."""
-        if not self._sync_remote_before_edit():
-            return
+        self._sync_remote_before_edit(lambda: self._open_group_rename(group_pk))
+
+    def _open_group_rename(self, group_pk: int) -> None:
+        """Open rename flow for a selected group after sync completes."""
         group = self._service.get_group(group_pk)
         if group is None:
             self.notify("Group not found", severity="error")
@@ -766,8 +774,10 @@ class MainScreen(Screen[None]):
 
     def _rename_selected_idea(self, idea_pk: int) -> None:
         """Open rename flow for a selected idea."""
-        if not self._sync_remote_before_edit():
-            return
+        self._sync_remote_before_edit(lambda: self._open_idea_rename(idea_pk))
+
+    def _open_idea_rename(self, idea_pk: int) -> None:
+        """Open rename flow for a selected idea after sync completes."""
         fresh = self._service.get_idea(idea_pk)
         if fresh is None:
             self.notify("Idea not found", severity="error")
@@ -784,7 +794,10 @@ class MainScreen(Screen[None]):
             ),
         )
 
-    def _sync_remote_before_edit(self) -> bool:
+    def _sync_remote_before_edit(
+        self,
+        on_ready: Callable[[], None] | None = None,
+    ) -> bool:
         """Refresh remote-backed data before opening edit-style flows."""
         if self._remote_cached_read_only:
             self.notify(
@@ -794,17 +807,23 @@ class MainScreen(Screen[None]):
             return False
         backend = self._syncing_backend()
         if backend is None:
+            if on_ready is not None:
+                on_ready()
             return True
-        self._set_sync_indicator()
-        try:
-            backend.sync_from_remote()
-        except (RuntimeError, ValueError) as exc:
-            self.notify(str(exc), severity="error")
+        if on_ready is not None:
+            self._pending_pre_edit_action = on_ready
+        if self._remote_sync_in_progress():
             return False
-        finally:
-            self._clear_sync_indicator()
-        self.refresh_ideas(select_pk=self._selected_idea_pk)
-        return True
+        self._set_sync_indicator()
+        self._remote_sync_worker = self._run_remote_sync()
+        return False
+
+    def _run_pending_pre_edit_action(self) -> None:
+        """Continue a deferred edit flow once remote sync succeeds."""
+        action = self._pending_pre_edit_action
+        self._pending_pre_edit_action = None
+        if action is not None:
+            action()
 
     def action_delete_group(self) -> None:
         """Delete selected group with optional bulk move."""
