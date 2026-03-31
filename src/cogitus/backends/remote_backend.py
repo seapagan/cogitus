@@ -61,16 +61,17 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         group_pk: int | None = None,
     ) -> Idea:
         """Create a remote idea and mirror it into the cache."""
-        created = self._api_client.create_idea(
-            IdeaCreateRequest(
-                title=title,
-                body=body,
-                tags=tags or [],
-                group_pk=group_pk,
+        with self._sync_lock:
+            created = self._api_client.create_idea(
+                IdeaCreateRequest(
+                    title=title,
+                    body=body,
+                    tags=tags or [],
+                    group_pk=group_pk,
+                )
             )
-        )
-        self._cache_repo.upsert_idea(created)
-        return self._require_cached_idea(created.pk)
+            self._cache_repo.upsert_idea(created)
+            return self._require_cached_idea(created.pk)
 
     def update_idea(
         self,
@@ -81,22 +82,23 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         group_pk: int | None = None,
     ) -> Idea | None:
         """Update a remote idea if the cached version is still current."""
-        current = self._cache_service.get_idea(pk)
-        if current is None:
-            return None
+        with self._sync_lock:
+            current = self._cache_service.get_idea(pk)
+            if current is None:
+                return None
 
-        updated = self._api_client.update_idea(
-            pk,
-            IdeaUpdateRequest(
-                title=title,
-                body=body,
-                tags=tags or [],
-                group_pk=group_pk,
-                last_known_updated_at=current.updated_at,
-            ),
-        )
-        self._cache_repo.upsert_idea(updated)
-        return self._require_cached_idea(updated.pk)
+            updated = self._api_client.update_idea(
+                pk,
+                IdeaUpdateRequest(
+                    title=title,
+                    body=body,
+                    tags=tags or [],
+                    group_pk=group_pk,
+                    last_known_updated_at=current.updated_at,
+                ),
+            )
+            self._cache_repo.upsert_idea(updated)
+            return self._require_cached_idea(updated.pk)
 
     def rename_idea(self, pk: int, title: str) -> Idea | None:
         """Rename a remote idea using the same stale-write protection."""
@@ -113,8 +115,9 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
 
     def delete_idea(self, pk: int) -> None:
         """Delete a remote idea and remove it from the cache."""
-        self._api_client.delete_idea(pk)
-        self._cache_repo.delete_idea(pk)
+        with self._sync_lock:
+            self._api_client.delete_idea(pk)
+            self._cache_repo.delete_idea(pk)
 
     def get_idea(self, pk: int) -> Idea | None:
         """Fetch one cached idea."""
@@ -146,19 +149,21 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
 
     def create_group(self, name: str) -> Group:
         """Create a remote group and mirror it into the cache."""
-        created = self._api_client.create_group(name)
-        self._cache_repo.upsert_group(created)
-        return self._require_cached_group(created.pk)
+        with self._sync_lock:
+            created = self._api_client.create_group(name)
+            self._cache_repo.upsert_group(created)
+            return self._require_cached_group(created.pk)
 
     def rename_group(self, pk: int, name: str) -> Group | None:
         """Rename a remote group and refresh cached search metadata."""
-        current = self._cache_service.get_group(pk)
-        if current is None:
-            return None
-        renamed = self._api_client.rename_group(pk, name)
-        self._cache_repo.upsert_group(renamed)
-        self._cache_repo.rebuild_search_index()
-        return self._require_cached_group(renamed.pk)
+        with self._sync_lock:
+            current = self._cache_service.get_group(pk)
+            if current is None:
+                return None
+            renamed = self._api_client.rename_group(pk, name)
+            self._cache_repo.upsert_group(renamed)
+            self._cache_repo.rebuild_search_index()
+            return self._require_cached_group(renamed.pk)
 
     def has_ideas_in_group(self, group_pk: int) -> bool:
         """Return whether the cached group contains ideas."""
@@ -181,14 +186,15 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         move_to_group_pk: int | None = None,
     ) -> None:
         """Delete a remote group and mirror the change into the cache."""
-        self._api_client.delete_group(
-            group_pk,
-            move_to_group_pk=move_to_group_pk,
-        )
-        self._cache_repo.delete_group(
-            group_pk,
-            move_to_group_pk=move_to_group_pk,
-        )
+        with self._sync_lock:
+            self._api_client.delete_group(
+                group_pk,
+                move_to_group_pk=move_to_group_pk,
+            )
+            self._cache_repo.delete_group(
+                group_pk,
+                move_to_group_pk=move_to_group_pk,
+            )
 
     def sync_from_remote(self) -> None:
         """Replace the local cache with the latest remote snapshot."""

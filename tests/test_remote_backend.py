@@ -427,3 +427,74 @@ def test_remote_backend_allows_follow_up_sync_after_serialized_run(
         cache_db.close()
 
     assert replace_snapshot.call_count == 2
+
+
+def test_remote_backend_serializes_writes_with_snapshot_replacement(
+    tmp_path: Path,
+    mocker: MockerFixture,
+) -> None:
+    """Remote writes should wait for an in-flight sync to finish."""
+    cache_db = get_db(str(tmp_path / "remote-cache.db"))
+    backend = RemoteIdeaBackend(
+        cache_db,
+        default_group_name="default",
+        api_client=mocker.Mock(),
+    )
+    first_started = threading.Event()
+    second_attempted = threading.Event()
+    allow_exit = threading.Event()
+    _patch_tracked_snapshot_replacement(
+        mocker,
+        backend,
+        first_started=first_started,
+        second_attempted=second_attempted,
+        allow_exit=allow_exit,
+    )
+    write_started = threading.Event()
+    created_response = mocker.Mock(pk=123)
+    created_idea = mocker.Mock(name="created_idea")
+    mocker.patch.object(
+        backend._api_client,
+        "fetch_snapshot",
+        return_value=object(),
+    )
+
+    def tracked_create_idea(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        write_started.set()
+        return created_response
+
+    mocker.patch.object(
+        backend._api_client,
+        "create_idea",
+        side_effect=tracked_create_idea,
+    )
+    mocker.patch.object(backend._cache_repo, "upsert_idea")
+    mocker.patch.object(
+        backend,
+        "_require_cached_idea",
+        return_value=created_idea,
+    )
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            sync_future = executor.submit(backend.sync_from_remote)
+            assert first_started.wait(timeout=1)
+
+            write_future = executor.submit(
+                backend.create_idea,
+                "Concurrent idea",
+                group_pk=1,
+            )
+
+            assert second_attempted.wait(timeout=1)
+            assert not write_started.wait(timeout=0.1)
+
+            allow_exit.set()
+            sync_future.result()
+            created = write_future.result()
+    finally:
+        cache_db.close()
+
+    assert write_started.is_set()
+    assert created is created_idea
