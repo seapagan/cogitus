@@ -181,6 +181,18 @@ class TestIdeaService:
         service.delete_tag(created.pk)
         assert service.get_tag(created.pk) is None
 
+    def test_create_tag_rejects_blank_name(self, service: IdeaService) -> None:
+        """Blank standalone tag names should fail at the service layer."""
+        with pytest.raises(ValueError, match="Tag name cannot be empty"):
+            service.create_tag("   ")
+
+    def test_rename_tag_rejects_blank_name(self, service: IdeaService) -> None:
+        """Blank standalone tag renames should fail at the service layer."""
+        tag = service.create_tag("python")
+
+        with pytest.raises(ValueError, match="Tag name cannot be empty"):
+            service.rename_tag(tag.pk, "   ")
+
     def test_rename_and_delete_tag_refresh_search_index(
         self,
         service: IdeaService,

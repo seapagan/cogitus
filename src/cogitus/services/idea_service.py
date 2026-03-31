@@ -448,4 +448,8 @@ class IdeaService:
     @staticmethod
     def _normalize_tag_name(name: str) -> str:
         """Normalize one standalone tag name."""
-        return name.strip().lower()
+        normalized = name.strip().lower()
+        if not normalized:
+            msg = "Tag name cannot be empty"
+            raise ValueError(msg)
+        return normalized
