@@ -167,7 +167,7 @@ def test_remote_backend_delegate_and_guard_paths(
     assert backend.search_results("Seed")[0].idea.pk == seed.pk
 
     rename_update = mocker.patch.object(
-        backend, "update_idea", return_value=seed
+        backend, "_update_cached_idea", return_value=seed
     )
     assert backend.rename_idea(seed.pk, "Renamed") is seed
     rename_update.assert_called_once_with(
@@ -176,6 +176,7 @@ def test_remote_backend_delegate_and_guard_paths(
         body="",
         tags=["python"],
         group_pk=seed.group.pk,
+        last_known_updated_at=seed.updated_at,
     )
 
     mocker.patch.object(
@@ -187,6 +188,69 @@ def test_remote_backend_delegate_and_guard_paths(
 
     backend.close()
     api_client.close.assert_called_once_with()
+
+
+def test_remote_backend_rename_idea_uses_one_cached_snapshot(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Rename should keep payload fields and optimistic lock in step."""
+    backend = RemoteIdeaBackend(
+        db,
+        default_group_name="default",
+        api_client=mocker.Mock(),
+    )
+    current = mocker.Mock(
+        body="Old body",
+        group=mocker.Mock(pk=7),
+        updated_at=11,
+    )
+    current.tags.fetch_all.return_value = [
+        mocker.Mock(name="tag-one"),
+        mocker.Mock(name="tag-two"),
+    ]
+    current.tags.fetch_all.return_value[0].name = "tag-one"
+    current.tags.fetch_all.return_value[1].name = "tag-two"
+    updated = mocker.Mock(pk=5)
+    renamed = mocker.Mock(name="renamed")
+
+    mocker.patch.object(
+        backend._cache_service,
+        "get_idea_with_relations",
+        return_value=current,
+    )
+    mocker.patch.object(
+        backend._cache_service,
+        "get_idea",
+        side_effect=AssertionError(
+            "rename_idea should not re-read the cache timestamp"
+        ),
+    )
+    update_idea = mocker.patch.object(
+        backend._api_client,
+        "update_idea",
+        return_value=updated,
+    )
+    upsert_idea = mocker.patch.object(backend._cache_repo, "upsert_idea")
+    require_cached = mocker.patch.object(
+        backend,
+        "_require_cached_idea",
+        return_value=renamed,
+    )
+
+    assert backend.rename_idea(5, "Renamed title") is renamed
+
+    update_call = update_idea.call_args
+    assert update_call is not None
+    assert update_call.args[0] == 5
+    request = update_call.args[1]
+    assert request.title == "Renamed title"
+    assert request.body == "Old body"
+    assert request.tags == ["tag-one", "tag-two"]
+    assert request.group_pk == 7
+    assert request.last_known_updated_at == 11
+    upsert_idea.assert_called_once_with(updated)
+    require_cached.assert_called_once_with(updated.pk)
 
 
 def test_remote_backend_internal_error_guards(

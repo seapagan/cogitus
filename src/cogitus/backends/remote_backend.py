@@ -87,31 +87,33 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
             if current is None:
                 return None
 
-            updated = self._api_client.update_idea(
+            return self._update_cached_idea(
                 pk,
-                IdeaUpdateRequest(
-                    title=title,
-                    body=body,
-                    tags=tags or [],
-                    group_pk=group_pk,
-                    last_known_updated_at=current.updated_at,
-                ),
+                title=title,
+                body=body,
+                tags=tags,
+                group_pk=group_pk,
+                last_known_updated_at=current.updated_at,
             )
-            self._cache_repo.upsert_idea(updated)
-            return self._require_cached_idea(updated.pk)
 
     def rename_idea(self, pk: int, title: str) -> Idea | None:
         """Rename a remote idea using the same stale-write protection."""
-        current_with_relations = self._cache_service.get_idea_with_relations(pk)
-        if current_with_relations is None:
-            return None
-        return self.update_idea(
-            pk,
-            title=title,
-            body=current_with_relations.body,
-            tags=[tag.name for tag in current_with_relations.tags.fetch_all()],
-            group_pk=current_with_relations.group.pk,
-        )
+        with self._sync_lock:
+            current_with_relations = (
+                self._cache_service.get_idea_with_relations(pk)
+            )
+            if current_with_relations is None:
+                return None
+            return self._update_cached_idea(
+                pk,
+                title=title,
+                body=current_with_relations.body,
+                tags=[
+                    tag.name for tag in current_with_relations.tags.fetch_all()
+                ],
+                group_pk=current_with_relations.group.pk,
+                last_known_updated_at=current_with_relations.updated_at,
+            )
 
     def delete_idea(self, pk: int) -> None:
         """Delete a remote idea and remove it from the cache."""
@@ -250,3 +252,27 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
             msg = f"Idea {idea_pk} not found in cache"
             raise RuntimeError(msg)
         return idea
+
+    def _update_cached_idea(
+        self,
+        pk: int,
+        *,
+        title: str,
+        body: str,
+        tags: list[str] | None,
+        group_pk: int | None,
+        last_known_updated_at: int,
+    ) -> Idea:
+        """Update the remote idea and mirror it into the cache."""
+        updated = self._api_client.update_idea(
+            pk,
+            IdeaUpdateRequest(
+                title=title,
+                body=body,
+                tags=tags or [],
+                group_pk=group_pk,
+                last_known_updated_at=last_known_updated_at,
+            ),
+        )
+        self._cache_repo.upsert_idea(updated)
+        return self._require_cached_idea(updated.pk)
