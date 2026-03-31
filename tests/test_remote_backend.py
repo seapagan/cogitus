@@ -422,6 +422,34 @@ def test_remote_backend_sync_from_worker_thread_uses_fresh_db_connection(
         cache_db.close()
 
 
+def test_remote_backend_sync_from_worker_thread_rejects_memory_cache() -> None:
+    """Worker-thread sync should fail fast for in-memory caches."""
+    cache_db = get_db(memory=True)
+    try:
+        backend = RemoteIdeaBackend(
+            cache_db,
+            default_group_name="default",
+            api_client=RemoteAPIClient(
+                base_url="http://remote.test",
+                username=REMOTE_USERNAME,
+                password=remote_secret(),
+                transport=MockRemoteAPI().transport(),
+            ),
+        )
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(backend.sync_from_remote)
+            with pytest.raises(
+                RuntimeError,
+                match=(
+                    "Worker-thread sync requires a file-backed cache database"
+                ),
+            ):
+                future.result()
+    finally:
+        cache_db.close()
+
+
 def _build_remote_backend_for_file_cache(tmp_path: Path) -> RemoteIdeaBackend:
     """Create a file-backed remote backend for thread-sync tests."""
     cache_db = get_db(str(tmp_path / "remote-cache.db"))

@@ -202,12 +202,12 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         """Replace the local cache with the latest remote snapshot."""
         with self._sync_lock:
             snapshot = self._api_client.fetch_snapshot()
-            if (
-                self._cache_db.is_memory
-                or threading.get_ident() == self._owner_thread_id
-            ):
+            if threading.get_ident() == self._owner_thread_id:
                 self._cache_repo.replace_snapshot(snapshot)
                 return
+            if self._cache_db.is_memory:
+                msg = "Worker-thread sync requires a file-backed cache database"
+                raise RuntimeError(msg)
 
             worker_db = self._build_worker_cache_db()
             worker_repo = RemoteCacheRepository(
