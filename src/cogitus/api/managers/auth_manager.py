@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime, timedelta, timezone
+from functools import cache
 from typing import Final
 
 import jwt
 from fastapi import HTTPException, status
 from jwt import ExpiredSignatureError, InvalidTokenError
+from jwt.algorithms import get_default_algorithms
 from pwdlib import PasswordHash
 
 from cogitus.api.models.auth import APIUser, TokenPayload
 from cogitus.api.schemas.response.auth import TokenResponse
 from cogitus.config import (
+    DEFAULT_API_AUTH_JWT_ALGORITHM,
     AppSettings,
     normalize_api_auth_jwt_algorithm,
     normalize_api_auth_token_expire_minutes,
@@ -41,6 +44,23 @@ def _invalid_token_header(*, expired: bool = False) -> dict[str, str]:
     return {"WWW-Authenticate": 'Bearer error="invalid_token"'}
 
 
+@cache
+def _valid_jwt_algorithms() -> frozenset[str]:
+    """Return canonical JWT algorithm names from PyJWT."""
+    return frozenset(
+        algorithm
+        for algorithm in get_default_algorithms()
+        if algorithm.lower() != "none"
+    )
+
+
+def _resolve_jwt_algorithm(algorithm: str) -> str:
+    """Validate a configured JWT algorithm against PyJWT names."""
+    if algorithm in _valid_jwt_algorithms():
+        return algorithm
+    return DEFAULT_API_AUTH_JWT_ALGORITHM
+
+
 def hash_password(password: str) -> str:
     """Hash a plaintext password using the recommended hasher."""
     return PASSWORD_HASHER.hash(password)
@@ -66,8 +86,10 @@ class AuthManager:
     @property
     def jwt_algorithm(self) -> str:
         """Return the normalized JWT algorithm."""
-        return normalize_api_auth_jwt_algorithm(
-            self._settings.api_auth_jwt_algorithm
+        return _resolve_jwt_algorithm(
+            normalize_api_auth_jwt_algorithm(
+                self._settings.api_auth_jwt_algorithm
+            )
         )
 
     @property

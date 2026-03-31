@@ -14,7 +14,7 @@ from cogitus.api.dependencies import get_service
 from cogitus.api.main import COGITUS_API_DB_PATH_ENV, create_api_app
 from cogitus.api.managers.auth_manager import AuthManager
 from cogitus.api.models.auth import APIUser
-from cogitus.config import AppSettings
+from cogitus.config import DEFAULT_API_AUTH_JWT_ALGORITHM, AppSettings
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -131,6 +131,26 @@ def test_auth_manager_rejects_wrong_username(
     )
 
     assert authenticated is None
+
+
+def test_auth_manager_accepts_canonical_eddsa_algorithm(
+    configured_api_settings: AppSettings,
+) -> None:
+    """Auth manager should keep PyJWT's canonical mixed-case EdDSA."""
+    configured_api_settings.api_auth_jwt_algorithm = "EdDSA"
+    manager = AuthManager(configured_api_settings)
+
+    assert manager.jwt_algorithm == "EdDSA"
+
+
+def test_auth_manager_defaults_invalid_jwt_algorithm_to_hs256(
+    configured_api_settings: AppSettings,
+) -> None:
+    """Auth manager should fall back when configured alg is invalid."""
+    configured_api_settings.api_auth_jwt_algorithm = "eddsa"
+    manager = AuthManager(configured_api_settings)
+
+    assert manager.jwt_algorithm == DEFAULT_API_AUTH_JWT_ALGORITHM
 
 
 def test_auth_manager_rejects_token_for_different_subject(

@@ -230,15 +230,23 @@ def test_normalize_api_auth_jwt_algorithm_empty_defaults_to_hs256() -> None:
 
 
 def test_normalize_api_auth_jwt_algorithm_accepts_supported_values() -> None:
-    """Supported JWT algorithms should be normalized and kept."""
-    assert normalize_api_auth_jwt_algorithm("  hs512  ") == "HS512"
+    """Configured JWT algorithms should be trimmed and kept."""
+    assert normalize_api_auth_jwt_algorithm("  HS512  ") == "HS512"
 
 
-def test_normalize_api_auth_jwt_algorithm_invalid_defaults_to_hs256() -> None:
-    """Unknown JWT algorithms should fallback safely."""
-    assert normalize_api_auth_jwt_algorithm("HS2256") == (
-        DEFAULT_API_AUTH_JWT_ALGORITHM
-    )
+def test_normalize_api_auth_jwt_algorithm_accepts_eddsa_case() -> None:
+    """Mixed-case EdDSA should be preserved by config normalization."""
+    assert normalize_api_auth_jwt_algorithm("  EdDSA  ") == "EdDSA"
+
+
+def test_normalize_api_auth_jwt_algorithm_preserves_noncanonical_case() -> None:
+    """Config normalization should preserve trimmed non-canonical values."""
+    assert normalize_api_auth_jwt_algorithm("  eddsa  ") == "eddsa"
+
+
+def test_normalize_api_auth_jwt_algorithm_preserves_unknown_values() -> None:
+    """Config normalization should preserve trimmed unknown values."""
+    assert normalize_api_auth_jwt_algorithm("HS2256") == "HS2256"
 
 
 def test_normalize_api_auth_token_expire_minutes_invalid_defaults() -> None:
