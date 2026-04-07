@@ -327,7 +327,10 @@ class MockRemoteAPI:
             "group_pk",
             default=idea.group_pk,
         )
-        idea.tag_pks = self._resolve_tags(self._payload_list(payload, "tags"))
+        if "tags" in payload:
+            idea.tag_pks = self._resolve_tags(
+                self._payload_list(payload, "tags")
+            )
         idea.updated_at = self._tick
         return self._json_response(200, self._idea_payload(idea))
 

@@ -319,6 +319,26 @@ def test_update_idea_with_stale_timestamp_returns_conflict(
     assert response.json()["detail"] == "Idea has been modified on the server"
 
 
+def test_update_idea_preserves_tags_when_omitted(
+    api_client: TestClient,
+) -> None:
+    """Idea updates should keep existing tags when the field is omitted."""
+    created = api_client.post(
+        "/api/v1/ideas",
+        json={"title": "Idea", "body": "", "tags": ["python"]},
+    )
+    assert created.status_code == 201
+    idea_pk = created.json()["pk"]
+
+    updated = api_client.put(
+        f"/api/v1/ideas/{idea_pk}",
+        json={"title": "Updated", "body": "Changed"},
+    )
+
+    assert updated.status_code == 200
+    assert [tag["name"] for tag in updated.json()["tags"]] == ["python"]
+
+
 def test_group_crud_and_reassign_delete(api_client: TestClient) -> None:
     """Groups should support CRUD and reassignment on delete."""
     source = api_client.post("/api/v1/groups", json={"name": "source"})

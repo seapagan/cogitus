@@ -157,6 +157,23 @@ def test_remote_api_client_idea_crud_helpers() -> None:
     assert created.pk not in api.ideas
 
 
+def test_remote_api_client_omits_unchanged_tags() -> None:
+    """Update payloads should preserve remote tags when tags are omitted."""
+    _, client = _build_seeded_remote_client()
+
+    updated = client.update_idea(
+        1,
+        IdeaUpdateRequest(
+            title="Seed idea",
+            body="Retitled body",
+            last_known_updated_at=3,
+        ),
+    )
+
+    assert [tag.name for tag in updated.tags] == ["python"]
+    assert updated.body == "Retitled body"
+
+
 def test_remote_api_client_group_crud_helpers() -> None:
     """Client group helpers should create, rename, and delete groups."""
     _, client = _build_seeded_remote_client()

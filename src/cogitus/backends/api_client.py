@@ -126,7 +126,7 @@ class RemoteAPIClient:
             self._request(
                 "PUT",
                 f"/api/v1/ideas/{idea_pk}",
-                json=payload.model_dump(),
+                json=payload.model_dump(exclude_unset=True),
             ).json()
         )
 

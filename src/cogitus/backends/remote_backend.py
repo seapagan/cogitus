@@ -264,15 +264,18 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         last_known_updated_at: int,
     ) -> Idea:
         """Update the remote idea and mirror it into the cache."""
+        request_kwargs: dict[str, object] = {
+            "title": title,
+            "body": body,
+            "group_pk": group_pk,
+            "last_known_updated_at": last_known_updated_at,
+        }
+        if tags is not None:
+            request_kwargs["tags"] = tags
+
         updated = self._api_client.update_idea(
             pk,
-            IdeaUpdateRequest(
-                title=title,
-                body=body,
-                tags=tags or [],
-                group_pk=group_pk,
-                last_known_updated_at=last_known_updated_at,
-            ),
+            IdeaUpdateRequest(**request_kwargs),
         )
         self._cache_repo.upsert_idea(updated)
         return self._require_cached_idea(updated.pk)

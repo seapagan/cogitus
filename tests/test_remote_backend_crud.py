@@ -270,6 +270,30 @@ def test_remote_backend_update_idea_raises_on_stale_cache(
         )
 
 
+def test_remote_backend_update_preserves_tags_when_omitted(
+    db: SqliterDB,
+) -> None:
+    """Updating without tags should keep the cached and remote tag set."""
+    api = MockRemoteAPI()
+    backend = RemoteIdeaBackend(
+        db,
+        default_group_name="default",
+        api_client=RemoteAPIClient(
+            base_url="http://remote.test",
+            username=REMOTE_USERNAME,
+            password=remote_secret(),
+            transport=api.transport(),
+        ),
+    )
+    backend.sync_from_remote()
+
+    updated = backend.update_idea(1, "Updated seed", "Changed body", tags=None)
+
+    assert updated is not None
+    assert updated.title == "Updated seed"
+    assert backend.search_results("tag:python")[0].idea.pk == 1
+
+
 def test_remote_backend_group_operations_update_cache_and_search(
     db: SqliterDB,
 ) -> None:
