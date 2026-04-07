@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
+import jwt
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -167,3 +169,26 @@ def test_auth_manager_rejects_token_for_different_subject(
         manager.decode_access_token(token)
 
     assert exc.value.status_code == 401
+
+
+def test_auth_manager_honors_zero_token_lifetime(
+    configured_api_settings: AppSettings,
+) -> None:
+    """Auth manager should keep a caller-provided zero token lifetime."""
+    manager = AuthManager(configured_api_settings)
+    user = APIUser(username=configured_api_settings.api_auth_username)
+    issued_at = datetime.now(tz=timezone.utc)
+
+    token = manager.create_access_token(
+        user=user,
+        expires_delta=timedelta(0),
+    )
+    payload = jwt.decode(
+        token,
+        manager.jwt_secret,
+        algorithms=[manager.jwt_algorithm],
+        options={"verify_exp": False},
+    )
+    expires_at = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+
+    assert expires_at <= issued_at + timedelta(seconds=1)

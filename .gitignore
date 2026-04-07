@@ -17,6 +17,7 @@ wheels/
 
 # AI stuff
 .claude/
+.codex/
 CLAUDE.md
 AGENTS.md
 

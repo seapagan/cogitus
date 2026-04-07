@@ -145,8 +145,10 @@ class AuthManager:
         """Create a signed JWT access token for the configured user."""
         self.ensure_configured()
 
-        token_lifetime = expires_delta or timedelta(
-            minutes=self.token_expire_minutes
+        token_lifetime = (
+            timedelta(minutes=self.token_expire_minutes)
+            if expires_delta is None
+            else expires_delta
         )
         payload = {
             "sub": user.username,
