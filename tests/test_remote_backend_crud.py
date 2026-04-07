@@ -331,3 +331,39 @@ def test_remote_backend_group_operations_update_cache_and_search(
     assert moved is not None
     assert moved.group.pk == 1
     assert backend.get_group(created_group.pk) is None
+
+
+def test_remote_backend_group_rules_match_service_errors(
+    db: SqliterDB,
+) -> None:
+    """Remote group writes should reject the same invalid cases as service."""
+    api = MockRemoteAPI()
+    backend = RemoteIdeaBackend(
+        db,
+        default_group_name="default",
+        api_client=RemoteAPIClient(
+            base_url="http://remote.test",
+            username=REMOTE_USERNAME,
+            password=remote_secret(),
+            transport=api.transport(),
+        ),
+    )
+    backend.sync_from_remote()
+    created_group = backend.create_group("backend")
+
+    with pytest.raises(ValueError, match="cannot be renamed"):
+        backend.rename_group(1, "renamed-default")
+
+    with pytest.raises(ValueError, match="cannot be deleted"):
+        backend.delete_group(1)
+
+    with pytest.raises(ValueError, match="Target group not found"):
+        backend.delete_group(created_group.pk, move_to_group_pk=99999)
+
+    with pytest.raises(
+        ValueError,
+        match="Cannot move ideas into the same group being deleted",
+    ):
+        backend.delete_group(
+            created_group.pk, move_to_group_pk=created_group.pk
+        )

@@ -191,6 +191,31 @@ def test_remote_api_client_group_crud_helpers() -> None:
     assert [tag.name for tag in tags] == ["python"]
 
 
+def test_remote_api_client_rejects_invalid_default_group_writes() -> None:
+    """Group client helpers should mirror default-group service guards."""
+    _, client = _build_seeded_remote_client()
+
+    with pytest.raises(ValueError, match="cannot be renamed"):
+        client.rename_group(1, "renamed-default")
+
+    with pytest.raises(ValueError, match="cannot be deleted"):
+        client.delete_group(1)
+
+
+def test_remote_api_client_rejects_invalid_group_delete_targets() -> None:
+    """Group delete should reject missing and identical reassignment targets."""
+    _, client = _build_seeded_remote_client()
+
+    with pytest.raises(ValueError, match="Target group not found"):
+        client.delete_group(2, move_to_group_pk=99999)
+
+    with pytest.raises(
+        ValueError,
+        match="Cannot move ideas into the same group being deleted",
+    ):
+        client.delete_group(2, move_to_group_pk=2)
+
+
 def test_remote_api_client_raises_for_network_and_auth_failures() -> None:
     """Client should surface transport and auth failures clearly."""
 

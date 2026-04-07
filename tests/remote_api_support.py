@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import parse_qs
 
 import httpx
@@ -358,21 +359,44 @@ class MockRemoteAPI:
                 {"detail": f"Group {group_pk} not found"},
             )
         if request.method == "PUT":
-            self._tick += 1
-            group.name = (
-                str(self._json_payload(request)["name"]).strip().lower()
-            )
-            group.updated_at = self._tick
-            return self._json_response(200, self._group_payload(group))
+            response_payload: dict[str, Any] | None
+            if group_pk == 1:
+                status_code = 409
+                response_payload = {"detail": "Default group cannot be renamed"}
+            else:
+                self._tick += 1
+                group.name = (
+                    str(self._json_payload(request)["name"]).strip().lower()
+                )
+                group.updated_at = self._tick
+                status_code = 200
+                response_payload = self._group_payload(group)
+            return self._json_response(status_code, response_payload)
+
         move_to_group_pk = request.url.params.get("move_to_group_pk")
         target_group_pk = int(move_to_group_pk) if move_to_group_pk else 1
-        for idea in self.ideas.values():
-            if idea.group_pk == group_pk:
-                idea.group_pk = target_group_pk
-                self._tick += 1
-                idea.updated_at = self._tick
-        del self.groups[group_pk]
-        return self._json_response(204, None)
+        target_group = self.groups.get(target_group_pk)
+        if group_pk == 1:
+            status_code = 409
+            response_payload = {"detail": "Default group cannot be deleted"}
+        elif target_group is None:
+            status_code = 404
+            response_payload = {"detail": "Target group not found"}
+        elif target_group_pk == group_pk:
+            status_code = 409
+            response_payload = {
+                "detail": "Cannot move ideas into the same group being deleted"
+            }
+        else:
+            for idea in self.ideas.values():
+                if idea.group_pk == group_pk:
+                    idea.group_pk = target_group_pk
+                    self._tick += 1
+                    idea.updated_at = self._tick
+            del self.groups[group_pk]
+            status_code = 204
+            response_payload = None
+        return self._json_response(status_code, response_payload)
 
     def _resolve_tags(self, tag_names: list[str]) -> list[int]:
         """Resolve tag names, creating tags as needed."""
