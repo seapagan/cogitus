@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 from urllib.parse import parse_qs
 
 import httpx
@@ -359,20 +358,33 @@ class MockRemoteAPI:
                 {"detail": f"Group {group_pk} not found"},
             )
         if request.method == "PUT":
-            response_payload: dict[str, Any] | None
-            if group_pk == 1:
-                status_code = 409
-                response_payload = {"detail": "Default group cannot be renamed"}
-            else:
-                self._tick += 1
-                group.name = (
-                    str(self._json_payload(request)["name"]).strip().lower()
-                )
-                group.updated_at = self._tick
-                status_code = 200
-                response_payload = self._group_payload(group)
-            return self._json_response(status_code, response_payload)
+            return self._handle_group_update(request, group_pk, group)
+        return self._handle_group_delete(request, group_pk)
 
+    def _handle_group_update(
+        self,
+        request: httpx.Request,
+        group_pk: int,
+        group: StoredGroup,
+    ) -> httpx.Response:
+        """Handle PUT requests for one group."""
+        if group_pk == 1:
+            return self._json_response(
+                409,
+                {"detail": "Default group cannot be renamed"},
+            )
+
+        self._tick += 1
+        group.name = str(self._json_payload(request)["name"]).strip().lower()
+        group.updated_at = self._tick
+        return self._json_response(200, self._group_payload(group))
+
+    def _handle_group_delete(
+        self,
+        request: httpx.Request,
+        group_pk: int,
+    ) -> httpx.Response:
+        """Handle DELETE requests for one group."""
         move_to_group_pk = request.url.params.get("move_to_group_pk")
         target_group_pk = int(move_to_group_pk) if move_to_group_pk else 1
         target_group = self.groups.get(target_group_pk)
