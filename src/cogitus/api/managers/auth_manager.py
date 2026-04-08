@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from functools import cache
@@ -30,6 +31,7 @@ DUMMY_VERIFY_VALUE: Final = (
 )
 BEARER_SCHEME: Final = "bearer"
 WWW_AUTHENTICATE_HEADER: Final = {"WWW-Authenticate": "Bearer"}
+logger = logging.getLogger(__name__)
 
 
 def _invalid_token_header(*, expired: bool = False) -> dict[str, str]:
@@ -58,6 +60,11 @@ def _resolve_jwt_algorithm(algorithm: str) -> str:
     """Validate a configured JWT algorithm against PyJWT names."""
     if algorithm in _valid_jwt_algorithms():
         return algorithm
+    logger.warning(
+        "Configured JWT algorithm %r not recognised; using %s",
+        algorithm,
+        DEFAULT_API_AUTH_JWT_ALGORITHM,
+    )
     return DEFAULT_API_AUTH_JWT_ALGORITHM
 
 
