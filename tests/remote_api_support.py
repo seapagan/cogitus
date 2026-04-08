@@ -286,6 +286,11 @@ class MockRemoteAPI:
         """Create a new idea."""
         payload = self._json_payload(request)
         group_pk = self._payload_int(payload, "group_pk", default=1)
+        if group_pk not in self.groups:
+            return self._json_response(
+                404,
+                {"detail": f"Group {group_pk} not found"},
+            )
         tag_pks = self._resolve_tags(self._payload_list(payload, "tags"))
         self._tick += 1
         idea = StoredIdea(
