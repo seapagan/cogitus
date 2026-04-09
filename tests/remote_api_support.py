@@ -327,11 +327,17 @@ class MockRemoteAPI:
         self._tick += 1
         idea.title = str(payload["title"])
         idea.body = str(payload.get("body", ""))
-        idea.group_pk = self._payload_int(
+        next_group_pk = self._payload_int(
             payload,
             "group_pk",
             default=idea.group_pk,
         )
+        if next_group_pk not in self.groups:
+            return self._json_response(
+                404,
+                {"detail": f"Group {next_group_pk} not found"},
+            )
+        idea.group_pk = next_group_pk
         if "tags" in payload:
             idea.tag_pks = self._resolve_tags(
                 self._payload_list(payload, "tags")
