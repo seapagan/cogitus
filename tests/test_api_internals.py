@@ -107,17 +107,21 @@ def test_token_endpoint_returns_service_unavailable_when_auth_unconfigured(
     )
     AppSettings._instances.clear()
 
-    with TestClient(
-        create_api_app(memory=True, default_group_name="default")
-    ) as client:
-        response = client.post(
-            "/api/v1/auth/token",
-            data={"username": "api-user", "password": "secret"},
-        )
+    try:
+        with TestClient(
+            create_api_app(memory=True, default_group_name="default")
+        ) as client:
+            response = client.post(
+                "/api/v1/auth/token",
+                data={"username": "api-user", "password": "secret"},
+            )
 
-    assert response.status_code == 503
-    assert response.json()["detail"] == "API authentication is not configured"
-    AppSettings._instances.clear()
+        assert response.status_code == 503
+        assert (
+            response.json()["detail"] == "API authentication is not configured"
+        )
+    finally:
+        AppSettings._instances.clear()
 
 
 def test_auth_manager_rejects_wrong_username(
