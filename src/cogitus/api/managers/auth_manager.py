@@ -13,6 +13,7 @@ from fastapi import HTTPException, status
 from jwt import ExpiredSignatureError, InvalidTokenError
 from jwt.algorithms import get_default_algorithms
 from pwdlib import PasswordHash
+from pwdlib.exceptions import UnknownHashError
 
 from cogitus.api.models.auth import APIUser, TokenPayload
 from cogitus.api.schemas.response.auth import TokenResponse
@@ -136,10 +137,21 @@ class AuthManager:
 
         configured_username = self.configured_username
         if not secrets.compare_digest(username, configured_username):
-            verify_password(password, DUMMY_VERIFY_VALUE)
+            try:
+                verify_password(password, DUMMY_VERIFY_VALUE)
+            except UnknownHashError:
+                return None
             return None
 
-        if not verify_password(password, self._settings.api_auth_password_hash):
+        try:
+            password_matches = verify_password(
+                password,
+                self._settings.api_auth_password_hash,
+            )
+        except UnknownHashError:
+            return None
+
+        if not password_matches:
             return None
 
         return APIUser(username=configured_username)

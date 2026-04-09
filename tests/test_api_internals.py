@@ -10,6 +10,7 @@ import jwt
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from pwdlib.exceptions import UnknownHashError
 
 import cogitus.api as api_package
 from cogitus.api.dependencies import get_service
@@ -128,6 +129,42 @@ def test_auth_manager_rejects_wrong_username(
 
     authenticated = manager.authenticate_user(
         "someone-else",
+        api_auth_credentials["password"],
+    )
+
+    assert authenticated is None
+
+
+def test_auth_manager_rejects_wrong_username_with_malformed_dummy_hash(
+    configured_api_settings: AppSettings,
+    api_auth_credentials: dict[str, str],
+    mocker: MockerFixture,
+) -> None:
+    """Auth manager should fail closed if dummy verification breaks."""
+    manager = AuthManager(configured_api_settings)
+    mocker.patch(
+        "cogitus.api.managers.auth_manager.verify_password",
+        side_effect=UnknownHashError("unknown hash"),
+    )
+
+    authenticated = manager.authenticate_user(
+        "someone-else",
+        api_auth_credentials["password"],
+    )
+
+    assert authenticated is None
+
+
+def test_auth_manager_rejects_malformed_password_hash(
+    configured_api_settings: AppSettings,
+    api_auth_credentials: dict[str, str],
+) -> None:
+    """Auth manager should fail closed on malformed password hashes."""
+    configured_api_settings.api_auth_password_hash = "not" + "-a-valid-hash"
+    manager = AuthManager(configured_api_settings)
+
+    authenticated = manager.authenticate_user(
+        api_auth_credentials["username"],
         api_auth_credentials["password"],
     )
 
