@@ -8,6 +8,7 @@ from cogitus.api.dependencies import get_current_api_user, get_idea_manager
 from cogitus.api.managers.idea_manager import IdeaManager
 from cogitus.api.schemas.request.idea import (
     IdeaCreateRequest,
+    IdeaDeleteRequest,
     IdeaUpdateRequest,
 )
 from cogitus.api.schemas.response.idea import IdeaResponse
@@ -64,7 +65,11 @@ async def update_idea(
 @router.delete("/{idea_pk}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_idea(
     idea_pk: int,
+    payload: IdeaDeleteRequest,
     manager: Annotated[IdeaManager, Depends(get_idea_manager)],
 ) -> None:
     """Delete an existing idea."""
-    manager.delete_idea(idea_pk)
+    manager.delete_idea(
+        idea_pk,
+        last_known_updated_at=payload.last_known_updated_at,
+    )

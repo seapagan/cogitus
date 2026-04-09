@@ -144,14 +144,22 @@ class IdeaService:
             msg = "Failed to rename idea"
             raise ValueError(msg) from exc
 
-    def delete_idea(self, pk: int) -> None:
+    def delete_idea(
+        self,
+        pk: int,
+        last_known_updated_at: int | None = None,
+    ) -> None:
         """Delete an idea by primary key.
 
         Args:
             pk: Primary key of the idea to delete.
+            last_known_updated_at: Optional optimistic-lock timestamp.
         """
         self._cursor_state_repo.delete_for_idea(pk)
-        self._idea_repo.delete(pk)
+        self._idea_repo.delete(
+            pk,
+            last_known_updated_at=last_known_updated_at,
+        )
 
     def get_idea(self, pk: int) -> Idea | None:
         """Fetch a single idea.

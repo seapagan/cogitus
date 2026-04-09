@@ -209,14 +209,27 @@ class IdeaRepository:
         self._search_backend.upsert_idea(idea.pk)
         return idea
 
-    def delete(self, pk: int) -> None:
+    def delete(
+        self,
+        pk: int,
+        last_known_updated_at: int | None = None,
+    ) -> None:
         """Delete an idea by primary key.
 
         Junction table rows are removed via CASCADE.
 
         Args:
             pk: The primary key of the idea to delete.
+            last_known_updated_at: Optional optimistic-lock timestamp.
         """
+        idea = self._db.get(Idea, pk)
+        if (
+            idea is not None
+            and last_known_updated_at is not None
+            and idea.updated_at != last_known_updated_at
+        ):
+            msg = "Idea has been modified on the server"
+            raise ValueError(msg)
         self._db.delete(Idea, pk)
         self._search_backend.delete_idea(pk)
 

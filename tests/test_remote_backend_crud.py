@@ -120,6 +120,8 @@ def test_remote_backend_delegate_and_guard_paths(
         return_value=None,
     )
     assert backend.rename_idea(seed.pk, "Renamed") is None
+    backend.delete_idea(999)
+    api_client.delete_idea.assert_not_called()
 
     backend.close()
     api_client.close.assert_called_once_with()
@@ -268,6 +270,30 @@ def test_remote_backend_update_idea_raises_on_stale_cache(
             tags=["python"],
             group_pk=1,
         )
+
+
+def test_remote_backend_delete_idea_raises_on_stale_cache(
+    db: SqliterDB,
+) -> None:
+    """Remote deletes should surface optimistic-lock conflicts."""
+    api = MockRemoteAPI()
+    backend = RemoteIdeaBackend(
+        db,
+        default_group_name="default",
+        api_client=RemoteAPIClient(
+            base_url="http://remote.test",
+            username=REMOTE_USERNAME,
+            password=remote_secret(),
+            transport=api.transport(),
+        ),
+    )
+    backend.sync_from_remote()
+    api.mutate_idea(1, title="Changed elsewhere")
+
+    with pytest.raises(ValueError, match="modified on the server"):
+        backend.delete_idea(1)
+
+    assert backend.get_idea(1) is not None
 
 
 def test_remote_backend_update_preserves_tags_when_omitted(

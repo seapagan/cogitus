@@ -9,6 +9,7 @@ from sqliter import SqliterDB
 
 from cogitus.api.schemas.request.idea import (
     IdeaCreateRequest,
+    IdeaDeleteRequest,
     IdeaUpdateRequest,
 )
 from cogitus.backends.protocols import SyncingIdeaBackend
@@ -118,7 +119,15 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
     def delete_idea(self, pk: int) -> None:
         """Delete a remote idea and remove it from the cache."""
         with self._sync_lock:
-            self._api_client.delete_idea(pk)
+            current = self._cache_service.get_idea(pk)
+            if current is None:
+                return
+            self._api_client.delete_idea(
+                pk,
+                IdeaDeleteRequest(
+                    last_known_updated_at=current.updated_at,
+                ),
+            )
             self._cache_repo.delete_idea(pk)
 
     def get_idea(self, pk: int) -> Idea | None:

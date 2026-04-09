@@ -185,7 +185,11 @@ def test_idea_crud_roundtrip(api_client: TestClient) -> None:
     assert updated.json()["title"] == "Updated API idea"
     assert [tag["name"] for tag in updated.json()["tags"]] == ["rest"]
 
-    deleted = api_client.delete(f"/api/v1/ideas/{idea_pk}")
+    deleted = api_client.request(
+        "DELETE",
+        f"/api/v1/ideas/{idea_pk}",
+        json={"last_known_updated_at": updated.json()["updated_at"]},
+    )
     assert deleted.status_code == 204
 
     missing = api_client.get(f"/api/v1/ideas/{idea_pk}")
@@ -256,7 +260,11 @@ def test_update_and_delete_missing_idea_return_not_found(
             "group_pk": None,
         },
     )
-    delete = api_client.delete("/api/v1/ideas/99999")
+    delete = api_client.request(
+        "DELETE",
+        "/api/v1/ideas/99999",
+        json={"last_known_updated_at": 0},
+    )
 
     assert update.status_code == 404
     assert delete.status_code == 404
@@ -337,6 +345,27 @@ def test_update_idea_preserves_tags_when_omitted(
 
     assert updated.status_code == 200
     assert [tag["name"] for tag in updated.json()["tags"]] == ["python"]
+
+
+def test_delete_idea_with_stale_timestamp_returns_conflict(
+    api_client: TestClient,
+) -> None:
+    """Idea deletes should reject stale optimistic-lock timestamps."""
+    created = api_client.post(
+        "/api/v1/ideas",
+        json={"title": "Idea", "body": "", "tags": []},
+    )
+    assert created.status_code == 201
+    created_body = created.json()
+
+    response = api_client.request(
+        "DELETE",
+        f"/api/v1/ideas/{created_body['pk']}",
+        json={"last_known_updated_at": created_body["updated_at"] - 1},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Idea has been modified on the server"
 
 
 def test_group_crud_and_reassign_delete(api_client: TestClient) -> None:

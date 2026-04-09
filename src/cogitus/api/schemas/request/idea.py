@@ -26,3 +26,11 @@ class IdeaUpdateRequest(BaseModel):
     tags: list[str] | None = None
     group_pk: int | None = None
     last_known_updated_at: int | None = None
+
+
+class IdeaDeleteRequest(BaseModel):
+    """Payload for deleting an idea with optimistic locking."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    last_known_updated_at: int | None = None

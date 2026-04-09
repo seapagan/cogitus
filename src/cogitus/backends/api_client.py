@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
     from cogitus.api.schemas.request.idea import (
         IdeaCreateRequest,
+        IdeaDeleteRequest,
         IdeaUpdateRequest,
     )
 
@@ -130,9 +131,17 @@ class RemoteAPIClient:
             ).json()
         )
 
-    def delete_idea(self, idea_pk: int) -> None:
+    def delete_idea(
+        self,
+        idea_pk: int,
+        payload: IdeaDeleteRequest,
+    ) -> None:
         """Delete a remote idea."""
-        self._request("DELETE", f"/api/v1/ideas/{idea_pk}")
+        self._request(
+            "DELETE",
+            f"/api/v1/ideas/{idea_pk}",
+            json=payload.model_dump(exclude_unset=True),
+        )
 
     def create_group(self, name: str) -> GroupResponse:
         """Create a remote group."""

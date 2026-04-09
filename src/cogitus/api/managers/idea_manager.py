@@ -78,8 +78,19 @@ class IdeaManager:
             raise_not_found("Idea", idea_pk)
         return self.get_idea(updated.pk)
 
-    def delete_idea(self, idea_pk: int) -> None:
+    def delete_idea(
+        self,
+        idea_pk: int,
+        *,
+        last_known_updated_at: int | None = None,
+    ) -> None:
         """Delete an existing idea."""
         if self._service.get_idea(idea_pk) is None:
             raise_not_found("Idea", idea_pk)
-        self._service.delete_idea(idea_pk)
+        try:
+            self._service.delete_idea(
+                idea_pk,
+                last_known_updated_at=last_known_updated_at,
+            )
+        except ValueError as error:
+            raise_http_for_value_error(error)

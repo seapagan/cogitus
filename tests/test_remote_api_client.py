@@ -7,6 +7,7 @@ import pytest
 
 from cogitus.api.schemas.request.idea import (
     IdeaCreateRequest,
+    IdeaDeleteRequest,
     IdeaUpdateRequest,
 )
 from cogitus.backends import api_client as api_client_module
@@ -149,12 +150,27 @@ def test_remote_api_client_idea_crud_helpers() -> None:
             last_known_updated_at=created.updated_at,
         ),
     )
-    client.delete_idea(updated.pk)
+    client.delete_idea(
+        updated.pk,
+        IdeaDeleteRequest(last_known_updated_at=updated.updated_at),
+    )
 
     assert updated.title == "Updated remote idea"
     assert updated.body == "Changed body"
     assert updated.tags[0].name == "httpx"
     assert created.pk not in api.ideas
+
+
+def test_remote_api_client_delete_rejects_stale_timestamp() -> None:
+    """Delete should reject stale optimistic-lock timestamps."""
+    api, client = _build_seeded_remote_client()
+    api.mutate_idea(1, title="Changed elsewhere")
+
+    with pytest.raises(ValueError, match="modified on the server"):
+        client.delete_idea(
+            1,
+            IdeaDeleteRequest(last_known_updated_at=3),
+        )
 
 
 def test_remote_api_client_omits_unchanged_tags() -> None:

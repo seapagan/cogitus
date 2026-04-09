@@ -315,15 +315,15 @@ class MockRemoteAPI:
                 404,
                 {"detail": f"Idea {idea_pk} not found"},
             )
-        if request.method == "DELETE":
-            del self.ideas[idea_pk]
-            return self._json_response(204, None)
         payload = self._json_payload(request)
         if payload.get("last_known_updated_at") != idea.updated_at:
             return self._json_response(
                 409,
                 {"detail": "Idea has been modified on the server"},
             )
+        if request.method == "DELETE":
+            del self.ideas[idea_pk]
+            return self._json_response(204, None)
         self._tick += 1
         idea.title = str(payload["title"])
         idea.body = str(payload.get("body", ""))
