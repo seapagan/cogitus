@@ -135,14 +135,14 @@ def test_auth_manager_rejects_wrong_username(
     assert authenticated is None
 
 
-def test_auth_manager_accepts_canonical_eddsa_algorithm(
+def test_auth_manager_defaults_canonical_eddsa_algorithm_to_hs256(
     configured_api_settings: AppSettings,
 ) -> None:
-    """Auth manager should keep PyJWT's canonical mixed-case EdDSA."""
+    """Auth manager should reject non-HMAC JWT algorithms."""
     configured_api_settings.api_auth_jwt_algorithm = "EdDSA"
     manager = AuthManager(configured_api_settings)
 
-    assert manager.jwt_algorithm == "EdDSA"
+    assert manager.jwt_algorithm == DEFAULT_API_AUTH_JWT_ALGORITHM
 
 
 def test_auth_manager_defaults_invalid_jwt_algorithm_to_hs256(

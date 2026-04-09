@@ -31,6 +31,7 @@ DUMMY_VERIFY_VALUE: Final = (
 )
 BEARER_SCHEME: Final = "bearer"
 WWW_AUTHENTICATE_HEADER: Final = {"WWW-Authenticate": "Bearer"}
+SHARED_SECRET_JWT_ALGORITHMS: Final = frozenset({"HS256", "HS384", "HS512"})
 logger = logging.getLogger(__name__)
 
 
@@ -49,7 +50,7 @@ def _invalid_token_header(*, expired: bool = False) -> dict[str, str]:
 @cache
 def _valid_jwt_algorithms() -> frozenset[str]:
     """Return canonical JWT algorithm names from PyJWT."""
-    return frozenset(
+    return SHARED_SECRET_JWT_ALGORITHMS & frozenset(
         algorithm
         for algorithm in get_default_algorithms()
         if algorithm.lower() != "none"
