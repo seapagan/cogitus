@@ -147,7 +147,6 @@ class AuthManager:
     def create_access_token(
         self,
         *,
-        user: APIUser,
         expires_delta: timedelta | None = None,
     ) -> str:
         """Create a signed JWT access token for the configured user."""
@@ -159,7 +158,7 @@ class AuthManager:
             else expires_delta
         )
         payload = {
-            "sub": user.username,
+            "sub": self.configured_username,
             "exp": datetime.now(tz=timezone.utc) + token_lifetime,
         }
         return jwt.encode(
@@ -216,6 +215,6 @@ class AuthManager:
             )
 
         return TokenResponse(
-            access_token=self.create_access_token(user=user),
+            access_token=self.create_access_token(),
             token_type=BEARER_SCHEME,
         )

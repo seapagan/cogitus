@@ -127,7 +127,6 @@ def test_protected_routes_return_expired_token_challenge(
     )
     assert user is not None
     token = manager.create_access_token(
-        user=user,
         expires_delta=timedelta(seconds=-1),
     )
 

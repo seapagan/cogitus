@@ -15,7 +15,6 @@ import cogitus.api as api_package
 from cogitus.api.dependencies import get_service
 from cogitus.api.main import COGITUS_API_DB_PATH_ENV, create_api_app
 from cogitus.api.managers.auth_manager import AuthManager
-from cogitus.api.models.auth import APIUser
 from cogitus.config import DEFAULT_API_AUTH_JWT_ALGORITHM, AppSettings
 
 if TYPE_CHECKING:
@@ -155,12 +154,30 @@ def test_auth_manager_defaults_invalid_jwt_algorithm_to_hs256(
     assert manager.jwt_algorithm == DEFAULT_API_AUTH_JWT_ALGORITHM
 
 
+def test_auth_manager_tokens_always_use_configured_subject(
+    configured_api_settings: AppSettings,
+) -> None:
+    """Auth manager should issue tokens for the configured username."""
+    manager = AuthManager(configured_api_settings)
+    token = manager.create_access_token()
+    decoded = manager.decode_access_token(token)
+
+    assert decoded.username == configured_api_settings.api_auth_username
+
+
 def test_auth_manager_rejects_token_for_different_subject(
     configured_api_settings: AppSettings,
 ) -> None:
     """Auth manager should reject a signed token for a different username."""
     manager = AuthManager(configured_api_settings)
-    token = manager.create_access_token(user=APIUser(username="someone-else"))
+    token = jwt.encode(
+        {
+            "sub": "someone-else",
+            "exp": datetime.now(tz=timezone.utc) + timedelta(minutes=5),
+        },
+        manager.jwt_secret,
+        algorithm=manager.jwt_algorithm,
+    )
 
     with pytest.raises(
         HTTPException,
@@ -176,11 +193,9 @@ def test_auth_manager_honors_zero_token_lifetime(
 ) -> None:
     """Auth manager should keep a caller-provided zero token lifetime."""
     manager = AuthManager(configured_api_settings)
-    user = APIUser(username=configured_api_settings.api_auth_username)
     issued_at = datetime.now(tz=timezone.utc)
 
     token = manager.create_access_token(
-        user=user,
         expires_delta=timedelta(0),
     )
     payload = jwt.decode(
