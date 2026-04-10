@@ -316,6 +316,10 @@ RemoteStartupRecoveryScreen {
     align: center middle;
 }
 
+RemoteCloneProgressScreen {
+    align: center middle;
+}
+
 RemoteCloneSwitchModeScreen {
     align: center middle;
 }
@@ -369,6 +373,21 @@ RemoteCloneSwitchModeScreen {
     min-width: 0;
     padding: 0 1;
     margin: 0 1;
+}
+
+#remote-clone-container {
+    width: 58;
+    max-width: 90%;
+    height: auto;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#remote-clone-status {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 1;
 }
 
 #remote-clone-switch-container {
