@@ -1,6 +1,6 @@
 [project]
 name = "cogitus"
-version = "0.8.0"
+version = "0.9.0"
 description = "A fast, searchable terminal workspace for capturing and evolving programming ideas."
 readme = "README.md"
 authors = [{ name = "Grant Ramsay", email = "seapagan@gmail.com" }]
@@ -170,6 +170,9 @@ mypy_path = "src"
 [[tool.mypy.overrides]]
 disable_error_code = []
 module = "tests.*"
+
+[tool.vulture]
+exclude = [".venv/"]
 
 # ---------------------------------- testing --------------------------------- #
 [tool.pytest.ini_options]
