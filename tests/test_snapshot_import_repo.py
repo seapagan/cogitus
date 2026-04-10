@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from cogitus.api.schemas.response.group import GroupResponse
 from cogitus.api.schemas.response.idea import IdeaResponse
@@ -106,3 +106,21 @@ def test_snapshot_import_replaces_db_and_preserves_cursor_state(
     ]
     assert service.get_idea_cursor_position(1) == 9
     assert service.search_results("tag:cli")[0].idea.pk == 1
+
+
+def test_snapshot_import_reports_progress_when_callback_is_present() -> None:
+    """Progress helper should emit a structured update when requested."""
+    updates: list[Any] = []
+
+    SnapshotImportRepository._report_progress(
+        "Ideas",
+        2,
+        3,
+        updates.append,
+    )
+
+    assert len(updates) == 1
+    progress = updates[0]
+    assert progress.stage == "Ideas"
+    assert progress.completed == 2
+    assert progress.total == 3

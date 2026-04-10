@@ -44,6 +44,7 @@ from cogitus.ui.screens.idea_form_screen import (
     NameInputScreen,
     RemoteCloneModeAction,
     RemoteCloneProgressScreen,
+    RemoteCloneSwitchModeScreen,
     RemoteStartupRecoveryAction,
     RemoteStartupRecoveryScreen,
 )
@@ -57,6 +58,7 @@ from cogitus.ui.widgets.text_area import CogitusTextArea
 from tests.helpers import _focused_widget
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from pytest_mock import MockerFixture
@@ -64,6 +66,7 @@ if TYPE_CHECKING:
     from textual.pilot import Pilot
     from textual.screen import Screen
 
+    from cogitus.repositories.snapshot_import_repo import SnapshotImportProgress
     from cogitus.services.idea_service import IdeaService
 
 
@@ -3831,6 +3834,49 @@ def test_clone_remote_to_local_uses_default_local_target_in_api_mode(
     close_db.assert_called_once()
 
 
+def test_cogitus_app_clone_remote_to_local_requires_config(
+    db: SqliterDB,
+) -> None:
+    """Clone should fail fast when the remote API is not configured."""
+    app = CogitusApp(db=db, settings=_FakeSettings())
+
+    with pytest.raises(
+        RuntimeError,
+        match="Remote API is not fully configured",
+    ):
+        app.clone_remote_to_local()
+
+
+def test_cogitus_app_should_prompt_after_clone_uses_setting(
+    db: SqliterDB,
+) -> None:
+    """Prompt preference should follow the persisted settings value."""
+    app = CogitusApp(
+        db=db,
+        settings=_FakeSettings(prompt_after_clone=False),
+    )
+
+    assert app.should_prompt_after_clone() is False
+
+
+def test_cogitus_app_clone_target_prefers_explicit_local_db_path(
+    mocker: MockerFixture,
+    db: SqliterDB,
+    tmp_path: Path,
+) -> None:
+    """Local mode with an explicit db_path should clone into that file."""
+    db_path = str(tmp_path / "custom-local.db")
+    get_db = mocker.patch("cogitus.app.get_db", return_value=db)
+    app = CogitusApp(
+        db_path=db_path,
+        settings=_FakeSettings(),
+    )
+
+    get_db.reset_mock()
+
+    assert app._resolve_clone_target_local_db_path() == db_path
+
+
 @pytest.mark.asyncio
 async def test_clone_remote_to_local_requires_confirmation(
     service: IdeaService,
@@ -3865,6 +3911,80 @@ async def test_clone_remote_to_local_requires_confirmation(
         app.pop_screen()
         app.exit()
         await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_remote_clone_progress_screen_updates_widgets() -> None:
+    """Clone progress modal should update status text and per-stage progress."""
+    screen = RemoteCloneProgressScreen()
+    app = _StyledSingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        screen.mark_download_complete()
+        screen.update_stage_progress(
+            stage="Groups",
+            completed=0,
+            total=0,
+        )
+        screen.update_stage_progress(
+            stage="Ideas",
+            completed=2,
+            total=3,
+        )
+
+        status = str(screen.query_one("#remote-clone-status", Static).render())
+        groups_bar = cast(
+            "Any",
+            screen.query_one("#clone-groups-progress"),
+        )
+        ideas_bar = cast(
+            "Any",
+            screen.query_one("#clone-ideas-progress"),
+        )
+
+        assert "Applying snapshot to local database" in status
+        assert groups_bar.progress == 1
+        assert groups_bar.total == 1
+        assert ideas_bar.progress == 2
+        assert ideas_bar.total == 3
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_remote_clone_switch_mode_screen_actions(
+    mocker: MockerFixture,
+) -> None:
+    """Switch modal actions should dismiss with the correct result."""
+    screen = RemoteCloneSwitchModeScreen()
+    app = _StyledSingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+
+        screen.action_stay_remote()
+        dismiss.assert_called_once_with(RemoteCloneModeAction.STAY_REMOTE)
+
+        dismiss.reset_mock()
+        screen.action_switch_local()
+        dismiss.assert_called_once_with(RemoteCloneModeAction.SWITCH_LOCAL)
+        app.exit()
+        await pilot.pause()
+
+
+def test_remote_clone_switch_mode_screen_button_handlers(
+    mocker: MockerFixture,
+) -> None:
+    """Button handlers should delegate to the corresponding actions."""
+    screen = RemoteCloneSwitchModeScreen()
+    stay_remote = mocker.patch.object(screen, "action_stay_remote")
+    switch_local = mocker.patch.object(screen, "action_switch_local")
+
+    screen._handle_stay_remote_button()
+    screen._handle_switch_local_button()
+
+    stay_remote.assert_called_once_with()
+    switch_local.assert_called_once_with()
 
 
 @pytest.mark.asyncio
@@ -3908,6 +4028,350 @@ async def test_clone_switch_to_local_persists_backend_mode(
             api_password=_remote_secret(),
         )
         notify.assert_called_once_with("Switched to local mode")
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_handle_remote_clone_success_local_refreshes(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Successful local clone should refresh ideas and notify."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        refresh_ideas = mocker.patch.object(screen, "refresh_ideas")
+        notify = mocker.patch.object(screen, "notify")
+        screen._remote_clone_worker = mocker.Mock()
+        screen._clone_started_in_remote_mode = False
+
+        screen._handle_remote_clone_success()
+
+        refresh_ideas.assert_called_once_with(
+            select_pk=screen._selected_idea_pk
+        )
+        notify.assert_called_once_with(
+            "Local database replaced from remote snapshot"
+        )
+        assert screen._remote_clone_worker is None
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_handle_remote_clone_success_remote_no_prompt(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Remote clone success without prompt should only notify."""
+
+    class _NoPromptCloneApp(_SingleScreenApp):
+        def should_prompt_after_clone(self) -> bool:
+            return False
+
+    screen = MainScreen(service)
+    app = _NoPromptCloneApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+        push_screen = mocker.patch.object(app, "push_screen")
+        screen._remote_clone_worker = mocker.Mock()
+        screen._clone_started_in_remote_mode = True
+
+        screen._handle_remote_clone_success()
+
+        push_screen.assert_not_called()
+        notify.assert_called_once_with(
+            "Local database replaced from remote snapshot"
+        )
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_handle_remote_clone_success_remote_prompts(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Remote clone success with prompt enabled should open the switch modal."""
+
+    class _PromptCloneApp(_SingleScreenApp):
+        def should_prompt_after_clone(self) -> bool:
+            return True
+
+    screen = MainScreen(service)
+    app = _PromptCloneApp(screen)
+
+    async with app.run_test() as pilot:
+        push_screen = mocker.patch.object(app, "push_screen")
+        screen._remote_clone_worker = mocker.Mock()
+        screen._clone_started_in_remote_mode = True
+
+        screen._handle_remote_clone_success()
+
+        assert isinstance(
+            push_screen.call_args.args[0],
+            RemoteCloneSwitchModeScreen,
+        )
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_handle_remote_clone_error_uses_default_message(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Clone error handler should fall back to a default message."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+        worker = mocker.Mock(error=None)
+        screen._remote_clone_worker = mocker.Mock()
+
+        screen._handle_remote_clone_error(worker)
+
+        notify.assert_called_once_with("Remote clone failed", severity="error")
+        assert screen._remote_clone_worker is None
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_worker_state_changed_routes_remote_clone_events(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Clone worker events should dispatch to the clone handlers only."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        success = mocker.patch.object(screen, "_handle_remote_clone_success")
+        error = mocker.patch.object(screen, "_handle_remote_clone_error")
+        worker = mocker.Mock()
+        screen._remote_clone_worker = worker
+
+        screen.on_worker_state_changed(
+            mocker.Mock(worker=worker, state=WorkerState.SUCCESS)
+        )
+        screen.on_worker_state_changed(
+            mocker.Mock(worker=worker, state=WorkerState.ERROR)
+        )
+
+        success.assert_called_once_with()
+        error.assert_called_once_with(worker)
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_dismiss_remote_clone_progress_pops_modal(
+    service: IdeaService,
+) -> None:
+    """Dismissing clone progress should pop the modal when it is active."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        progress_screen = RemoteCloneProgressScreen()
+        screen._remote_clone_progress_screen = progress_screen
+        app.push_screen(progress_screen)
+        await pilot.pause()
+
+        screen._dismiss_remote_clone_progress()
+        await pilot.pause()
+
+        assert app.screen is screen
+        assert screen._remote_clone_progress_screen is None
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_update_remote_clone_progress_updates_modal(
+    service: IdeaService,
+) -> None:
+    """Main screen should forward progress updates into the mounted modal."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        progress_screen = RemoteCloneProgressScreen()
+        screen._remote_clone_progress_screen = progress_screen
+        app.push_screen(progress_screen)
+        await pilot.pause()
+
+        screen._update_remote_clone_progress(
+            progress=cast(
+                "Any",
+                type(
+                    "Progress",
+                    (),
+                    {"stage": "Download", "completed": 1, "total": 1},
+                )(),
+            )
+        )
+        screen._update_remote_clone_progress(
+            progress=cast(
+                "Any",
+                type(
+                    "Progress",
+                    (),
+                    {"stage": "Tags", "completed": 2, "total": 4},
+                )(),
+            )
+        )
+
+        status = str(
+            progress_screen.query_one("#remote-clone-status", Static).render()
+        )
+        tags_bar = cast(
+            "Any",
+            progress_screen.query_one("#clone-tags-progress"),
+        )
+        assert "Applying snapshot to local database" in status
+        assert tags_bar.progress == 2
+        assert tags_bar.total == 4
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_update_remote_clone_progress_ignores_missing_modal(
+    service: IdeaService,
+) -> None:
+    """Progress updates should be ignored when no modal is mounted."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        screen._update_remote_clone_progress(
+            progress=cast(
+                "Any",
+                type(
+                    "Progress",
+                    (),
+                    {"stage": "Tags", "completed": 2, "total": 4},
+                )(),
+            )
+        )
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_run_remote_clone_requires_app_hook(
+    service: IdeaService,
+) -> None:
+    """Clone worker body should fail clearly without an app clone hook."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        with pytest.raises(TypeError, match="Remote clone is unavailable"):
+            cast("Any", MainScreen._run_remote_clone).__wrapped__(screen)
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_run_remote_clone_forwards_progress_updates(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Clone worker should pass progress back through call_from_thread."""
+
+    class _CloneApp(_SingleScreenApp):
+        def clone_remote_to_local(
+            self,
+            *,
+            progress_callback: Callable[[SnapshotImportProgress], None]
+            | None = None,
+        ) -> None:
+            if progress_callback is not None:
+                progress_callback(
+                    type(
+                        "Progress",
+                        (),
+                        {"stage": "Tags", "completed": 2, "total": 4},
+                    )()
+                )
+
+    screen = MainScreen(service)
+    app = _CloneApp(screen)
+
+    async with app.run_test() as pilot:
+        call_from_thread = mocker.patch.object(app, "call_from_thread")
+
+        cast("Any", MainScreen._run_remote_clone).__wrapped__(screen)
+
+        call_from_thread.assert_called_once()
+        assert call_from_thread.call_args.args[0] == (
+            screen._update_remote_clone_progress
+        )
+        progress = call_from_thread.call_args.args[1]
+        assert progress.stage == "Tags"
+        assert progress.completed == 2
+        assert progress.total == 4
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_action_clone_remote_to_local_warns_when_already_running(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Starting a second clone should warn instead of opening a modal."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+        screen._remote_clone_worker = mocker.Mock(is_finished=False)
+
+        screen.action_clone_remote_to_local()
+
+        notify.assert_called_once_with(
+            "Remote clone already in progress",
+            severity="warning",
+        )
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_remote_clone_switch_dismiss_branches(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Dismiss results should notify for stay-remote and app-hook fallback."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+
+        screen._on_remote_clone_switch_dismiss(
+            RemoteCloneModeAction.STAY_REMOTE
+        )
+        notify.assert_called_once_with(
+            "Local database replaced from remote snapshot"
+        )
+
+        notify.reset_mock()
+        screen._on_remote_clone_switch_dismiss(
+            RemoteCloneModeAction.SWITCH_LOCAL
+        )
+        notify.assert_called_once_with(
+            "Local fallback is unavailable",
+            severity="error",
+        )
         app.exit()
         await pilot.pause()
 
