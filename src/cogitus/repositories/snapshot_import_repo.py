@@ -88,6 +88,8 @@ class SnapshotImportRepository:
         progress_callback: SnapshotImportCallback | None,
     ) -> dict[int, Group]:
         """Insert snapshot groups and return them keyed by primary key."""
+        if progress_callback is None:
+            return self._bulk_insert_groups(groups)
         self._report_progress("Groups", 0, len(groups), progress_callback)
         inserted: dict[int, Group] = {}
         for index, group in enumerate(groups, start=1):
@@ -111,6 +113,8 @@ class SnapshotImportRepository:
         progress_callback: SnapshotImportCallback | None,
     ) -> dict[int, Tag]:
         """Insert snapshot tags and return them keyed by primary key."""
+        if progress_callback is None:
+            return self._bulk_insert_tags(tags)
         self._report_progress("Tags", 0, len(tags), progress_callback)
         inserted: dict[int, Tag] = {}
         for index, tag in enumerate(tags, start=1):
@@ -136,6 +140,10 @@ class SnapshotImportRepository:
         progress_callback: SnapshotImportCallback | None,
     ) -> None:
         """Insert snapshot ideas and restore their tag links."""
+        if progress_callback is None:
+            self._bulk_insert_ideas(ideas, groups_by_pk=groups_by_pk)
+            self._sync_snapshot_idea_tags(ideas, tags_by_pk=tags_by_pk)
+            return
         self._report_progress("Ideas", 0, len(ideas), progress_callback)
         for index, idea in enumerate(ideas, start=1):
             cached_idea = self._db.insert(
@@ -148,6 +156,68 @@ class SnapshotImportRepository:
                 index,
                 len(ideas),
                 progress_callback,
+            )
+
+    def _bulk_insert_groups(
+        self,
+        groups: list[GroupResponse],
+    ) -> dict[int, Group]:
+        """Insert snapshot groups in one batch."""
+        if not groups:
+            return {}
+        inserted = self._db.bulk_insert(
+            [self._group_model(group) for group in groups],
+            timestamp_override=True,
+        )
+        return {group.pk: group for group in inserted}
+
+    def _bulk_insert_tags(
+        self,
+        tags: list[TagResponse],
+    ) -> dict[int, Tag]:
+        """Insert snapshot tags in one batch."""
+        if not tags:
+            return {}
+        inserted = self._db.bulk_insert(
+            [self._tag_model(tag) for tag in tags],
+            timestamp_override=True,
+        )
+        return {tag.pk: tag for tag in inserted}
+
+    def _bulk_insert_ideas(
+        self,
+        ideas: list[IdeaResponse],
+        *,
+        groups_by_pk: dict[int, Group],
+    ) -> None:
+        """Insert snapshot ideas in one batch."""
+        if not ideas:
+            return
+        self._db.bulk_insert(
+            [
+                self._idea_model(
+                    idea,
+                    groups_by_pk[idea.group.pk],
+                )
+                for idea in ideas
+            ],
+            timestamp_override=True,
+        )
+
+    def _sync_snapshot_idea_tags(
+        self,
+        ideas: list[IdeaResponse],
+        *,
+        tags_by_pk: dict[int, Tag],
+    ) -> None:
+        """Recreate snapshot idea-tag links through the ORM M2M API."""
+        for idea in ideas:
+            cached_idea = self._db.get(Idea, idea.pk)
+            if cached_idea is None:
+                msg = f"Idea {idea.pk} not found after snapshot insert"
+                raise RuntimeError(msg)
+            cached_idea.tags.set(
+                *(tags_by_pk[tag.pk] for tag in idea.tags),
             )
 
     def _restore_cursor_positions(
