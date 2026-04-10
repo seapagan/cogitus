@@ -40,6 +40,11 @@ if TYPE_CHECKING:
     from cogitus.services.idea_service import IdeaService
 
 
+def _focused_widget(app: App[None]) -> Widget | None:
+    """Return the currently focused widget."""
+    return app.focused
+
+
 class _WidgetApp(App[None]):
     """Small app to mount a single widget for tests."""
 
@@ -871,7 +876,8 @@ async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
 
         await pilot.press("up")
         await pilot.pause()
-        assert app.focused is search
+        focused = _focused_widget(app)
+        assert focused is search
 
         search.value = ""
         await pilot.pause()

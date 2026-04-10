@@ -60,6 +60,7 @@ if TYPE_CHECKING:
     from sqliter import SqliterDB
     from textual.pilot import Pilot
     from textual.screen import Screen
+    from textual.widget import Widget
 
     from cogitus.services.idea_service import IdeaService
 
@@ -79,6 +80,11 @@ class _SingleScreenApp(App[None]):
     def on_mount(self) -> None:
         """Push the test screen."""
         self.push_screen(self._screen)
+
+
+def _focused_widget(app: App[None]) -> Widget | None:
+    """Return the currently focused widget."""
+    return app.focused
 
 
 class _StyledSingleScreenApp(_SingleScreenApp):
@@ -2878,7 +2884,8 @@ async def test_main_screen_cancel_search_closes_autocomplete_first(
         screen.action_cancel_search()
         await pilot.pause()
         assert search.value == ""
-        assert app.focused is tree
+        focused = _focused_widget(app)
+        assert focused is tree
 
 
 @pytest.mark.asyncio
@@ -2915,7 +2922,8 @@ async def test_main_screen_search_cancel_restores_previous_focus(
         screen.action_cancel_search()
         await pilot.pause()
         assert search.value == ""
-        assert app.focused is tree
+        focused = _focused_widget(app)
+        assert focused is tree
 
 
 @pytest.mark.asyncio
@@ -3009,7 +3017,8 @@ async def test_main_screen_search_results_support_keyboard_navigation(
 
         screen.action_cancel_search()
         await pilot.pause()
-        assert app.focused is search
+        focused = _focused_widget(app)
+        assert focused is search
         assert search.value == "python"
 
         screen.action_cancel_search()
