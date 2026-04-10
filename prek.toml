@@ -24,16 +24,21 @@ repo = "https://github.com/pre-commit/mirrors-mypy"
 rev = "v1.19.1"
 hooks = [
   { id = "mypy", name = "run mypy", additional_dependencies = [
+    "fastapi",
+    "httpx",
     "pydantic",
     "pyperclip",
     "pytest",
     "pytest-mock",
+    "pwdlib",
+    "pyjwt",
     "rich",
     "simple-toml-settings",
     "sqliter-py",
     "textual",
     "typer",
     "types-pyperclip",
+    "uvicorn",
   ], args = ["--strict"] },
 ]
 

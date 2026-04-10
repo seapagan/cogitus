@@ -17,6 +17,7 @@ wheels/
 
 # AI stuff
 .claude/
+.codex/
 CLAUDE.md
 AGENTS.md
 
@@ -31,3 +32,6 @@ site
 
 # local dev python version
 .python-version
+
+# Added by ggshield
+.cache_ggshield

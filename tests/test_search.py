@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from cogitus.models.idea import Idea
+
 if TYPE_CHECKING:
     from sqliter import SqliterDB
 
-    from cogitus.models.idea import Idea
     from cogitus.services.idea_service import IdeaService
 
 
@@ -119,15 +120,16 @@ class TestSearch:
         """Equal-score text matches should fall back to recency order."""
         older = service.create_idea("Python title", "Same match strength")
         newer = service.create_idea("Python title", "Same match strength")
-        db.connect().execute(
-            "UPDATE ideas SET updated_at = ? WHERE pk = ?;",
-            (1, older.pk),
+        db.update_where(
+            Idea,
+            where={"pk": older.pk},
+            values={"updated_at": 1},
         )
-        db.connect().execute(
-            "UPDATE ideas SET updated_at = ? WHERE pk = ?;",
-            (10, newer.pk),
+        db.update_where(
+            Idea,
+            where={"pk": newer.pk},
+            values={"updated_at": 10},
         )
-        db.connect().commit()
 
         results = service.search_ideas("python")
 

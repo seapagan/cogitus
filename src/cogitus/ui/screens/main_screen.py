@@ -5,10 +5,14 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, ClassVar
 
+from textual import work
 from textual.binding import ActiveBinding, Binding, BindingType
 from textual.screen import Screen
-from textual.widgets import Footer, Header
+from textual.widgets import Header
+from textual.worker import Worker, WorkerState
 
+from cogitus.backends import BackendConfig
+from cogitus.backends.protocols import SyncingIdeaBackend
 from cogitus.config import (
     DEFAULT_EDIT_BODY_CURSOR_MODE,
     DEFAULT_NEW_IDEA_GROUP_MODE,
@@ -20,13 +24,17 @@ from cogitus.search import parse_search_query
 from cogitus.ui.clipboard import copy_to_clipboard
 from cogitus.ui.screens.idea_form_screen import (
     AboutScreen,
+    BackendConfigScreen,
     ConfirmDialog,
     GroupDeleteReassignScreen,
     GroupFormScreen,
     HelpScreen,
     IdeaFormScreen,
     NameInputScreen,
+    RemoteStartupRecoveryAction,
+    RemoteStartupRecoveryScreen,
 )
+from cogitus.ui.widgets.footer import CogitusStatusBar
 from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
 
@@ -35,14 +43,17 @@ if TYPE_CHECKING:
 
     from textual.app import ComposeResult
     from textual.events import AppFocus, ScreenResume
+    from textual.timer import Timer
 
+    from cogitus.backends.protocols import IdeaBackend
     from cogitus.models.group import Group
     from cogitus.models.idea import Idea
-    from cogitus.services.idea_service import IdeaService
 
 
 class MainScreen(Screen[None]):
     """Two-pane main screen: idea list + detail view."""
+
+    REMOTE_SYNC_INTERVAL_SECONDS: ClassVar[int] = 60
 
     _SEARCH_MODE_DISABLED_ACTIONS: ClassVar[frozenset[str]] = frozenset(
         {
@@ -72,6 +83,16 @@ class MainScreen(Screen[None]):
             "footer_back_to_search",
         }
     )
+    _REMOTE_READ_ONLY_ACTIONS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "new_idea",
+            "new_group",
+            "delete_group",
+            "edit_idea",
+            "rename_selected",
+            "delete_idea",
+        }
+    )
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("n", "new_idea", "New", key_display="n"),
@@ -85,6 +106,7 @@ class MainScreen(Screen[None]):
         Binding("e", "edit_idea", "Edit", key_display="e"),
         Binding("r", "rename_selected", "Rename", key_display="r"),
         Binding("d", "delete_idea", "Delete", key_display="d"),
+        Binding("c", "show_backend_config", "Settings", show=False),
         Binding("slash", "focus_search", "Search", key_display="/"),
         Binding("escape", "cancel_search", "Back", show=False),
         Binding(
@@ -138,7 +160,7 @@ class MainScreen(Screen[None]):
 
     def __init__(
         self,
-        service: IdeaService,
+        service: IdeaBackend,
         *,
         initial_select_pk: int | None = None,
         on_selected_idea_changed: Callable[[int | None], None] | None = None,
@@ -151,7 +173,7 @@ class MainScreen(Screen[None]):
         """Initialize with the idea service.
 
         Args:
-            service: The IdeaService instance.
+            service: The idea backend instance.
             initial_select_pk: Idea primary key to select on first load.
             on_selected_idea_changed: Callback for selected idea changes.
             edit_body_cursor_mode: Edit form body cursor mode.
@@ -174,27 +196,228 @@ class MainScreen(Screen[None]):
         self._selected_idea_pk: int | None = None
         self._active_pane: str = "list"
         self._focus_before_search: str = "list"
+        self._remote_sync_timer: Timer | None = None
+        self._remote_sync_worker: Worker[None] | None = None
+        self._remote_sync_error: str | None = None
+        self._initial_remote_sync_pending = False
+        self._remote_startup_modal_open = False
+        self._remote_cached_read_only = False
+        self._pending_pre_edit_action: Callable[[], None] | None = None
+        self._base_sub_title = ""
 
     def compose(self) -> ComposeResult:
         """Compose the main screen layout."""
         yield Header(icon=f"v{self._app_version}")
         yield IdeaListPanel(id="idea-list-panel")
         yield IdeaView(id="content-panel")
-        yield Footer()
+        yield CogitusStatusBar()
 
     def on_mount(self) -> None:
         """Load ideas when screen mounts."""
+        self._base_sub_title = self.app.sub_title
         self.refresh_ideas(select_pk=self._initial_select_pk)
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         panel.browse_widget().focus()
+        self._configure_remote_sync()
 
     def on_app_focus(self, _event: AppFocus) -> None:
         """Refresh visible relative timestamps when the app regains focus."""
         self._refresh_relative_timestamps()
+        self._request_remote_sync()
 
     def on_screen_resume(self, _event: ScreenResume) -> None:
         """Refresh visible relative timestamps when this screen resumes."""
         self._refresh_relative_timestamps()
+        self._request_remote_sync()
+
+    def replace_service(self, service: IdeaBackend) -> None:
+        """Swap in a new backend and refresh the visible state."""
+        self._service = service
+        self._configure_remote_sync()
+        self.refresh_ideas(select_pk=self._selected_idea_pk)
+
+    def _configure_remote_sync(self) -> None:
+        """Enable or disable background sync based on backend support."""
+        if self._remote_sync_timer is not None:
+            self._remote_sync_timer.stop()
+            self._remote_sync_timer = None
+        self._remote_sync_worker = None
+        self._remote_sync_error = None
+        self._initial_remote_sync_pending = False
+        self._remote_startup_modal_open = False
+        self._pending_pre_edit_action = None
+        self._clear_sync_indicator()
+        if not self._syncing_backend():
+            self._set_remote_cached_read_only(read_only=False)
+            return
+        self._initial_remote_sync_pending = True
+        self._request_remote_sync()
+        self._remote_sync_timer = self.set_interval(
+            self.REMOTE_SYNC_INTERVAL_SECONDS,
+            self._request_remote_sync,
+        )
+
+    def _set_remote_cached_read_only(self, *, read_only: bool) -> None:
+        """Update cached-mode mutability and the footer warning marker."""
+        self._remote_cached_read_only = read_only
+        if not self.is_mounted:
+            return
+        self.query_one(CogitusStatusBar).show_cache_warning = read_only
+        self.refresh_bindings()
+
+    def _syncing_backend(self) -> SyncingIdeaBackend | None:
+        """Return the backend when it supports remote sync."""
+        if isinstance(self._service, SyncingIdeaBackend):
+            return self._service
+        return None
+
+    def _request_remote_sync(self) -> None:
+        """Schedule a background sync when the remote backend is active."""
+        if self.app.screen is not self:
+            return
+        if self._syncing_backend() is None:
+            return
+        if self._remote_startup_modal_open:
+            return
+        if self._remote_sync_in_progress():
+            return
+        self._set_sync_indicator()
+        self._remote_sync_worker = self._run_remote_sync()
+
+    def _remote_sync_in_progress(self) -> bool:
+        """Return whether a background remote sync is still running."""
+        worker = self._remote_sync_worker
+        return worker is not None and not worker.is_finished
+
+    @work(thread=True, exclusive=True, exit_on_error=False)
+    def _run_remote_sync(self) -> None:
+        """Refresh the remote cache without blocking the UI."""
+        backend = self._syncing_backend()
+        if backend is None:
+            return
+        backend.sync_from_remote()
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        """Refresh the UI when a background remote sync completes."""
+        if event.worker is not self._remote_sync_worker:
+            return
+        if event.state == WorkerState.SUCCESS:
+            self._handle_remote_sync_success()
+            self._refresh_after_remote_sync()
+            self._run_pending_pre_edit_action()
+            return
+        if event.state == WorkerState.ERROR:
+            self._pending_pre_edit_action = None
+            self._handle_remote_sync_error(event.worker)
+
+    def _handle_remote_sync_success(self) -> None:
+        """Apply UI state updates after a successful remote sync."""
+        was_read_only = self._remote_cached_read_only
+        self._initial_remote_sync_pending = False
+        self._remote_sync_error = None
+        self._clear_sync_indicator()
+        if not was_read_only:
+            return
+        self._set_remote_cached_read_only(read_only=False)
+        restore_remote_mode = getattr(
+            self.app,
+            "restore_remote_mode",
+            None,
+        )
+        if callable(restore_remote_mode):
+            restore_remote_mode()
+        self.notify("Remote API reconnected")
+
+    def _handle_remote_sync_error(self, worker: Worker[None]) -> None:
+        """Apply UI state updates after a failed remote sync."""
+        self._clear_sync_indicator()
+        message = (
+            str(worker.error)
+            if worker.error is not None
+            else "Remote sync failed"
+        )
+        if self._initial_remote_sync_pending:
+            self._initial_remote_sync_pending = False
+            self._show_remote_startup_recovery(message)
+            return
+        if self._remote_cached_read_only:
+            self._remote_sync_error = message
+            return
+        if message != self._remote_sync_error:
+            self.notify(message, severity="error")
+        self._remote_sync_error = message
+
+    def _show_remote_startup_recovery(self, message: str) -> None:
+        """Open the startup recovery modal for an initial remote failure."""
+        if self._remote_startup_modal_open:
+            return
+        self._remote_startup_modal_open = True
+        self.app.push_screen(
+            RemoteStartupRecoveryScreen(message),
+            callback=self._on_remote_startup_recovery_dismiss,
+        )
+
+    def _on_remote_startup_recovery_dismiss(self, result: object) -> None:
+        """Handle the recovery action chosen after remote startup fails."""
+        self._remote_startup_modal_open = False
+        if not isinstance(result, RemoteStartupRecoveryAction):
+            return
+        if result == RemoteStartupRecoveryAction.RETRY:
+            self._set_remote_cached_read_only(read_only=False)
+            restore_remote_mode = getattr(
+                self.app,
+                "restore_remote_mode",
+                None,
+            )
+            if callable(restore_remote_mode):
+                restore_remote_mode()
+            self._initial_remote_sync_pending = True
+            self._request_remote_sync()
+            return
+        if result == RemoteStartupRecoveryAction.USE_CACHE:
+            self._set_remote_cached_read_only(read_only=True)
+            activate_cached_remote_mode = getattr(
+                self.app,
+                "activate_cached_remote_mode",
+                None,
+            )
+            if callable(activate_cached_remote_mode):
+                activate_cached_remote_mode()
+            self.refresh_ideas(select_pk=self._selected_idea_pk)
+            return
+        if result == RemoteStartupRecoveryAction.SWITCH_LOCAL:
+            activate_local_fallback = getattr(
+                self.app,
+                "activate_session_local_fallback",
+                None,
+            )
+            if callable(activate_local_fallback):
+                activate_local_fallback()
+                self.notify("Using local mode for this session")
+            else:
+                self.notify(
+                    "Local fallback is unavailable",
+                    severity="error",
+                )
+            return
+        self.app.exit()
+
+    def _refresh_after_remote_sync(self) -> None:
+        """Refresh visible state while preserving current selection."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        selected_group_pk = panel.get_selected_group_pk()
+        self.refresh_ideas(
+            select_pk=self._selected_idea_pk,
+            select_group_pk=selected_group_pk,
+        )
+
+    def _set_sync_indicator(self) -> None:
+        """Show a subtle syncing indicator in the app subtitle."""
+        self.app.sub_title = f"{self._base_sub_title} | Syncing..."
+
+    def _clear_sync_indicator(self) -> None:
+        """Restore the default subtitle after a sync completes."""
+        self.app.sub_title = self._base_sub_title
 
     def _refresh_relative_timestamps(self) -> None:
         """Refresh in-place relative timestamps in the visible idea tree."""
@@ -416,8 +639,20 @@ class MainScreen(Screen[None]):
             return
         view.show_idea(idea)
 
+    def _ensure_mutation_allowed(self) -> bool:
+        """Return whether mutating actions are allowed right now."""
+        if not self._remote_cached_read_only:
+            return True
+        self.notify(
+            "Cached remote data is read-only while the API is unavailable",
+            severity="warning",
+        )
+        return False
+
     def action_new_idea(self) -> None:
         """Open the new idea form."""
+        if not self._ensure_mutation_allowed():
+            return
         initial_group_pk = None
         if self._new_idea_group_mode == NewIdeaGroupMode.CONTEXTUAL:
             initial_group_pk = self._get_contextual_new_idea_group_pk()
@@ -444,6 +679,8 @@ class MainScreen(Screen[None]):
 
     def action_new_group(self) -> None:
         """Open the new group form."""
+        if not self._ensure_mutation_allowed():
+            return
         self.app.push_screen(
             GroupFormScreen(self._service),
             callback=self._on_group_form_dismiss,
@@ -451,12 +688,18 @@ class MainScreen(Screen[None]):
 
     def action_edit_idea(self) -> None:
         """Open the edit form for the selected idea."""
+        if not self._ensure_mutation_allowed():
+            return
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         idea = panel.get_selected_idea()
         if idea is None:
             self.notify("No idea selected", severity="warning")
             return
-        fresh = self._service.get_idea(idea.pk)
+        self._sync_remote_before_edit(lambda: self._open_edit_idea(idea.pk))
+
+    def _open_edit_idea(self, idea_pk: int) -> None:
+        """Open the edit form using freshly synced data."""
+        fresh = self._service.get_idea(idea_pk)
         if fresh is None:
             self.notify("Idea not found", severity="error")
             return
@@ -471,6 +714,8 @@ class MainScreen(Screen[None]):
 
     def action_delete_idea(self) -> None:
         """Delete the selected idea with confirmation."""
+        if not self._ensure_mutation_allowed():
+            return
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         idea = panel.get_selected_idea()
         if idea is None:
@@ -485,6 +730,8 @@ class MainScreen(Screen[None]):
 
     def action_rename_selected(self) -> None:
         """Rename the currently selected group or idea."""
+        if not self._ensure_mutation_allowed():
+            return
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         group_pk = panel.get_selected_group_pk()
         if group_pk is not None:
@@ -499,6 +746,10 @@ class MainScreen(Screen[None]):
 
     def _rename_selected_group(self, group_pk: int) -> None:
         """Open rename flow for a selected group."""
+        self._sync_remote_before_edit(lambda: self._open_group_rename(group_pk))
+
+    def _open_group_rename(self, group_pk: int) -> None:
+        """Open rename flow for a selected group after sync completes."""
         group = self._service.get_group(group_pk)
         if group is None:
             self.notify("Group not found", severity="error")
@@ -523,6 +774,10 @@ class MainScreen(Screen[None]):
 
     def _rename_selected_idea(self, idea_pk: int) -> None:
         """Open rename flow for a selected idea."""
+        self._sync_remote_before_edit(lambda: self._open_idea_rename(idea_pk))
+
+    def _open_idea_rename(self, idea_pk: int) -> None:
+        """Open rename flow for a selected idea after sync completes."""
         fresh = self._service.get_idea(idea_pk)
         if fresh is None:
             self.notify("Idea not found", severity="error")
@@ -539,8 +794,41 @@ class MainScreen(Screen[None]):
             ),
         )
 
+    def _sync_remote_before_edit(
+        self,
+        on_ready: Callable[[], None] | None = None,
+    ) -> bool:
+        """Refresh remote-backed data before opening edit-style flows."""
+        if self._remote_cached_read_only:
+            self.notify(
+                "Cached remote data is read-only while the API is unavailable",
+                severity="warning",
+            )
+            return False
+        backend = self._syncing_backend()
+        if backend is None:
+            if on_ready is not None:
+                on_ready()
+            return True
+        if on_ready is not None:
+            self._pending_pre_edit_action = on_ready
+        if self._remote_sync_in_progress():
+            return False
+        self._set_sync_indicator()
+        self._remote_sync_worker = self._run_remote_sync()
+        return False
+
+    def _run_pending_pre_edit_action(self) -> None:
+        """Continue a deferred edit flow once remote sync succeeds."""
+        action = self._pending_pre_edit_action
+        self._pending_pre_edit_action = None
+        if action is not None:
+            action()
+
     def action_delete_group(self) -> None:
         """Delete selected group with optional bulk move."""
+        if not self._ensure_mutation_allowed():
+            return
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
         group_pk = panel.get_selected_group_pk()
         if group_pk is None:
@@ -638,6 +926,8 @@ class MainScreen(Screen[None]):
     ) -> None:
         """Handle delete confirmation result."""
         if confirmed:
+            if not self._ensure_mutation_allowed():
+                return
             self._service.delete_idea(pk)
             self.notify("Idea deleted")
             self.refresh_ideas()
@@ -661,6 +951,8 @@ class MainScreen(Screen[None]):
         """Handle group rename flow completion."""
         if name is None:
             return
+        if not self._ensure_mutation_allowed():
+            return
         try:
             renamed = self._service.rename_group(group_pk, name)
         except ValueError as exc:
@@ -679,6 +971,8 @@ class MainScreen(Screen[None]):
     ) -> None:
         """Handle idea rename flow completion."""
         if title is None:
+            return
+        if not self._ensure_mutation_allowed():
             return
         try:
             renamed = self._service.rename_idea(idea_pk, title)
@@ -699,6 +993,8 @@ class MainScreen(Screen[None]):
     ) -> None:
         """Handle delete-group confirmation for empty groups."""
         if confirmed:
+            if not self._ensure_mutation_allowed():
+                return
             try:
                 self._service.delete_group(group_pk)
             except ValueError as exc:
@@ -714,6 +1010,8 @@ class MainScreen(Screen[None]):
     ) -> None:
         """Handle group delete with reassignment."""
         if target_group_pk is None:
+            return
+        if not self._ensure_mutation_allowed():
             return
         try:
             self._service.delete_group(
@@ -749,6 +1047,29 @@ class MainScreen(Screen[None]):
     def action_show_help(self) -> None:
         """Show the help overlay."""
         self.app.push_screen(HelpScreen())
+
+    def action_show_backend_config(self) -> None:
+        """Show the backend configuration modal."""
+        getter = getattr(self.app, "get_backend_config", None)
+        if getter is None:
+            self.notify("Backend settings are unavailable", severity="error")
+            return
+        config = getter()
+        self.app.push_screen(
+            BackendConfigScreen(config),
+            callback=self._on_backend_config_dismiss,
+        )
+
+    def _on_backend_config_dismiss(self, config: object) -> None:
+        """Apply backend configuration changes from the modal."""
+        if not isinstance(config, BackendConfig):
+            return
+        apply_backend_config = getattr(self.app, "apply_backend_config", None)
+        if apply_backend_config is None:
+            self.notify("Backend settings are unavailable", severity="error")
+            return
+        apply_backend_config(config)
+        self.notify("Connection settings updated")
 
     def action_show_about(self) -> None:
         """Show the About overlay."""
@@ -791,30 +1112,41 @@ class MainScreen(Screen[None]):
     ) -> bool | None:
         """Show search-mode footer hints only when they are relevant."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        search_is_active = panel.search_is_active()
+        search_input_focused = panel.is_search_input_focused()
+        search_results_focused = panel.is_search_results_focused()
+        if (
+            self._remote_cached_read_only
+            and action in self._REMOTE_READ_ONLY_ACTIONS
+        ):
+            return False
 
-        if panel.search_is_active():
+        if search_is_active:
             if (
-                panel.is_search_input_focused()
-                or panel.is_search_results_focused()
+                search_input_focused or search_results_focused
             ) and action in self._SEARCH_MODE_DISABLED_ACTIONS:
                 return False
-            if panel.is_search_input_focused() and action in (
-                self._SEARCH_INPUT_DISABLED_ACTIONS
+            if (
+                search_input_focused
+                and action in self._SEARCH_INPUT_DISABLED_ACTIONS
             ):
                 return False
 
+        result: bool | None
         if action == "footer_search_results":
-            return (
-                panel.is_search_input_focused()
-                and panel.search_is_active()
+            result = (
+                search_input_focused
+                and search_is_active
                 and not panel.autocomplete_is_visible()
                 and bool(panel.get_selected_idea())
             )
-        if action == "footer_exit_search":
-            return panel.is_search_input_focused()
-        if action == "rename_selected":
-            return self._can_rename_selection()
-        return super().check_action(action, parameters)
+        elif action == "footer_exit_search":
+            result = search_input_focused
+        elif action == "rename_selected":
+            result = self._can_rename_selection()
+        else:
+            result = super().check_action(action, parameters)
+        return result
 
     def _can_rename_selection(self) -> bool:
         """Return whether the current focus/selection supports rename."""

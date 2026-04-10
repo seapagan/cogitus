@@ -111,25 +111,36 @@ class IdeaRepository:
 
     def list_all(
         self,
-        limit: int = 100,
+        limit: int | None = None,
         offset: int = 0,
     ) -> list[Idea]:
         """Fetch ideas ordered by most recently updated.
 
         Args:
-            limit: Maximum number of ideas to return.
+            limit: Maximum number of ideas to return, or all when None.
             offset: Number of ideas to skip.
 
         Returns:
             List of ideas sorted by updated_at descending.
         """
+        query = (
+            self._db.select(Idea)
+            .select_related("group")
+            .prefetch_related("tags")
+            .order("updated_at", reverse=True)
+            .offset(offset)
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        return query.fetch_all()
+
+    def list_snapshot_ideas(self) -> list[Idea]:
+        """Fetch all ideas with relations for a full snapshot export."""
         return (
             self._db.select(Idea)
             .select_related("group")
             .prefetch_related("tags")
             .order("updated_at", reverse=True)
-            .limit(limit)
-            .offset(offset)
             .fetch_all()
         )
 
@@ -140,6 +151,7 @@ class IdeaRepository:
         body: str,
         tag_names: list[str] | None = None,
         group_pk: int | None = None,
+        last_known_updated_at: int | None = None,
     ) -> Idea | None:
         """Update an idea's fields and re-sync tag associations.
 
@@ -150,6 +162,7 @@ class IdeaRepository:
             tag_names: If provided, replace all tags with these.
             group_pk: Optional group primary key. When None, preserve the
                 existing group assignment.
+            last_known_updated_at: Optional optimistic-lock timestamp.
 
         Returns:
             The updated Idea, or None if not found.
@@ -157,6 +170,12 @@ class IdeaRepository:
         idea = self._db.get(Idea, pk)
         if idea is None:
             return None
+        if (
+            last_known_updated_at is not None
+            and idea.updated_at != last_known_updated_at
+        ):
+            msg = "Idea has been modified on the server"
+            raise ValueError(msg)
 
         idea.title = title
         idea.body = body
@@ -190,14 +209,27 @@ class IdeaRepository:
         self._search_backend.upsert_idea(idea.pk)
         return idea
 
-    def delete(self, pk: int) -> None:
+    def delete(
+        self,
+        pk: int,
+        last_known_updated_at: int | None = None,
+    ) -> None:
         """Delete an idea by primary key.
 
         Junction table rows are removed via CASCADE.
 
         Args:
             pk: The primary key of the idea to delete.
+            last_known_updated_at: Optional optimistic-lock timestamp.
         """
+        idea = self._db.get(Idea, pk)
+        if (
+            idea is not None
+            and last_known_updated_at is not None
+            and idea.updated_at != last_known_updated_at
+        ):
+            msg = "Idea has been modified on the server"
+            raise ValueError(msg)
         self._db.delete(Idea, pk)
         self._search_backend.delete_idea(pk)
 

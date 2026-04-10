@@ -1,10 +1,17 @@
-"""Database connection factory for Cogitus."""
+"""Database connection factory for Cogitus.
+
+Raw SQL remains intentional in this module for SQLite-specific PRAGMA,
+schema-inspection, and migration operations that are outside sqliter-py's
+documented ORM/query surface.
+"""
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from sqliter import SqliterDB
+from sqliter.exceptions import SqliterError
 
 from cogitus.config import normalize_default_group_name
 from cogitus.constants import DEFAULT_GROUP_NAME
@@ -25,6 +32,20 @@ def _ensure_default_group(db: SqliterDB, default_group_name: str) -> int:
     return group.pk
 
 
+def enable_wal_mode(db: SqliterDB) -> None:
+    """Enable WAL journaling for file-backed SQLite databases."""
+    if db.is_memory:
+        return
+    result = db.connect().execute("PRAGMA journal_mode=WAL;").fetchone()
+    mode = "" if result is None else str(result[0]).lower()
+    if mode != "wal":
+        msg = (
+            "Failed to enable WAL mode; "
+            f"SQLite reported {mode or 'unknown'} instead"
+        )
+        raise RuntimeError(msg)
+
+
 def _column_exists(db: SqliterDB, table_name: str, column_name: str) -> bool:
     """Return True if a column exists in the given table."""
     if not table_name.isidentifier():
@@ -34,39 +55,11 @@ def _column_exists(db: SqliterDB, table_name: str, column_name: str) -> bool:
     return any(str(row[1]) == column_name for row in result.fetchall())
 
 
-def _table_exists(db: SqliterDB, table_name: str) -> bool:
-    """Return True if the table exists."""
-    row = (
-        db.connect()
-        .execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?;",
-            (table_name,),
-        )
-        .fetchone()
-    )
-    return row is not None
-
-
-def _index_exists(db: SqliterDB, index_name: str) -> bool:
-    """Return True if the index exists."""
-    row = (
-        db.connect()
-        .execute(
-            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?;",
-            (index_name,),
-        )
-        .fetchone()
-    )
-    return row is not None
-
-
 def _migrate_ideas_group_fk(db: SqliterDB, default_group_pk: int) -> None:
     """Add ideas.group_id and backfill existing rows when missing."""
     with db.connect() as conn:
-        column_added = False
         if not _column_exists(db, "ideas", "group_id"):
             conn.execute("ALTER TABLE ideas ADD COLUMN group_id INTEGER;")
-            column_added = True
         conn.execute(
             """
             UPDATE ideas
@@ -80,19 +73,6 @@ def _migrate_ideas_group_fk(db: SqliterDB, default_group_pk: int) -> None:
             """,
             (default_group_pk,),
         )
-        changes_row = conn.execute("SELECT changes();").fetchone()
-        repaired_rows = int(changes_row[0]) if changes_row is not None else 0
-        index_missing = not _index_exists(
-            db,
-            "idx_ideas_group_id",
-        )
-        if column_added or index_missing or repaired_rows > 0:
-            # Rebuild index only when migration actually changed state.
-            conn.execute("DROP INDEX IF EXISTS idx_ideas_group_id;")
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_ideas_group_id "
-                "ON ideas (group_id);"
-            )
         conn.commit()
 
 
@@ -120,7 +100,11 @@ def get_db(
         expanded = Path(db_path).expanduser()
         expanded.parent.mkdir(parents=True, exist_ok=True)
         db = SqliterDB(str(expanded))
-        db.connect().execute("PRAGMA journal_mode=WAL;")
+        try:
+            enable_wal_mode(db)
+        except (RuntimeError, SqliterError, sqlite3.Error):
+            db.close()
+            raise
 
     normalized_default_group_name = normalize_default_group_name(
         default_group_name
@@ -132,7 +116,7 @@ def get_db(
         db,
         normalized_default_group_name,
     )
-    ideas_existed = _table_exists(db, "ideas")
+    ideas_existed = "ideas" in db.table_names
     if ideas_existed:
         _migrate_ideas_group_fk(db, default_group_pk)
     db.create_table(Idea)

@@ -90,6 +90,89 @@ Example:
 default_group_name="inbox"
 ```
 
+### `data_backend_mode`
+
+Controls whether the TUI reads ideas from the local SQLite database or from a
+remote Cogitus API server.
+
+- Type: string
+- Default: `local`
+
+Valid options are:
+
+- `"local"`
+  - Uses the local Cogitus SQLite database directly.
+- `"api"`
+  - Uses a remote Cogitus API server and maintains a local cache database for
+    the TUI.
+
+You can change this from inside the app with `Ctrl+P` and the `Backend
+settings` command.
+
+If the configured value is invalid, Cogitus falls back to `"local"` and shows a
+warning toast at startup.
+
+Example:
+
+```toml
+data_backend_mode="api"
+```
+
+### `remote_api_base_url`
+
+The base URL for the remote Cogitus API server when `data_backend_mode="api"`.
+
+- Type: string
+- Default: `""`
+
+Behavior:
+
+- Leading and trailing whitespace is trimmed.
+- A trailing `/` is removed automatically.
+- This value is required for remote mode.
+
+Example:
+
+```toml
+remote_api_base_url="http://127.0.0.1:8000"
+```
+
+### `remote_api_username`
+
+The username the TUI uses when authenticating against the remote Cogitus API.
+
+- Type: string
+- Default: `""`
+
+This value is required for remote mode.
+
+Example:
+
+```toml
+remote_api_username="api-user"
+```
+
+### `remote_api_password`
+
+The password the TUI uses when authenticating against the remote Cogitus API.
+
+- Type: string
+- Default: `""`
+
+This value is required for remote mode.
+
+!!! warning
+    This password is currently stored in the normal Cogitus config file. It is
+    convenient, but not a hardened secret-storage solution yet.
+
+Example:
+
+```toml
+remote_api_password="your-password"
+```
+
 ## Notes
 
 - Settings are saved on app exit.
+- Remote-backend settings can also be edited from the in-app `Backend settings`
+  dialog.

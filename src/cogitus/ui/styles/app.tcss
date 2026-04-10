@@ -4,6 +4,48 @@ MainScreen {
     layout: horizontal;
 }
 
+CogitusStatusBar {
+    dock: bottom;
+    height: 1;
+    layout: horizontal;
+    background: $footer-background;
+    color: $footer-foreground;
+}
+
+CogitusStatusBar > Footer {
+    dock: none;
+    width: 1fr;
+    height: 1;
+}
+
+CogitusStatusBar > #footer-cache-warning,
+CogitusStatusBar > #footer-command-palette {
+    width: auto;
+    height: 1;
+    margin: 0;
+}
+
+CogitusStatusBar > #footer-cache-warning {
+    border-left: vkey $foreground 20%;
+}
+
+CogitusStatusBar > #footer-cache-warning .footer-key--description {
+    padding: 0 1;
+    background: $error;
+    color: $text;
+    text-style: bold;
+}
+
+CogitusStatusBar > #footer-cache-warning .footer-key--key {
+    padding: 0;
+    color: $error;
+    background: $error;
+}
+
+CogitusStatusBar > #footer-command-palette {
+    border-left: vkey $foreground 20%;
+}
+
 #idea-list-panel {
     width: 1fr;
     max-width: 45;
@@ -261,8 +303,16 @@ GroupDeleteReassignScreen {
     align: center middle;
 }
 
+BackendConfigScreen {
+    align: center middle;
+}
+
 /* Delete confirmation */
 ConfirmDialog {
+    align: center middle;
+}
+
+RemoteStartupRecoveryScreen {
     align: center middle;
 }
 
@@ -291,6 +341,32 @@ ConfirmDialog {
     margin: 0 1;
 }
 
+#remote-startup-container {
+    width: 74;
+    max-width: 90%;
+    height: auto;
+    border: thick $error;
+    background: $surface;
+    padding: 1 2;
+}
+
+#remote-startup-message {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 1;
+}
+
+#remote-startup-buttons {
+    height: 3;
+    align: center middle;
+}
+
+#remote-startup-buttons Button {
+    min-width: 0;
+    padding: 0 1;
+    margin: 0 1;
+}
+
 #name-input-container {
     width: 50;
     height: auto;
@@ -308,6 +384,28 @@ ConfirmDialog {
     min-width: 0;
     padding: 0 1;
     margin: 0 1;
+}
+
+#backend-config-container {
+    width: 72;
+    max-width: 90%;
+    height: auto;
+    max-height: 90vh;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#backend-config-container > Label {
+    width: 100%;
+    margin: 0;
+}
+
+#backend-mode-select,
+#backend-api-url,
+#backend-api-username,
+#backend-api-password {
+    width: 100%;
 }
 
 /* Help overlay */

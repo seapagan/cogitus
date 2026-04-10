@@ -150,10 +150,11 @@ class TestIdeaService:
 
     def test_list_ideas(self, service: IdeaService) -> None:
         """All ideas are returned by list_ideas."""
-        service.create_idea("First")
-        service.create_idea("Second")
+        for i in range(105):
+            service.create_idea(f"Idea {i}")
+
         ideas = service.list_ideas()
-        assert len(ideas) == 2
+        assert len(ideas) == 105
 
     def test_list_tags(self, service: IdeaService) -> None:
         """All tags are returned alphabetically."""
@@ -164,6 +165,52 @@ class TestIdeaService:
             "alpha",
             "zebra",
         ]
+
+    def test_standalone_tag_crud(self, service: IdeaService) -> None:
+        """Standalone tags can be created, renamed, fetched, and deleted."""
+        created = service.create_tag("  PyThOn  ")
+
+        fetched = service.get_tag(created.pk)
+        assert fetched is not None
+        assert fetched.name == "python"
+
+        renamed = service.rename_tag(created.pk, "  FastAPI  ")
+        assert renamed is not None
+        assert renamed.name == "fastapi"
+
+        service.delete_tag(created.pk)
+        assert service.get_tag(created.pk) is None
+
+    def test_create_tag_rejects_blank_name(self, service: IdeaService) -> None:
+        """Blank standalone tag names should fail at the service layer."""
+        with pytest.raises(ValueError, match="Tag name cannot be empty"):
+            service.create_tag("   ")
+
+    def test_rename_tag_rejects_blank_name(self, service: IdeaService) -> None:
+        """Blank standalone tag renames should fail at the service layer."""
+        tag = service.create_tag("python")
+
+        with pytest.raises(ValueError, match="Tag name cannot be empty"):
+            service.rename_tag(tag.pk, "   ")
+
+    def test_rename_and_delete_tag_refresh_search_index(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Tag mutations should refresh search visibility."""
+        idea = service.create_idea("API", tags=["python"])
+        tag = service.list_tags()[0]
+
+        renamed = service.rename_tag(tag.pk, "fastapi")
+
+        assert renamed is not None
+        assert [
+            result.pk for result in service.search_ideas("tag:fastapi")
+        ] == [idea.pk]
+        assert service.search_ideas("tag:python") == []
+
+        service.delete_tag(tag.pk)
+        assert service.search_ideas("tag:fastapi") == []
 
     def test_list_tags_in_use_excludes_orphans(
         self,

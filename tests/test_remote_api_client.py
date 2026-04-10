@@ -1,0 +1,348 @@
+"""Tests for the low-level remote API client."""
+
+from __future__ import annotations
+
+import httpx
+import pytest
+
+from cogitus.api.schemas.request.idea import (
+    IdeaCreateRequest,
+    IdeaDeleteRequest,
+    IdeaUpdateRequest,
+)
+from cogitus.backends import api_client as api_client_module
+from cogitus.backends.api_client import RemoteAPIClient
+from tests.remote_api_support import (
+    REMOTE_USERNAME,
+    MockRemoteAPI,
+    StoredGroup,
+    StoredIdea,
+    remote_secret,
+    wrong_remote_secret,
+)
+
+
+def _authorized_headers(api: MockRemoteAPI) -> dict[str, str]:
+    """Return a valid authorization header for the fake API."""
+    token_response = api.transport().handle_request(
+        httpx.Request(
+            "POST",
+            "http://remote.test/api/v1/auth/token",
+            content=f"username={REMOTE_USERNAME}&password={remote_secret()}",
+        )
+    )
+    return {
+        "Authorization": (f"Bearer {token_response.json()['access_token']}")
+    }
+
+
+def _build_seeded_remote_client() -> tuple[MockRemoteAPI, RemoteAPIClient]:
+    """Return a client backed by seeded remote state."""
+    api = MockRemoteAPI()
+    api.groups[2] = StoredGroup(
+        pk=2,
+        created_at=4,
+        updated_at=4,
+        name="backend",
+    )
+    api.ideas[2] = StoredIdea(
+        pk=2,
+        created_at=5,
+        updated_at=5,
+        title="Second idea",
+        body="Second body",
+        group_pk=2,
+        tag_pks=[1],
+    )
+    api._next_group_pk = 3
+    api._next_idea_pk = 3
+    client = RemoteAPIClient(
+        base_url="http://remote.test",
+        username=REMOTE_USERNAME,
+        password=remote_secret(),
+        transport=api.transport(),
+    )
+    return api, client
+
+
+def test_remote_api_client_fetch_snapshot_reauths_after_unauthorized() -> None:
+    """The remote client should reauthenticate once after a 401."""
+    api = MockRemoteAPI()
+    api.expire_next_token()
+    client = RemoteAPIClient(
+        base_url="http://remote.test",
+        username=REMOTE_USERNAME,
+        password=remote_secret(),
+        transport=api.transport(),
+    )
+
+    snapshot = client.fetch_snapshot()
+
+    assert api.token_requests == 2
+    assert [group.name for group in snapshot.groups] == ["default"]
+    assert [tag.name for tag in snapshot.tags] == ["python"]
+    assert [idea.title for idea in snapshot.ideas] == ["Seed idea"]
+
+
+def test_remote_api_client_fetch_snapshot_uses_snapshot_route() -> None:
+    """Full snapshot refresh should use the dedicated snapshot endpoint."""
+    api, client = _build_seeded_remote_client()
+
+    snapshot = client.fetch_snapshot()
+
+    assert [group.name for group in snapshot.groups] == [
+        "backend",
+        "default",
+    ]
+    assert [idea.title for idea in snapshot.ideas] == [
+        "Second idea",
+        "Seed idea",
+    ]
+    assert api.snapshot_requests == 1
+    assert api.list_group_requests == 0
+    assert api.list_tag_requests == 0
+    assert api.list_idea_requests == 0
+
+
+def test_remote_api_client_requires_complete_config() -> None:
+    """The remote client should reject incomplete remote configuration."""
+    client = RemoteAPIClient(
+        base_url="",
+        username=REMOTE_USERNAME,
+        password=remote_secret(),
+    )
+
+    with pytest.raises(ValueError, match="not fully configured"):
+        client.fetch_snapshot()
+
+
+def test_remote_api_client_lists_all_ideas_with_pagination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The client should fetch paginated idea results across all pages."""
+    _, client = _build_seeded_remote_client()
+    monkeypatch.setattr(api_client_module, "_IDEA_PAGE_SIZE", 1)
+
+    ideas = client.list_all_ideas()
+
+    assert [idea.title for idea in ideas] == ["Second idea", "Seed idea"]
+
+
+def test_remote_api_client_idea_crud_helpers() -> None:
+    """Client idea helpers should create, update, and delete ideas."""
+    api, client = _build_seeded_remote_client()
+
+    created = client.create_idea(
+        IdeaCreateRequest(
+            title="Remote idea",
+            body="Serve remotely",
+            tags=["fastapi"],
+            group_pk=1,
+        )
+    )
+    updated = client.update_idea(
+        created.pk,
+        IdeaUpdateRequest(
+            title="Updated remote idea",
+            body="Changed body",
+            tags=["httpx"],
+            group_pk=1,
+            last_known_updated_at=created.updated_at,
+        ),
+    )
+    client.delete_idea(
+        updated.pk,
+        IdeaDeleteRequest(last_known_updated_at=updated.updated_at),
+    )
+
+    assert updated.title == "Updated remote idea"
+    assert updated.body == "Changed body"
+    assert updated.tags[0].name == "httpx"
+    assert created.pk not in api.ideas
+
+
+def test_remote_api_client_delete_rejects_stale_timestamp() -> None:
+    """Delete should reject stale optimistic-lock timestamps."""
+    api, client = _build_seeded_remote_client()
+    api.mutate_idea(1, title="Changed elsewhere")
+
+    with pytest.raises(ValueError, match="modified on the server"):
+        client.delete_idea(
+            1,
+            IdeaDeleteRequest(last_known_updated_at=3),
+        )
+
+
+def test_remote_api_client_omits_unchanged_tags() -> None:
+    """Update payloads should preserve remote tags when tags are omitted."""
+    _, client = _build_seeded_remote_client()
+
+    updated = client.update_idea(
+        1,
+        IdeaUpdateRequest(
+            title="Seed idea",
+            body="Retitled body",
+            last_known_updated_at=3,
+        ),
+    )
+
+    assert [tag.name for tag in updated.tags] == ["python"]
+    assert updated.body == "Retitled body"
+
+
+def test_remote_api_client_group_crud_helpers() -> None:
+    """Client group helpers should create, rename, and delete groups."""
+    _, client = _build_seeded_remote_client()
+
+    created_group = client.create_group("platform")
+    renamed_group = client.rename_group(created_group.pk, "services")
+    client.delete_group(renamed_group.pk, move_to_group_pk=1)
+    tags = client.list_tags()
+
+    assert renamed_group.name == "services"
+    assert [group.name for group in client.list_groups()] == [
+        "backend",
+        "default",
+    ]
+    assert [tag.name for tag in tags] == ["python"]
+
+
+def test_remote_api_client_rejects_invalid_default_group_writes() -> None:
+    """Group client helpers should mirror default-group service guards."""
+    _, client = _build_seeded_remote_client()
+
+    with pytest.raises(ValueError, match="cannot be renamed"):
+        client.rename_group(1, "renamed-default")
+
+    with pytest.raises(ValueError, match="cannot be deleted"):
+        client.delete_group(1)
+
+
+def test_remote_api_client_rejects_invalid_group_delete_targets() -> None:
+    """Group delete should reject missing and identical reassignment targets."""
+    _, client = _build_seeded_remote_client()
+
+    with pytest.raises(ValueError, match="Target group not found"):
+        client.delete_group(2, move_to_group_pk=99999)
+
+    with pytest.raises(
+        ValueError,
+        match="Cannot move ideas into the same group being deleted",
+    ):
+        client.delete_group(2, move_to_group_pk=2)
+
+
+def test_remote_api_client_raises_for_network_and_auth_failures() -> None:
+    """Client should surface transport and auth failures clearly."""
+
+    def failing_transport(request: httpx.Request) -> httpx.Response:
+        message = "boom"
+        if request.url.path == "/api/v1/auth/token":
+            raise httpx.ConnectError(message, request=request)
+        return httpx.Response(500)
+
+    network_client = RemoteAPIClient(
+        base_url="http://remote.test",
+        username=REMOTE_USERNAME,
+        password=remote_secret(),
+        transport=httpx.MockTransport(failing_transport),
+    )
+    with pytest.raises(ValueError, match="Could not reach the remote API"):
+        network_client.list_groups()
+
+    auth_client = RemoteAPIClient(
+        base_url="http://remote.test",
+        username=REMOTE_USERNAME,
+        password=wrong_remote_secret(),
+        transport=MockRemoteAPI().transport(),
+    )
+    with pytest.raises(
+        ValueError,
+        match="Incorrect username or password",
+    ):
+        auth_client.list_groups()
+
+
+def test_remote_api_client_uses_generic_errors_for_bad_responses() -> None:
+    """Client should handle generic API failures and malformed payloads."""
+
+    def error_transport(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/auth/token":
+            return httpx.Response(
+                200,
+                json={"access_token": "token", "token_type": "bearer"},
+            )
+        return httpx.Response(500, json={})
+
+    client = RemoteAPIClient(
+        base_url="http://remote.test",
+        username=REMOTE_USERNAME,
+        password=remote_secret(),
+        transport=httpx.MockTransport(error_transport),
+    )
+    with pytest.raises(ValueError, match="Remote API request failed"):
+        client.list_groups()
+
+    response = httpx.Response(500, text="not-json")
+    assert RemoteAPIClient._detail_from_response(response) == ""
+    assert (
+        RemoteAPIClient._detail_from_response(
+            httpx.Response(500, json=["not-a-dict"])
+        )
+        == ""
+    )
+    with pytest.raises(
+        TypeError,
+        match="Remote API returned an unexpected response body",
+    ):
+        RemoteAPIClient._parse_model_list(
+            {"unexpected": True},
+            lambda payload: payload,
+        )
+
+
+def test_mock_remote_api_rejects_wrong_idea_method() -> None:
+    """Wrong verbs on idea detail routes should not mutate fake state."""
+    api = MockRemoteAPI()
+
+    response = api.transport().handle_request(
+        httpx.Request(
+            "PATCH",
+            "http://remote.test/api/v1/ideas/1",
+            headers=_authorized_headers(api),
+        )
+    )
+
+    assert response.status_code == 405
+    assert api.ideas[1].title == "Seed idea"
+
+
+def test_mock_remote_api_rejects_wrong_token_method() -> None:
+    """Wrong verbs on auth token route should not mint tokens."""
+    api = MockRemoteAPI()
+
+    response = api.transport().handle_request(
+        httpx.Request(
+            "GET",
+            "http://remote.test/api/v1/auth/token",
+        )
+    )
+
+    assert response.status_code == 405
+    assert api.token_requests == 0
+
+
+def test_mock_remote_api_rejects_wrong_group_method() -> None:
+    """Wrong verbs on group detail routes should not mutate fake state."""
+    api = MockRemoteAPI()
+
+    response = api.transport().handle_request(
+        httpx.Request(
+            "GET",
+            "http://remote.test/api/v1/groups/1",
+            headers=_authorized_headers(api),
+        )
+    )
+
+    assert response.status_code == 405
+    assert api.groups[1].name == "default"

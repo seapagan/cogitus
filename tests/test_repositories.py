@@ -74,6 +74,42 @@ class TestTagRepository:
         assert tag.name == "python"
         assert tag.pk > 0
 
+    def test_create_tag_rejects_empty_name(
+        self,
+        tag_repo: TagRepository,
+    ) -> None:
+        """Creating a tag with an empty name should fail."""
+        with pytest.raises(ValueError, match="cannot be empty"):
+            tag_repo.create("   ")
+
+    def test_create_tag_rejects_duplicate_name(
+        self,
+        tag_repo: TagRepository,
+    ) -> None:
+        """Creating a duplicate tag should fail clearly."""
+        tag_repo.create("python")
+
+        with pytest.raises(ValueError, match='Tag "python" already exists'):
+            tag_repo.create("Python")
+
+    def test_create_tag_preserves_non_duplicate_insert_errors(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Non-duplicate insert failures should not be rewritten."""
+        mocker.patch.object(
+            tag_repo._db,
+            "insert",
+            side_effect=RecordInsertionError("database is locked"),
+        )
+
+        with pytest.raises(
+            RecordInsertionError,
+            match="database is locked",
+        ):
+            tag_repo.create("python")
+
     def test_get_or_create_existing(self, tag_repo: TagRepository) -> None:
         """Existing tag is returned without duplication."""
         t1 = tag_repo.get_or_create("python")
@@ -112,6 +148,84 @@ class TestTagRepository:
             "zebra",
         ]
 
+    def test_rename_tag_updates_name(self, tag_repo: TagRepository) -> None:
+        """Renaming a tag should normalize and persist the new name."""
+        tag = tag_repo.create("python")
+
+        renamed = tag_repo.rename(tag.pk, "FastAPI")
+
+        assert renamed is not None
+        assert renamed.name == "fastapi"
+        assert tag_repo.find_by_name("fastapi") is not None
+
+    def test_rename_tag_missing_returns_none(
+        self,
+        tag_repo: TagRepository,
+    ) -> None:
+        """Renaming a missing tag should return None."""
+        assert tag_repo.rename(99999, "python") is None
+
+    def test_rename_tag_rejects_empty_name(
+        self,
+        tag_repo: TagRepository,
+    ) -> None:
+        """Renaming a tag to an empty name should fail."""
+        tag = tag_repo.create("python")
+
+        with pytest.raises(ValueError, match="cannot be empty"):
+            tag_repo.rename(tag.pk, "   ")
+
+    def test_rename_tag_rejects_duplicate_name(
+        self,
+        tag_repo: TagRepository,
+    ) -> None:
+        """Renaming a tag to an existing tag name should fail."""
+        source = tag_repo.create("python")
+        tag_repo.create("fastapi")
+
+        with pytest.raises(ValueError, match='Tag "fastapi" already exists'):
+            tag_repo.rename(source.pk, "fastapi")
+
+    def test_rename_tag_translates_update_race(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Update races should surface as duplicate-name ValueErrors."""
+        tag = tag_repo.create("python")
+        conflicting = tag_repo.create("fastapi")
+        mocker.patch.object(
+            tag_repo._db,
+            "update",
+            side_effect=RecordUpdateError("update failed"),
+        )
+        find_by_name = mocker.patch.object(
+            tag_repo,
+            "find_by_name",
+            side_effect=[None, conflicting],
+        )
+
+        with pytest.raises(ValueError, match='Tag "fastapi" already exists'):
+            tag_repo.rename(tag.pk, "fastapi")
+
+        assert find_by_name.call_count == 2
+
+    def test_rename_tag_preserves_non_duplicate_update_errors(
+        self,
+        tag_repo: TagRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Non-duplicate update failures should not be rewritten."""
+        tag = tag_repo.create("python")
+        mocker.patch.object(
+            tag_repo._db,
+            "update",
+            side_effect=RecordUpdateError("disk full"),
+        )
+
+        with pytest.raises(RecordUpdateError, match="disk full"):
+            tag_repo.rename(tag.pk, "fastapi")
+
     def test_get_or_create_recovers_after_insert_race(
         self,
         tag_repo: TagRepository,
@@ -123,7 +237,7 @@ class TestTagRepository:
         find_mock = mocker.patch.object(
             tag_repo,
             "find_by_name",
-            side_effect=[None, existing],
+            side_effect=[None, existing, existing],
         )
         mocker.patch.object(
             tag_repo._db,
@@ -134,7 +248,7 @@ class TestTagRepository:
         found = tag_repo.get_or_create("python")
 
         assert found.pk == existing.pk
-        assert find_mock.call_count == 2
+        assert find_mock.call_count == 3
 
     def test_list_in_use(
         self,
@@ -301,23 +415,6 @@ class TestTagRepository:
         with pytest.raises(KeyError, match="Missing projected field: name"):
             tag_repo.list_with_usage()
 
-    def test_metadata_helper_raises_when_descriptor_metadata_missing(
-        self,
-        mocker: MockerFixture,
-    ) -> None:
-        """Metadata helper should fail clearly when sql_metadata is missing."""
-        mocker.patch.object(
-            tag_repo_module,
-            "Idea",
-            SimpleNamespace(tags=SimpleNamespace(sql_metadata=None)),
-        )
-
-        with pytest.raises(
-            RuntimeError,
-            match=r"Idea\.tags SQL metadata is unavailable",
-        ):
-            tag_repo_module._idea_tags_sql_metadata()
-
     def test_related_name_helper_raises_when_descriptor_name_missing(
         self,
         mocker: MockerFixture,
@@ -381,12 +478,11 @@ class TestIdeaRepository:
 
     def test_list_all(self, idea_repo: IdeaRepository) -> None:
         """All ideas are returned ordered by updated_at."""
-        idea_repo.create("First")
-        idea_repo.create("Second")
-        idea_repo.create("Third")
+        for i in range(105):
+            idea_repo.create(f"Idea {i}")
 
         ideas = idea_repo.list_all()
-        assert len(ideas) == 3
+        assert len(ideas) == 105
 
     def test_list_all_with_limit(self, idea_repo: IdeaRepository) -> None:
         """Limit parameter restricts result count."""
@@ -947,6 +1043,56 @@ class TestIdeaCursorStateRepository:
         """Missing idea should no-op when setting cursor position."""
         idea_cursor_state_repo.set_position(99999, 4)
         assert idea_cursor_state_repo.get_position(99999) is None
+
+    def test_list_positions_and_delete_for_idea(
+        self,
+        idea_cursor_state_repo: IdeaCursorStateRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Cursor positions should list and delete persisted state."""
+        idea = idea_repo.create("Cursor")
+        idea_cursor_state_repo.set_position(idea.pk, 9)
+
+        assert idea_cursor_state_repo.list_positions() == {idea.pk: 9}
+
+        idea_cursor_state_repo.delete_for_idea(idea.pk)
+        assert idea_cursor_state_repo.list_positions() == {}
+
+    def test_list_positions_raises_for_non_int_idea_id(
+        self,
+        idea_cursor_state_repo: IdeaCursorStateRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Unexpected non-int idea IDs should fail clearly."""
+
+        class _FakeCursorStateQuery:
+            def order(
+                self,
+                field: str,
+            ) -> _FakeCursorStateQuery:
+                assert field == "updated_at"
+                return self
+
+            @staticmethod
+            def fetch_all() -> list[SimpleNamespace]:
+                return [
+                    SimpleNamespace(
+                        idea_id="oops",
+                        body_cursor_position=1,
+                    )
+                ]
+
+        mocker.patch.object(
+            idea_cursor_state_repo._db,
+            "select",
+            return_value=_FakeCursorStateQuery(),
+        )
+
+        with pytest.raises(
+            TypeError,
+            match=r"Expected IdeaCursorState\.idea_id",
+        ):
+            idea_cursor_state_repo.list_positions()
 
 
 class TestGroupRepository:

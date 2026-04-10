@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from rich.table import Table
@@ -21,7 +22,12 @@ from textual.widgets import (
     Static,
 )
 
-from cogitus.config import DEFAULT_EDIT_BODY_CURSOR_MODE, EditBodyCursorMode
+from cogitus.backends import BackendConfig
+from cogitus.config import (
+    DEFAULT_EDIT_BODY_CURSOR_MODE,
+    DataBackendMode,
+    EditBodyCursorMode,
+)
 from cogitus.metadata import AppMetadata, get_about_entries
 from cogitus.ui.widgets.autocomplete import (
     _AutocompleteState,
@@ -39,8 +45,8 @@ if TYPE_CHECKING:
     from textual.events import Key, Resize
     from textual.widget import Widget
 
+    from cogitus.backends.protocols import IdeaBackend
     from cogitus.models.idea import Idea
-    from cogitus.services.idea_service import IdeaService
 
 
 @dataclass(frozen=True)
@@ -91,7 +97,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
 
     def __init__(
         self,
-        service: IdeaService,
+        service: IdeaBackend,
         idea: Idea | None = None,
         *,
         initial_group_pk: int | None = None,
@@ -102,7 +108,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         """Initialize the idea form.
 
         Args:
-            service: The IdeaService instance.
+            service: The idea backend instance.
             idea: Existing idea to edit, or None for new.
             initial_group_pk: Initial group pk for new-idea mode.
             edit_body_cursor_mode: Cursor mode for edit form body.
@@ -638,22 +644,30 @@ class IdeaFormScreen(ModalScreen[int | None]):
         group_pk = group_value
 
         if self._idea is not None:
-            result = self._service.update_idea(
-                pk=self._idea.pk,
-                title=title,
-                body=body,
-                tags=tags,
-                group_pk=group_pk,
-            )
+            try:
+                result = self._service.update_idea(
+                    pk=self._idea.pk,
+                    title=title,
+                    body=body,
+                    tags=tags,
+                    group_pk=group_pk,
+                )
+            except ValueError as exc:
+                self.notify(str(exc), severity="error")
+                return
             pk = result.pk if result else None
             self._persist_edit_cursor_position()
         else:
-            idea = self._service.create_idea(
-                title=title,
-                body=body,
-                tags=tags or None,
-                group_pk=group_pk,
-            )
+            try:
+                idea = self._service.create_idea(
+                    title=title,
+                    body=body,
+                    tags=tags or None,
+                    group_pk=group_pk,
+                )
+            except ValueError as exc:
+                self.notify(str(exc), severity="error")
+                return
             pk = idea.pk
 
         self.dismiss(pk)
@@ -719,6 +733,108 @@ class ConfirmDialog(ModalScreen[bool]):
         self.dismiss(False)
 
 
+class RemoteStartupRecoveryAction(str, Enum):
+    """Actions offered when the initial remote sync fails."""
+
+    RETRY = "retry"
+    USE_CACHE = "use_cache"
+    SWITCH_LOCAL = "switch_local"
+    QUIT = "quit"
+
+
+class RemoteStartupRecoveryScreen(
+    ModalScreen[RemoteStartupRecoveryAction],
+):
+    """Recovery modal shown when remote mode fails during startup."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("r", "retry", "Retry", show=False),
+        Binding("c", "use_cache", "Use Cache", show=False),
+        Binding("l", "switch_local", "Local Mode", show=False),
+        Binding("q,escape", "quit_app", "Quit", show=False),
+    ]
+
+    def __init__(self, message: str) -> None:
+        """Initialize the recovery modal with the sync failure message."""
+        super().__init__()
+        self._message = message
+
+    def compose(self) -> ComposeResult:
+        """Compose the startup recovery dialog."""
+        with Vertical(id="remote-startup-container"):
+            yield Static("Remote Sync Failed", id="form-title")
+            yield Static(
+                (
+                    f"{self._message}\n\n"
+                    "Using cached remote data puts Cogitus into "
+                    "READ-ONLY mode until remote sync succeeds again.\n"
+                    "Cached remote data may be stale or empty.\n"
+                    "Switching to local mode uses a separate local SQLite "
+                    "database, which may differ from the remote data.\n"
+                    "Local fallback only applies to this session and does "
+                    "not sync changes back automatically."
+                ),
+                id="remote-startup-message",
+            )
+            with Horizontal(id="remote-startup-buttons"):
+                yield Button(
+                    "Retry [R]",
+                    variant="primary",
+                    id="retry-remote-btn",
+                )
+                yield Button(
+                    "Use Cache [C]",
+                    variant="default",
+                    id="use-cache-btn",
+                )
+                yield Button(
+                    "Use Local [L]",
+                    variant="default",
+                    id="use-local-btn",
+                )
+                yield Button(
+                    "Quit [Q]",
+                    variant="error",
+                    id="quit-startup-btn",
+                )
+
+    @on(Button.Pressed, "#retry-remote-btn")
+    def _handle_retry_button(self) -> None:
+        """Retry the remote connection when requested."""
+        self.action_retry()
+
+    @on(Button.Pressed, "#use-cache-btn")
+    def _handle_use_cache_button(self) -> None:
+        """Continue with cached remote data when requested."""
+        self.action_use_cache()
+
+    @on(Button.Pressed, "#use-local-btn")
+    def _handle_use_local_button(self) -> None:
+        """Switch to session-local mode when requested."""
+        self.action_switch_local()
+
+    @on(Button.Pressed, "#quit-startup-btn")
+    def _handle_quit_button(self) -> None:
+        """Quit the application when requested."""
+        self.action_quit_app()
+
+    def action_retry(self) -> None:
+        """Dismiss with the retry action."""
+        self.dismiss(RemoteStartupRecoveryAction.RETRY)
+
+    def action_use_cache(self) -> None:
+        """Dismiss with the cached remote action."""
+        self.dismiss(RemoteStartupRecoveryAction.USE_CACHE)
+
+    def action_switch_local(self) -> None:
+        """Dismiss with the session-local fallback action."""
+        self.dismiss(RemoteStartupRecoveryAction.SWITCH_LOCAL)
+
+    def action_quit_app(self) -> None:
+        """Dismiss with the quit action."""
+        self.dismiss(RemoteStartupRecoveryAction.QUIT)
+
+
 class GroupFormScreen(ModalScreen[int | None]):
     """Modal form for creating a group."""
 
@@ -733,7 +849,7 @@ class GroupFormScreen(ModalScreen[int | None]):
         ),
     ]
 
-    def __init__(self, service: IdeaService) -> None:
+    def __init__(self, service: IdeaBackend) -> None:
         """Initialize the group form."""
         super().__init__()
         self._service = service
@@ -871,6 +987,114 @@ class NameInputScreen(ModalScreen[str | None]):
         self.dismiss(None)
 
 
+class BackendConfigScreen(ModalScreen[BackendConfig | None]):
+    """Modal dialog for choosing the active Cogitus backend."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape", "cancel", "Cancel", show=False),
+        Binding(
+            "ctrl+s",
+            "save",
+            "Save",
+            show=False,
+            priority=True,
+        ),
+    ]
+
+    def __init__(self, config: BackendConfig) -> None:
+        """Initialize the backend config modal with existing values."""
+        super().__init__()
+        self._config = config
+
+    def compose(self) -> ComposeResult:
+        """Compose the backend settings form."""
+        with VerticalScroll(id="backend-config-container"):
+            yield Static("Connection Settings", id="form-title")
+            yield Label("Backend")
+            yield Select[DataBackendMode](
+                options=[
+                    ("Local SQLite", DataBackendMode.LOCAL),
+                    ("Remote API", DataBackendMode.API),
+                ],
+                value=self._config.mode,
+                allow_blank=False,
+                id="backend-mode-select",
+            )
+            yield Label("Remote API URL")
+            yield Input(
+                value=self._config.api_base_url,
+                placeholder="http://127.0.0.1:8000",
+                id="backend-api-url",
+            )
+            yield Label("Remote API Username")
+            yield Input(
+                value=self._config.api_username,
+                placeholder="api user",
+                id="backend-api-username",
+            )
+            yield Label("Remote API Password")
+            yield Input(
+                value=self._config.api_password,
+                placeholder="api password",
+                password=True,
+                id="backend-api-password",
+            )
+            with Horizontal(id="name-input-buttons"):
+                yield Button(
+                    "Save [Ctrl+s]",
+                    variant="primary",
+                    id="save-backend-btn",
+                )
+                yield Button(
+                    "Cancel [Esc]",
+                    variant="default",
+                    id="cancel-backend-btn",
+                )
+
+    @on(Button.Pressed, "#save-backend-btn")
+    def _handle_save_backend_button(self) -> None:
+        """Save backend configuration when the primary button is pressed."""
+        self.action_save()
+
+    @on(Button.Pressed, "#cancel-backend-btn")
+    def _handle_cancel_backend_button(self) -> None:
+        """Cancel backend configuration changes."""
+        self.action_cancel()
+
+    def action_save(self) -> None:
+        """Validate and return the selected backend configuration."""
+        mode = self.query_one("#backend-mode-select", Select).value
+        if not isinstance(mode, DataBackendMode):
+            self.notify("Select a backend mode", severity="error")
+            return
+
+        api_base_url = self.query_one("#backend-api-url", Input).value
+        api_username = self.query_one("#backend-api-username", Input).value
+        api_password = self.query_one("#backend-api-password", Input).value
+
+        if mode == DataBackendMode.API and not (
+            api_base_url.strip() and api_username.strip() and api_password
+        ):
+            self.notify(
+                "Remote API mode requires URL, username, and password",
+                severity="error",
+            )
+            return
+
+        self.dismiss(
+            BackendConfig(
+                mode=mode,
+                api_base_url=api_base_url.strip(),
+                api_username=api_username.strip(),
+                api_password=api_password,
+            )
+        )
+
+    def action_cancel(self) -> None:
+        """Cancel and dismiss the backend config modal."""
+        self.dismiss(None)
+
+
 class GroupDeleteReassignScreen(ModalScreen[int | None]):
     """Modal dialog to choose destination group when deleting a group."""
 
@@ -975,6 +1199,7 @@ class HelpScreen(ModalScreen[None]):
         "  Escape           Cancel (confirm if edit is dirty)\n"
         "\n"
         "[bold]General[/bold]\n"
+        "  c                Connection settings\n"
         "  a                About\n"
         "  ?                Toggle this help\n"
         "  q                Quit"

@@ -17,6 +17,10 @@ Ideas to add to Cogitus
   from the OS setting)~~ Textual does this natively - document it.
 - clicking on any of the tags above the body window should open the search
   results as if `tag:<tag name>` was searched.
+- revisit the custom footer status widgets and replace the current private
+  `textual.widgets._footer.FooterKey` dependency with a public Textual API or
+  an internal equivalent once that can be done without reintroducing the past
+  footer layout/refresh regressions. Low priority.
 
 ## CLI
 
@@ -69,6 +73,23 @@ Ideas to add to Cogitus
   usage as we are using SQLite. See also the MCP server item below. Perhaps
   enable a local `cogitus` app to use a remote server instead of local SQLite
   file?
+- reevaluate the remote API cache design once there is less planned work and
+  technical debt: can we simplify from the current file-backed local cache to a
+  memory-backed cache without losing the needed sync, worker-thread, startup,
+  and cursor-state behavior?
+- split API database startup initialization from per-request connection
+  creation, then revisit changing synchronous API handlers from `async def` to
+  `def` so FastAPI can safely use a threadpool with request-scoped `SqliterDB`
+  / `IdeaService` instances.
+- replace pre-edit full remote sync with a targeted single-idea refresh so
+  editing one idea does not require pulling the whole remote snapshot first.
+- remove plaintext secret storage from normal app settings: stop persisting the
+  API JWT signing secret in TOML, and move the remote API password to a secret
+  store or runtime-only prompt flow instead of keeping it as plain text in the
+  normal config file.
+- replace fragile API error-message substring matching with shared typed
+  domain/API exceptions so HTTP 404/409/422 classification does not depend on
+  repository and service error wording.
 
 ## Undo and History
 

@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
 
-from cogitus.cli.commands import app
+from cogitus.cli.commands import COGITUS_API_DB_PATH_ENV, app
 from cogitus.cli.formatters import (
     format_idea_markdown,
     format_ideas_json,
@@ -19,9 +21,12 @@ from cogitus.cli.formatters import (
     format_ideas_simple,
     format_ideas_table,
 )
+from cogitus.config import AppSettings, get_settings
 from cogitus.metadata import AppMetadata
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from pytest_mock import MockerFixture
     from sqliter import SqliterDB
 
@@ -286,6 +291,215 @@ class TestDeleteCommand:
             result = runner.invoke(app, ["delete", "999", "--force"])
             assert result.exit_code == 1
             assert "not found" in result.output
+
+
+class TestApiServeCommand:
+    """Tests for the API serve command."""
+
+    def test_api_serve_uses_uvicorn_factory(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Serve command should invoke uvicorn with the app factory."""
+        monkeypatch.delenv(COGITUS_API_DB_PATH_ENV, raising=False)
+        db_path = tmp_path / "cogitus-api.db"
+
+        try:
+            with patch("uvicorn.run") as mock_run:
+                result = runner.invoke(
+                    app,
+                    [
+                        "api",
+                        "serve",
+                        "--host",
+                        "127.0.0.1",
+                        "--port",
+                        "9001",
+                        "--reload",
+                        "--db-path",
+                        str(db_path),
+                    ],
+                )
+
+            assert result.exit_code == 0
+            assert os.environ[COGITUS_API_DB_PATH_ENV] == str(db_path)
+            mock_run.assert_called_once_with(
+                "cogitus.api.main:create_api_app",
+                host="127.0.0.1",
+                port=9001,
+                reload=True,
+                factory=True,
+            )
+        finally:
+            monkeypatch.delenv(COGITUS_API_DB_PATH_ENV, raising=False)
+
+    def test_api_serve_clears_db_path_env_when_not_provided(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Serve command should clear any prior API DB path override."""
+        monkeypatch.setenv(COGITUS_API_DB_PATH_ENV, "stale-value")
+
+        with patch("uvicorn.run") as mock_run:
+            result = runner.invoke(app, ["api", "serve"])
+
+        assert result.exit_code == 0
+        assert COGITUS_API_DB_PATH_ENV not in os.environ
+        mock_run.assert_called_once_with(
+            "cogitus.api.main:create_api_app",
+            host="127.0.0.1",
+            port=8000,
+            reload=False,
+            factory=True,
+        )
+
+    def test_api_serve_requires_api_extra(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Serve command should fail cleanly without the optional API deps."""
+
+        def fake_import_module(name: str) -> object:
+            if name == "uvicorn":
+                raise ModuleNotFoundError
+            return __import__(name)
+
+        monkeypatch.setattr(
+            "cogitus.cli.commands.importlib.import_module",
+            fake_import_module,
+        )
+
+        result = runner.invoke(app, ["api", "serve"])
+
+        assert result.exit_code == 1
+        assert "pip install cogitus[api]" in result.output
+
+
+class TestApiAuthCommand:
+    """Tests for API auth bootstrap commands."""
+
+    def test_api_set_auth_persists_credentials(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """set-auth should persist a hashed password and generated secret."""
+        monkeypatch.setattr(
+            "simple_toml_settings.settings.xdg_config_home",
+            lambda: tmp_path,
+        )
+        AppSettings._instances.clear()
+        monkeypatch.setattr(
+            "cogitus.cli.commands._import_optional_module",
+            lambda _: SimpleNamespace(
+                hash_password=lambda password: f"hashed::{password}"
+            ),
+        )
+        monkeypatch.setattr(
+            "cogitus.cli.commands.token_urlsafe",
+            lambda _: "generated-secret",
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "api",
+                "set-auth",
+                "--username",
+                "  api-user  ",
+                "--password",
+                "secret-password",
+            ],
+        )
+
+        AppSettings._instances.clear()
+        settings = get_settings()
+        expected_digest = "hashed::secret-password"
+        generated_key = "generated-secret"
+
+        assert result.exit_code == 0
+        assert "Configured API auth for user 'api-user'." in result.output
+        assert settings.api_auth_username == "api-user"
+        assert settings.api_auth_password_hash == expected_digest
+        assert settings.api_auth_jwt_secret == generated_key
+
+    def test_api_set_auth_rotates_existing_secret(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """set-auth should rotate the JWT secret when requested."""
+        monkeypatch.setattr(
+            "simple_toml_settings.settings.xdg_config_home",
+            lambda: tmp_path,
+        )
+        AppSettings._instances.clear()
+        settings = get_settings()
+        existing_key = "existing-signing-key"
+        rotated_key = "rotated-secret"
+        settings.api_auth_jwt_secret = existing_key
+        settings.save()
+
+        monkeypatch.setattr(
+            "cogitus.cli.commands._import_optional_module",
+            lambda _: SimpleNamespace(hash_password=lambda _: "stored-digest"),
+        )
+        monkeypatch.setattr(
+            "cogitus.cli.commands.token_urlsafe",
+            lambda _: rotated_key,
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "api",
+                "set-auth",
+                "--username",
+                "api-user",
+                "--password",
+                "secret-password",
+                "--rotate-secret",
+            ],
+        )
+
+        AppSettings._instances.clear()
+        loaded = get_settings()
+
+        assert result.exit_code == 0
+        assert "JWT signing secret rotated." in result.output
+        assert loaded.api_auth_jwt_secret == rotated_key
+
+    def test_api_set_auth_rejects_blank_username(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """set-auth should reject empty usernames."""
+        monkeypatch.setattr(
+            "simple_toml_settings.settings.xdg_config_home",
+            lambda: tmp_path,
+        )
+        AppSettings._instances.clear()
+        monkeypatch.setattr(
+            "cogitus.cli.commands._import_optional_module",
+            lambda _: SimpleNamespace(hash_password=lambda _: "stored-digest"),
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "api",
+                "set-auth",
+                "--username",
+                "   ",
+                "--password",
+                "secret-password",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "username cannot be empty" in result.output
 
 
 class TestVersionOption:

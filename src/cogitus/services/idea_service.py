@@ -65,6 +65,10 @@ class IdeaService:
         """Return the canonical fallback group name."""
         return self._default_group_name
 
+    def transaction(self) -> SqliterDB:
+        """Return the service-owned DB for explicit transaction scopes."""
+        return self._db
+
     def create_idea(
         self,
         title: str,
@@ -97,6 +101,7 @@ class IdeaService:
         body: str,
         tags: list[str] | None = None,
         group_pk: int | None = None,
+        last_known_updated_at: int | None = None,
     ) -> Idea | None:
         """Update an existing idea.
 
@@ -106,6 +111,7 @@ class IdeaService:
             body: New body text.
             tags: If provided, replaces all tags (normalized).
             group_pk: Optional group primary key.
+            last_known_updated_at: Optional optimistic-lock timestamp.
 
         Returns:
             The updated Idea, or None if not found.
@@ -116,6 +122,7 @@ class IdeaService:
             body=body,
             tag_names=self._normalize_tags(tags),
             group_pk=group_pk,
+            last_known_updated_at=last_known_updated_at,
         )
 
     def rename_idea(self, pk: int, title: str) -> Idea | None:
@@ -137,14 +144,22 @@ class IdeaService:
             msg = "Failed to rename idea"
             raise ValueError(msg) from exc
 
-    def delete_idea(self, pk: int) -> None:
+    def delete_idea(
+        self,
+        pk: int,
+        last_known_updated_at: int | None = None,
+    ) -> None:
         """Delete an idea by primary key.
 
         Args:
             pk: Primary key of the idea to delete.
+            last_known_updated_at: Optional optimistic-lock timestamp.
         """
         self._cursor_state_repo.delete_for_idea(pk)
-        self._idea_repo.delete(pk)
+        self._idea_repo.delete(
+            pk,
+            last_known_updated_at=last_known_updated_at,
+        )
 
     def get_idea(self, pk: int) -> Idea | None:
         """Fetch a single idea.
@@ -161,13 +176,21 @@ class IdeaService:
         """Fetch one idea with group and tags eagerly loaded."""
         return self._idea_repo.get_with_relations(pk)
 
-    def list_ideas(self) -> list[Idea]:
+    def list_ideas(
+        self,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Idea]:
         """List all ideas, most recently updated first.
 
         Returns:
             List of all ideas.
         """
-        return self._idea_repo.list_all()
+        return self._idea_repo.list_all(limit=limit, offset=offset)
+
+    def list_snapshot_ideas(self) -> list[Idea]:
+        """List all ideas with relations for a full snapshot response."""
+        return self._idea_repo.list_snapshot_ideas()
 
     def search_ideas(self, query: str) -> list[Idea]:
         """Search ideas by visible text and optional structured filters.
@@ -197,6 +220,26 @@ class IdeaService:
             List of all tags.
         """
         return self._tag_repo.list_all()
+
+    def get_tag(self, pk: int) -> Tag | None:
+        """Fetch a single tag by primary key."""
+        return self._tag_repo.get(pk)
+
+    def create_tag(self, name: str) -> Tag:
+        """Create a standalone tag."""
+        return self._tag_repo.create(self._normalize_tag_name(name))
+
+    def rename_tag(self, pk: int, name: str) -> Tag | None:
+        """Rename an existing tag and refresh search data."""
+        tag = self._tag_repo.rename(pk, self._normalize_tag_name(name))
+        if tag is not None:
+            self._idea_repo.rebuild_search_index()
+        return tag
+
+    def delete_tag(self, pk: int) -> None:
+        """Delete a tag and refresh search data."""
+        self._tag_repo.delete(pk)
+        self._idea_repo.rebuild_search_index()
 
     def list_tags_in_use(self) -> list[Tag]:
         """List tags currently linked to at least one idea."""
@@ -409,3 +452,12 @@ class IdeaService:
                 seen.add(normalized)
                 result.append(normalized)
         return result
+
+    @staticmethod
+    def _normalize_tag_name(name: str) -> str:
+        """Normalize one standalone tag name."""
+        normalized = name.strip().lower()
+        if not normalized:
+            msg = "Tag name cannot be empty"
+            raise ValueError(msg)
+        return normalized
