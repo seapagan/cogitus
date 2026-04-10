@@ -23,9 +23,14 @@ from cogitus.config import (
     normalize_new_idea_group_mode,
     normalize_remote_api_base_url,
 )
-from cogitus.db import get_db
+from cogitus.db import DEFAULT_DB_PATH, get_db
 from cogitus.metadata import get_app_metadata
 from cogitus.repositories.group_repo import GroupRepository
+from cogitus.repositories.snapshot_import_repo import (
+    SnapshotImportCallback,
+    SnapshotImportProgress,
+    SnapshotImportRepository,
+)
 from cogitus.services.idea_service import IdeaService
 from cogitus.ui.screens.main_screen import MainScreen
 
@@ -48,6 +53,7 @@ if TYPE_CHECKING:
         remote_api_base_url: str
         remote_api_username: str
         remote_api_password: str
+        prompt_after_clone: bool
 
         def save(self) -> None:
             """Persist settings."""
@@ -117,6 +123,7 @@ class CogitusApp(App[None]):
         self._data_backend_mode = normalize_data_backend_mode(
             configured_backend_mode
         )
+        self._prompt_after_clone = bool(self._settings.prompt_after_clone)
         self._remote_api_base_url = normalize_remote_api_base_url(
             self._settings.remote_api_base_url
         )
@@ -148,6 +155,11 @@ class CogitusApp(App[None]):
                 "Backend settings",
                 "Configure the local or remote data backend",
                 screen.action_show_backend_config,
+            )
+            yield SystemCommand(
+                "Clone Remote To Local",
+                "Overwrite the local database with a fresh remote snapshot",
+                screen.action_clone_remote_to_local,
             )
 
     def _backend_title_suffix(self) -> str:
@@ -309,6 +321,66 @@ class CogitusApp(App[None]):
         self._update_title()
         if isinstance(self.screen, MainScreen):
             self.screen.replace_service(self._service)
+
+    def should_prompt_after_clone(self) -> bool:
+        """Return whether remote-mode clone should prompt for local switch."""
+        return self._prompt_after_clone
+
+    def clone_remote_to_local(
+        self,
+        *,
+        progress_callback: SnapshotImportCallback | None = None,
+    ) -> None:
+        """Replace the local database with a fresh remote snapshot."""
+        if not self._remote_api_base_url:
+            msg = "Remote API is not fully configured"
+            raise RuntimeError(msg)
+
+        client = RemoteAPIClient(
+            base_url=self._remote_api_base_url,
+            username=self._remote_api_username,
+            password=self._remote_api_password,
+        )
+        target_db = None
+        try:
+            if progress_callback is not None:
+                progress_callback(
+                    SnapshotImportProgress(
+                        stage="Download",
+                        completed=0,
+                        total=0,
+                    )
+                )
+            snapshot = client.fetch_snapshot()
+            if progress_callback is not None:
+                progress_callback(
+                    SnapshotImportProgress(
+                        stage="Download",
+                        completed=1,
+                        total=1,
+                    )
+                )
+            target_db = get_db(
+                self._resolve_clone_target_local_db_path(),
+                default_group_name=self._default_group_name,
+            )
+            SnapshotImportRepository(target_db).replace_snapshot(
+                snapshot,
+                progress_callback=progress_callback,
+            )
+        finally:
+            client.close()
+            if target_db is not None:
+                target_db.close()
+
+    def _resolve_clone_target_local_db_path(self) -> str:
+        """Return the file-backed local DB path for remote snapshot clones."""
+        if (
+            self._active_backend_mode() == DataBackendMode.LOCAL
+            and self._db_path is not None
+        ):
+            return self._db_path
+        return DEFAULT_DB_PATH
 
     def _build_main_screen(self) -> MainScreen:
         """Build the main application screen."""

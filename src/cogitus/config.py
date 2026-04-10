@@ -63,6 +63,7 @@ class AppSettings(TOMLSettings):
     remote_api_base_url: str = ""
     remote_api_username: str = ""
     remote_api_password: str = ""
+    prompt_after_clone: bool = True
     api_auth_username: str = ""
     api_auth_password_hash: str = ""
     api_auth_jwt_secret: str = ""

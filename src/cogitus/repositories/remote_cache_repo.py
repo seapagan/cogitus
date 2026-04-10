@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING
 
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
-from cogitus.models.idea_cursor_state import IdeaCursorState
 from cogitus.models.tag import Tag
 from cogitus.repositories.group_repo import GroupRepository
 from cogitus.repositories.idea_cursor_state_repo import (
     IdeaCursorStateRepository,
 )
+from cogitus.repositories.snapshot_import_repo import SnapshotImportRepository
 from cogitus.search.backend import FtsSearchBackend
 
 if TYPE_CHECKING:
@@ -37,28 +37,12 @@ class RemoteCacheRepository:
         self._default_group_name = default_group_name
         self._cursor_repo = IdeaCursorStateRepository(db)
         self._group_repo = GroupRepository(db)
+        self._snapshot_importer = SnapshotImportRepository(db)
         self._search_backend = FtsSearchBackend(db)
 
     def replace_snapshot(self, snapshot: RemoteSnapshot) -> None:
         """Replace the entire cache with a fresh remote snapshot."""
-        cursor_positions = self._cursor_repo.list_positions()
-
-        with self._db.connect():
-            self._db.select(IdeaCursorState).delete()
-            self._db.select(Idea).delete()
-            self._db.select(Tag).delete()
-            self._db.select(Group).delete()
-
-            groups_by_pk = self._bulk_insert_groups(snapshot.groups)
-            tags_by_pk = self._bulk_insert_tags(snapshot.tags)
-            self._bulk_insert_ideas(snapshot.ideas, groups_by_pk)
-            self._sync_snapshot_idea_tags(snapshot.ideas, tags_by_pk)
-
-        self._search_backend.rebuild()
-        self._restore_cursor_positions(
-            cursor_positions,
-            valid_idea_pks={idea.pk for idea in snapshot.ideas},
-        )
+        self._snapshot_importer.replace_snapshot(snapshot)
 
     def upsert_group(self, group: GroupResponse) -> None:
         """Insert or update one cached group with remote timestamps."""
