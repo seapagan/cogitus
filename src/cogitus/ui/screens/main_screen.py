@@ -16,6 +16,7 @@ from cogitus.backends.protocols import SyncingIdeaBackend
 from cogitus.config import (
     DEFAULT_EDIT_BODY_CURSOR_MODE,
     DEFAULT_NEW_IDEA_GROUP_MODE,
+    DataBackendMode,
     EditBodyCursorMode,
     NewIdeaGroupMode,
 )
@@ -489,14 +490,16 @@ class MainScreen(Screen[None]):
         if result != RemoteCloneModeAction.SWITCH_LOCAL:
             self.notify("Local database replaced from remote snapshot")
             return
-        activate_local_fallback = getattr(
-            self.app,
-            "activate_session_local_fallback",
-            None,
-        )
-        if callable(activate_local_fallback):
-            activate_local_fallback()
-            self.notify("Using local mode for this session")
+        get_backend_config = getattr(self.app, "get_backend_config", None)
+        apply_backend_config = getattr(self.app, "apply_backend_config", None)
+        if callable(get_backend_config) and callable(apply_backend_config):
+            apply_backend_config(
+                replace(
+                    get_backend_config(),
+                    mode=DataBackendMode.LOCAL,
+                )
+            )
+            self.notify("Switched to local mode")
             return
         self.notify("Local fallback is unavailable", severity="error")
 

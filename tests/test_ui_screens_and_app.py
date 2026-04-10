@@ -42,6 +42,7 @@ from cogitus.ui.screens.idea_form_screen import (
     HelpScreen,
     IdeaFormScreen,
     NameInputScreen,
+    RemoteCloneModeAction,
     RemoteCloneProgressScreen,
     RemoteStartupRecoveryAction,
     RemoteStartupRecoveryScreen,
@@ -124,6 +125,18 @@ class _FakeSettings:
     def save(self) -> None:
         """Record save invocation."""
         self.saved = True
+
+    def set(
+        self,
+        key: str,
+        value: object,
+        *,
+        autosave: bool = True,
+    ) -> None:
+        """Store one setting value through the settings API."""
+        setattr(self, key, value)
+        if autosave:
+            self.save()
 
 
 class _FrozenDateTime:
@@ -3850,6 +3863,51 @@ async def test_clone_remote_to_local_requires_confirmation(
         assert isinstance(app.screen, RemoteCloneProgressScreen)
 
         app.pop_screen()
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_clone_switch_to_local_persists_backend_mode(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Post-clone local choice should use persisted backend config flow."""
+
+    class _CloneSwitchApp(_SingleScreenApp):
+        def __init__(self, screen: MainScreen) -> None:
+            super().__init__(screen)
+            self._config = BackendConfig(
+                mode=DataBackendMode.API,
+                api_base_url="http://127.0.0.1:8000",
+                api_username="api-user",
+                api_password=_remote_secret(),
+            )
+            self.applied: BackendConfig | None = None
+
+        def get_backend_config(self) -> BackendConfig:
+            return self._config
+
+        def apply_backend_config(self, config: BackendConfig) -> None:
+            self.applied = config
+
+    screen = MainScreen(service)
+    app = _CloneSwitchApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+
+        screen._on_remote_clone_switch_dismiss(
+            RemoteCloneModeAction.SWITCH_LOCAL
+        )
+
+        assert app.applied == BackendConfig(
+            mode=DataBackendMode.LOCAL,
+            api_base_url="http://127.0.0.1:8000",
+            api_username="api-user",
+            api_password=_remote_secret(),
+        )
+        notify.assert_called_once_with("Switched to local mode")
         app.exit()
         await pilot.pause()
 

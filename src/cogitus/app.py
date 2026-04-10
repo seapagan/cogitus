@@ -55,6 +55,15 @@ if TYPE_CHECKING:
         remote_api_password: str
         prompt_after_clone: bool
 
+        def set(
+            self,
+            key: str,
+            value: object,
+            *,
+            autosave: bool = True,
+        ) -> None:
+            """Persist one setting value via the settings API."""
+
         def save(self) -> None:
             """Persist settings."""
 
@@ -273,10 +282,26 @@ class CogitusApp(App[None]):
         """Persist backend settings and rebuild the active backend."""
         if isinstance(self._service, RemoteIdeaBackend):
             self._service.close()
-        self._settings.data_backend_mode = config.mode.value
-        self._settings.remote_api_base_url = config.api_base_url
-        self._settings.remote_api_username = config.api_username
-        self._settings.remote_api_password = config.api_password
+        self._settings.set(
+            "data_backend_mode",
+            config.mode.value,
+            autosave=False,
+        )
+        self._settings.set(
+            "remote_api_base_url",
+            config.api_base_url,
+            autosave=False,
+        )
+        self._settings.set(
+            "remote_api_username",
+            config.api_username,
+            autosave=False,
+        )
+        self._settings.set(
+            "remote_api_password",
+            config.api_password,
+            autosave=False,
+        )
         self._settings.save()
         self._load_settings_state()
         self._session_backend_mode_override = None
