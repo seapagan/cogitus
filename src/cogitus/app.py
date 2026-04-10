@@ -400,10 +400,7 @@ class CogitusApp(App[None]):
 
     def _resolve_clone_target_local_db_path(self) -> str:
         """Return the file-backed local DB path for remote snapshot clones."""
-        if (
-            self._active_backend_mode() == DataBackendMode.LOCAL
-            and self._db_path is not None
-        ):
+        if self._db_path is not None:
             return self._db_path
         return DEFAULT_DB_PATH
 

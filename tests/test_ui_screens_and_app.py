@@ -3877,6 +3877,31 @@ def test_cogitus_app_clone_target_prefers_explicit_local_db_path(
     assert app._resolve_clone_target_local_db_path() == db_path
 
 
+def test_cogitus_app_clone_target_prefers_explicit_local_db_path_in_api_mode(
+    mocker: MockerFixture,
+    db: SqliterDB,
+    tmp_path: Path,
+) -> None:
+    """API mode should still clone into the explicitly configured local DB."""
+    db_path = str(tmp_path / "custom-local.db")
+    get_db = mocker.patch("cogitus.app.get_db", return_value=db)
+    app = CogitusApp(
+        db_path=db_path,
+        settings=_FakeSettings(
+            backend_config=BackendConfig(
+                mode=DataBackendMode.API,
+                api_base_url="http://127.0.0.1:8000",
+                api_username="api-user",
+                api_password=_remote_secret(),
+            )
+        ),
+    )
+
+    get_db.reset_mock()
+
+    assert app._resolve_clone_target_local_db_path() == db_path
+
+
 @pytest.mark.asyncio
 async def test_clone_remote_to_local_requires_confirmation(
     service: IdeaService,
