@@ -52,6 +52,7 @@ from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
 from cogitus.ui.widgets.search_results import SearchResultsList
 from cogitus.ui.widgets.text_area import CogitusTextArea
+from tests.helpers import _focused_widget
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -60,7 +61,6 @@ if TYPE_CHECKING:
     from sqliter import SqliterDB
     from textual.pilot import Pilot
     from textual.screen import Screen
-    from textual.widget import Widget
 
     from cogitus.services.idea_service import IdeaService
 
@@ -80,11 +80,6 @@ class _SingleScreenApp(App[None]):
     def on_mount(self) -> None:
         """Push the test screen."""
         self.push_screen(self._screen)
-
-
-def _focused_widget(app: App[None]) -> Widget | None:
-    """Return the currently focused widget."""
-    return app.focused
 
 
 class _StyledSingleScreenApp(_SingleScreenApp):

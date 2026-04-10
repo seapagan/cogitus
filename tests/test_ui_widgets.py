@@ -29,6 +29,7 @@ from cogitus.ui.widgets.search_results import (
     SearchResultsList,
     _marked_text_to_text,
 )
+from tests.helpers import _focused_widget
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -38,11 +39,6 @@ if TYPE_CHECKING:
 
     from cogitus.models.idea import Idea
     from cogitus.services.idea_service import IdeaService
-
-
-def _focused_widget(app: App[None]) -> Widget | None:
-    """Return the currently focused widget."""
-    return app.focused
 
 
 class _WidgetApp(App[None]):
