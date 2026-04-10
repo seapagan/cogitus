@@ -42,6 +42,7 @@ from cogitus.ui.screens.idea_form_screen import (
     HelpScreen,
     IdeaFormScreen,
     NameInputScreen,
+    RemoteCloneProgressScreen,
     RemoteStartupRecoveryAction,
     RemoteStartupRecoveryScreen,
 )
@@ -100,6 +101,8 @@ class _FakeSettings:
         new_idea_group_mode: str = "contextual",
         default_group_name: str = "default",
         backend_config: BackendConfig | None = None,
+        *,
+        prompt_after_clone: bool = True,
     ) -> None:
         resolved_backend = backend_config or BackendConfig(
             mode=DataBackendMode.LOCAL,
@@ -115,6 +118,7 @@ class _FakeSettings:
         self.remote_api_base_url = resolved_backend.api_base_url
         self.remote_api_username = resolved_backend.api_username
         self.remote_api_password = resolved_backend.api_password
+        self.prompt_after_clone = prompt_after_clone
         self.saved = False
 
     def save(self) -> None:
@@ -3719,6 +3723,133 @@ async def test_cogitus_app_backend_settings_palette_and_shortcut(
         await pilot.press("c")
         assert isinstance(push_screen.call_args.args[0], BackendConfigScreen)
 
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_clone_remote_palette_command(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Palette should expose the remote-to-local clone action."""
+    app = CogitusApp(db=db, settings=_FakeSettings())
+
+    async with app.run_test() as pilot:
+        assert isinstance(app.screen, MainScreen)
+        clone_action = cast(
+            "Any",
+            mocker.patch.object(
+                app.screen,
+                "action_clone_remote_to_local",
+            ),
+        )
+
+        commands = list(app.get_system_commands(app.screen))
+        clone_command = next(
+            command
+            for command in commands
+            if command.title == "Clone Remote To Local"
+        )
+        assert clone_command.help == (
+            "Overwrite the local database with a fresh remote snapshot"
+        )
+
+        clone_command.callback()
+        clone_action.assert_called_once()
+
+        app.exit()
+        await pilot.pause()
+
+
+def test_clone_remote_to_local_uses_default_local_target_in_api_mode(
+    mocker: MockerFixture,
+    db: SqliterDB,
+) -> None:
+    """Remote-mode clone should import into the normal local DB path."""
+    client = mocker.Mock()
+    client.fetch_snapshot.return_value = mocker.sentinel.snapshot
+    remote_client_cls = mocker.patch(
+        "cogitus.app.RemoteAPIClient",
+        return_value=client,
+    )
+    get_db = mocker.patch("cogitus.app.get_db", return_value=db)
+    importer = mocker.Mock()
+    importer_cls = mocker.patch(
+        "cogitus.app.SnapshotImportRepository",
+        return_value=importer,
+    )
+    close_db = cast("Any", mocker.patch.object(db, "close"))
+    progress_updates: list[tuple[str, int, int]] = []
+    app = CogitusApp(
+        settings=_FakeSettings(
+            backend_config=BackendConfig(
+                mode=DataBackendMode.API,
+                api_base_url="http://127.0.0.1:8000",
+                api_username="api-user",
+                api_password=_remote_secret(),
+            )
+        )
+    )
+    remote_client_cls.reset_mock()
+    get_db.reset_mock()
+
+    app.clone_remote_to_local(
+        progress_callback=lambda progress: progress_updates.append(
+            (progress.stage, progress.completed, progress.total)
+        )
+    )
+
+    remote_client_cls.assert_called_once()
+    get_db.assert_called_with(
+        "~/.config/cogitus/cogitus.db",
+        default_group_name="default",
+    )
+    importer_cls.assert_called_once_with(db)
+    importer.replace_snapshot.assert_called_once_with(
+        mocker.sentinel.snapshot,
+        progress_callback=mocker.ANY,
+    )
+    assert progress_updates[:2] == [
+        ("Download", 0, 0),
+        ("Download", 1, 1),
+    ]
+    client.close.assert_called_once()
+    close_db.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_clone_remote_to_local_requires_confirmation(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """The destructive clone action should require confirmation first."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        run_clone = mocker.patch.object(
+            screen,
+            "_run_remote_clone",
+            return_value=mocker.Mock(is_finished=False),
+        )
+
+        screen.action_clone_remote_to_local()
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmDialog)
+        message = str(app.screen.query_one("#confirm-message", Static).render())
+        assert "overwrite the existing local database" in message.lower()
+
+        await pilot.press("n")
+        run_clone.assert_not_called()
+
+        screen.action_clone_remote_to_local()
+        await pilot.pause()
+        await pilot.press("y")
+        run_clone.assert_called_once()
+        assert isinstance(app.screen, RemoteCloneProgressScreen)
+
+        app.pop_screen()
         app.exit()
         await pilot.pause()
 
