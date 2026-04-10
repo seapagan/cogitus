@@ -16,7 +16,11 @@ import cogitus.api as api_package
 from cogitus.api.dependencies import get_service
 from cogitus.api.main import COGITUS_API_DB_PATH_ENV, create_api_app
 from cogitus.api.managers.auth_manager import AuthManager
-from cogitus.config import DEFAULT_API_AUTH_JWT_ALGORITHM, AppSettings
+from cogitus.config import (
+    DEFAULT_API_AUTH_JWT_ALGORITHM,
+    AppSettings,
+    get_settings,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -160,19 +164,32 @@ def test_auth_manager_rejects_wrong_username_with_malformed_dummy_hash(
 
 
 def test_auth_manager_rejects_malformed_password_hash(
-    configured_api_settings: AppSettings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     api_auth_credentials: dict[str, str],
 ) -> None:
     """Auth manager should fail closed on malformed password hashes."""
-    configured_api_settings.api_auth_password_hash = "not" + "-a-valid-hash"
-    manager = AuthManager(configured_api_settings)
-
-    authenticated = manager.authenticate_user(
-        api_auth_credentials["username"],
-        api_auth_credentials["password"],
+    monkeypatch.setattr(
+        "simple_toml_settings.settings.xdg_config_home",
+        lambda: tmp_path,
     )
+    AppSettings._instances.clear()
 
-    assert authenticated is None
+    try:
+        settings = get_settings()
+        settings.api_auth_username = api_auth_credentials["username"]
+        settings.api_auth_password_hash = "not" + "-a-valid-hash"
+        settings.api_auth_jwt_secret = api_auth_credentials["secret"]
+        manager = AuthManager(settings)
+
+        authenticated = manager.authenticate_user(
+            api_auth_credentials["username"],
+            api_auth_credentials["password"],
+        )
+
+        assert authenticated is None
+    finally:
+        AppSettings._instances.clear()
 
 
 def test_auth_manager_defaults_canonical_eddsa_algorithm_to_hs256(
