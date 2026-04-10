@@ -52,6 +52,7 @@ from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
 from cogitus.ui.widgets.search_results import SearchResultsList
 from cogitus.ui.widgets.text_area import CogitusTextArea
+from tests.helpers import _focused_widget
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -2878,7 +2879,8 @@ async def test_main_screen_cancel_search_closes_autocomplete_first(
         screen.action_cancel_search()
         await pilot.pause()
         assert search.value == ""
-        assert app.focused is tree
+        focused = _focused_widget(app)
+        assert focused is tree
 
 
 @pytest.mark.asyncio
@@ -2915,7 +2917,8 @@ async def test_main_screen_search_cancel_restores_previous_focus(
         screen.action_cancel_search()
         await pilot.pause()
         assert search.value == ""
-        assert app.focused is tree
+        focused = _focused_widget(app)
+        assert focused is tree
 
 
 @pytest.mark.asyncio
@@ -3009,7 +3012,8 @@ async def test_main_screen_search_results_support_keyboard_navigation(
 
         screen.action_cancel_search()
         await pilot.pause()
-        assert app.focused is search
+        focused = _focused_widget(app)
+        assert focused is search
         assert search.value == "python"
 
         screen.action_cancel_search()

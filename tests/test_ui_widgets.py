@@ -29,6 +29,7 @@ from cogitus.ui.widgets.search_results import (
     SearchResultsList,
     _marked_text_to_text,
 )
+from tests.helpers import _focused_widget
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -871,7 +872,8 @@ async def test_idea_list_panel_search_keys_can_move_between_input_and_results(
 
         await pilot.press("up")
         await pilot.pause()
-        assert app.focused is search
+        focused = _focused_widget(app)
+        assert focused is search
 
         search.value = ""
         await pilot.pause()
