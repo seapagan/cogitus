@@ -153,11 +153,30 @@ class SnapshotImportRepository:
             return
         self._report_progress("Ideas", 0, len(ideas), progress_callback)
         for index, idea in enumerate(ideas, start=1):
+            try:
+                group = groups_by_pk[idea.group.pk]
+            except KeyError:
+                msg = (
+                    "Snapshot is inconsistent: "
+                    f"idea {idea.pk} references missing group "
+                    f"{idea.group.pk}"
+                )
+                raise RuntimeError(msg) from None
             cached_idea = self._db.insert(
-                self._idea_model(idea, groups_by_pk[idea.group.pk]),
+                self._idea_model(idea, group),
                 timestamp_override=True,
             )
-            cached_idea.tags.set(*(tags_by_pk[tag.pk] for tag in idea.tags))
+            try:
+                cached_tags = [tags_by_pk[tag.pk] for tag in idea.tags]
+            except KeyError as exc:
+                missing_tag_pk = exc.args[0]
+                msg = (
+                    "Snapshot is inconsistent: "
+                    f"idea {idea.pk} references missing tag "
+                    f"{missing_tag_pk}"
+                )
+                raise RuntimeError(msg) from None
+            cached_idea.tags.set(*cached_tags)
             self._report_progress(
                 "Ideas",
                 index,

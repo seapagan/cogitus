@@ -221,6 +221,70 @@ def test_snapshot_import_sync_snapshot_idea_tags_requires_inserted_idea(
         )
 
 
+def test_snapshot_import_progress_path_reports_missing_group(
+    db: SqliterDB,
+) -> None:
+    """Progress-aware import should fail clearly on missing snapshot groups."""
+    importer = SnapshotImportRepository(db)
+    python_tag = _tag(pk=1, name="python", created_at=2, updated_at=2)
+    missing_group = _group(pk=99, name="missing", created_at=1, updated_at=1)
+    snapshot = RemoteSnapshot(
+        groups=[],
+        tags=[python_tag],
+        ideas=[
+            _idea(
+                pk=1,
+                title="Imported idea",
+                body="Local clone body",
+                group=missing_group,
+                tags=[python_tag],
+                timestamps=(4, 5),
+            )
+        ],
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="idea 1 references missing group 99",
+    ):
+        importer.replace_snapshot(
+            snapshot,
+            progress_callback=lambda _progress: None,
+        )
+
+
+def test_snapshot_import_progress_path_reports_missing_tag(
+    db: SqliterDB,
+) -> None:
+    """Progress-aware import should fail clearly on missing snapshot tags."""
+    importer = SnapshotImportRepository(db)
+    default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
+    missing_tag = _tag(pk=99, name="missing", created_at=2, updated_at=2)
+    snapshot = RemoteSnapshot(
+        groups=[default_group],
+        tags=[],
+        ideas=[
+            _idea(
+                pk=1,
+                title="Imported idea",
+                body="Local clone body",
+                group=default_group,
+                tags=[missing_tag],
+                timestamps=(4, 5),
+            )
+        ],
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="idea 1 references missing tag 99",
+    ):
+        importer.replace_snapshot(
+            snapshot,
+            progress_callback=lambda _progress: None,
+        )
+
+
 def test_snapshot_import_bulk_helpers_handle_empty_inputs(
     db: SqliterDB,
 ) -> None:
