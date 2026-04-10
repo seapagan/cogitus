@@ -251,11 +251,12 @@ def test_auth_manager_honors_zero_token_lifetime(
 ) -> None:
     """Auth manager should keep a caller-provided zero token lifetime."""
     manager = AuthManager(configured_api_settings)
-    issued_at = datetime.now(tz=timezone.utc)
+    before_issue = datetime.now(tz=timezone.utc)
 
     token = manager.create_access_token(
         expires_delta=timedelta(0),
     )
+    after_issue = datetime.now(tz=timezone.utc)
     payload = jwt.decode(
         token,
         manager.jwt_secret,
@@ -264,4 +265,5 @@ def test_auth_manager_honors_zero_token_lifetime(
     )
     expires_at = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
 
-    assert expires_at <= issued_at + timedelta(seconds=1)
+    assert before_issue - timedelta(seconds=1) <= expires_at
+    assert expires_at <= after_issue + timedelta(seconds=1)
