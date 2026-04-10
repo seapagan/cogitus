@@ -359,52 +359,9 @@ def test_internal_helper_guards_cover_empty_and_missing_cache_paths(
     """Private guard helpers should fail clearly for missing cache rows."""
     repo = RemoteCacheRepository(db, default_group_name="default")
 
-    assert repo._bulk_insert_groups([]) == {}
-    assert repo._bulk_insert_tags([]) == {}
-    repo._bulk_insert_ideas([], {})
-
     with pytest.raises(RuntimeError, match="Group 999 not found"):
         repo._require_group(999)
     with pytest.raises(RuntimeError, match="Tag 999 not found"):
         repo._require_tag(999)
     with pytest.raises(RuntimeError, match="Idea 999 not found"):
         repo._require_idea(999)
-
-
-def test_snapshot_helper_paths_insert_links_and_restore_cursor(
-    db: SqliterDB,
-) -> None:
-    """Snapshot helper methods should insert rows and restore state."""
-    service = IdeaService(db)
-    repo = RemoteCacheRepository(db, default_group_name="default")
-    placeholder = service.create_idea("Placeholder")
-    service.set_idea_cursor_position(placeholder.pk, 14)
-
-    imported_group = _group(pk=2, name="imported", created_at=1, updated_at=1)
-    api_tag = _tag(pk=1, name="api", created_at=2, updated_at=2)
-    cli_tag = _tag(pk=2, name="cli", created_at=3, updated_at=3)
-    groups_by_pk = repo._bulk_insert_groups([imported_group])
-    tags_by_pk = repo._bulk_insert_tags([api_tag, cli_tag])
-    ideas = [
-        _idea(
-            pk=2,
-            title="Seed idea",
-            body="Body",
-            group=imported_group,
-            tags=[api_tag, cli_tag],
-            timestamps=(4, 5),
-        )
-    ]
-
-    repo._bulk_insert_ideas(ideas, groups_by_pk)
-    repo._sync_snapshot_idea_tags(ideas, tags_by_pk)
-    repo._restore_cursor_positions({2: 14, 999: 22}, valid_idea_pks={2})
-
-    inserted = service.get_idea_with_relations(2)
-    assert inserted is not None
-    assert inserted.group.name == "imported"
-    assert sorted(tag.name for tag in inserted.tags.fetch_all()) == [
-        "api",
-        "cli",
-    ]
-    assert service.get_idea_cursor_position(2) == 14

@@ -8,9 +8,6 @@ from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
 from cogitus.repositories.group_repo import GroupRepository
-from cogitus.repositories.idea_cursor_state_repo import (
-    IdeaCursorStateRepository,
-)
 from cogitus.repositories.snapshot_import_repo import SnapshotImportRepository
 from cogitus.search.backend import FtsSearchBackend
 
@@ -35,7 +32,6 @@ class RemoteCacheRepository:
         """Initialize the cache repository with its persistence helpers."""
         self._db = db
         self._default_group_name = default_group_name
-        self._cursor_repo = IdeaCursorStateRepository(db)
         self._group_repo = GroupRepository(db)
         self._snapshot_importer = SnapshotImportRepository(db)
         self._search_backend = FtsSearchBackend(db)
@@ -143,74 +139,6 @@ class RemoteCacheRepository:
     def rebuild_search_index(self) -> None:
         """Rebuild the cache search index from relational tables."""
         self._search_backend.rebuild()
-
-    def _bulk_insert_groups(
-        self,
-        groups: list[GroupResponse],
-    ) -> dict[int, Group]:
-        """Insert snapshot groups and return them keyed by primary key."""
-        if not groups:
-            return {}
-        inserted = self._db.bulk_insert(
-            [self._group_model(group) for group in groups],
-            timestamp_override=True,
-        )
-        return {group.pk: group for group in inserted}
-
-    def _bulk_insert_tags(
-        self,
-        tags: list[TagResponse],
-    ) -> dict[int, Tag]:
-        """Insert snapshot tags and return them keyed by primary key."""
-        if not tags:
-            return {}
-        inserted = self._db.bulk_insert(
-            [self._tag_model(tag) for tag in tags],
-            timestamp_override=True,
-        )
-        return {tag.pk: tag for tag in inserted}
-
-    def _bulk_insert_ideas(
-        self,
-        ideas: list[IdeaResponse],
-        groups_by_pk: dict[int, Group],
-    ) -> None:
-        """Insert snapshot ideas using already-inserted cached groups."""
-        if not ideas:
-            return
-        self._db.bulk_insert(
-            [
-                self._idea_model(
-                    idea,
-                    groups_by_pk[idea.group.pk],
-                )
-                for idea in ideas
-            ],
-            timestamp_override=True,
-        )
-
-    def _sync_snapshot_idea_tags(
-        self,
-        ideas: list[IdeaResponse],
-        tags_by_pk: dict[int, Tag],
-    ) -> None:
-        """Recreate snapshot idea-tag links through the ORM M2M API."""
-        for idea in ideas:
-            cached_idea = self._require_idea(idea.pk)
-            cached_idea.tags.set(
-                *(tags_by_pk[tag.pk] for tag in idea.tags),
-            )
-
-    def _restore_cursor_positions(
-        self,
-        cursor_positions: dict[int, int],
-        *,
-        valid_idea_pks: set[int],
-    ) -> None:
-        """Restore cursor positions for ideas that still exist remotely."""
-        for idea_pk, position in cursor_positions.items():
-            if idea_pk in valid_idea_pks:
-                self._cursor_repo.set_position(idea_pk, position)
 
     def _resolve_move_target_group_pk(
         self,
