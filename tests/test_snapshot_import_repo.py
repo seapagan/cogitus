@@ -118,6 +118,7 @@ def test_snapshot_import_uses_bulk_insert_without_progress_callback(
     """Full snapshot replacement should keep the efficient bulk insert path."""
     importer = SnapshotImportRepository(db)
     bulk_insert = mocker.patch.object(db, "bulk_insert", wraps=db.bulk_insert)
+    get = mocker.patch.object(db, "get", wraps=db.get)
     default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
     python_tag = _tag(pk=1, name="python", created_at=2, updated_at=2)
     cli_tag = _tag(pk=2, name="cli", created_at=3, updated_at=3)
@@ -139,6 +140,7 @@ def test_snapshot_import_uses_bulk_insert_without_progress_callback(
     importer.replace_snapshot(snapshot)
 
     assert bulk_insert.call_count == 3
+    get.assert_not_called()
 
 
 def test_snapshot_import_with_progress_callback_uses_rowwise_progress_path(
@@ -212,7 +214,11 @@ def test_snapshot_import_sync_snapshot_idea_tags_requires_inserted_idea(
         RuntimeError,
         match="Idea 1 not found after snapshot insert",
     ):
-        importer._sync_snapshot_idea_tags(ideas, tags_by_pk=tags_by_pk)
+        importer._sync_snapshot_idea_tags(
+            ideas,
+            cached_ideas_by_pk={},
+            tags_by_pk=tags_by_pk,
+        )
 
 
 def test_snapshot_import_bulk_helpers_handle_empty_inputs(
@@ -223,7 +229,7 @@ def test_snapshot_import_bulk_helpers_handle_empty_inputs(
 
     assert importer._bulk_insert_groups([]) == {}
     assert importer._bulk_insert_tags([]) == {}
-    importer._bulk_insert_ideas([], groups_by_pk={})
+    assert importer._bulk_insert_ideas([], groups_by_pk={}) == {}
 
 
 def test_snapshot_import_reports_progress_when_callback_is_present() -> None:

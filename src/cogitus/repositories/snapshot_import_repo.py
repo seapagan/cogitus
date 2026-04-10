@@ -141,8 +141,15 @@ class SnapshotImportRepository:
     ) -> None:
         """Insert snapshot ideas and restore their tag links."""
         if progress_callback is None:
-            self._bulk_insert_ideas(ideas, groups_by_pk=groups_by_pk)
-            self._sync_snapshot_idea_tags(ideas, tags_by_pk=tags_by_pk)
+            cached_ideas_by_pk = self._bulk_insert_ideas(
+                ideas,
+                groups_by_pk=groups_by_pk,
+            )
+            self._sync_snapshot_idea_tags(
+                ideas,
+                cached_ideas_by_pk=cached_ideas_by_pk,
+                tags_by_pk=tags_by_pk,
+            )
             return
         self._report_progress("Ideas", 0, len(ideas), progress_callback)
         for index, idea in enumerate(ideas, start=1):
@@ -189,11 +196,11 @@ class SnapshotImportRepository:
         ideas: list[IdeaResponse],
         *,
         groups_by_pk: dict[int, Group],
-    ) -> None:
+    ) -> dict[int, Idea]:
         """Insert snapshot ideas in one batch."""
         if not ideas:
-            return
-        self._db.bulk_insert(
+            return {}
+        inserted = self._db.bulk_insert(
             [
                 self._idea_model(
                     idea,
@@ -203,16 +210,18 @@ class SnapshotImportRepository:
             ],
             timestamp_override=True,
         )
+        return {idea.pk: idea for idea in inserted}
 
     def _sync_snapshot_idea_tags(
         self,
         ideas: list[IdeaResponse],
         *,
+        cached_ideas_by_pk: dict[int, Idea],
         tags_by_pk: dict[int, Tag],
     ) -> None:
         """Recreate snapshot idea-tag links through the ORM M2M API."""
         for idea in ideas:
-            cached_idea = self._db.get(Idea, idea.pk)
+            cached_idea = cached_ideas_by_pk.get(idea.pk)
             if cached_idea is None:
                 msg = f"Idea {idea.pk} not found after snapshot insert"
                 raise RuntimeError(msg)
