@@ -23,10 +23,21 @@ from cogitus.config import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
     from pathlib import Path
 
     from fastapi import Request
     from pytest_mock import MockerFixture
+
+
+@pytest.fixture
+def isolated_app_settings() -> Generator[None]:
+    """Clear singleton app settings before and after isolated tests."""
+    AppSettings._instances.clear()
+    try:
+        yield
+    finally:
+        AppSettings._instances.clear()
 
 
 def test_get_service_raises_when_uninitialized() -> None:
@@ -103,29 +114,23 @@ def test_create_api_app_uses_env_db_path(
 def test_token_endpoint_returns_service_unavailable_when_auth_unconfigured(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    isolated_app_settings: None,
 ) -> None:
     """Token endpoint should fail clearly when API auth is not configured."""
     monkeypatch.setattr(
         "simple_toml_settings.settings.xdg_config_home",
         lambda: tmp_path,
     )
-    AppSettings._instances.clear()
-
-    try:
-        with TestClient(
-            create_api_app(memory=True, default_group_name="default")
-        ) as client:
-            response = client.post(
-                "/api/v1/auth/token",
-                data={"username": "api-user", "password": "secret"},
-            )
-
-        assert response.status_code == 503
-        assert (
-            response.json()["detail"] == "API authentication is not configured"
+    with TestClient(
+        create_api_app(memory=True, default_group_name="default")
+    ) as client:
+        response = client.post(
+            "/api/v1/auth/token",
+            data={"username": "api-user", "password": "secret"},
         )
-    finally:
-        AppSettings._instances.clear()
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "API authentication is not configured"
 
 
 def test_auth_manager_rejects_wrong_username(
@@ -167,29 +172,25 @@ def test_auth_manager_rejects_malformed_password_hash(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     api_auth_credentials: dict[str, str],
+    isolated_app_settings: None,
 ) -> None:
     """Auth manager should fail closed on malformed password hashes."""
     monkeypatch.setattr(
         "simple_toml_settings.settings.xdg_config_home",
         lambda: tmp_path,
     )
-    AppSettings._instances.clear()
+    settings = get_settings()
+    settings.api_auth_username = api_auth_credentials["username"]
+    settings.api_auth_password_hash = "not" + "-a-valid-hash"
+    settings.api_auth_jwt_secret = api_auth_credentials["secret"]
+    manager = AuthManager(settings)
 
-    try:
-        settings = get_settings()
-        settings.api_auth_username = api_auth_credentials["username"]
-        settings.api_auth_password_hash = "not" + "-a-valid-hash"
-        settings.api_auth_jwt_secret = api_auth_credentials["secret"]
-        manager = AuthManager(settings)
+    authenticated = manager.authenticate_user(
+        api_auth_credentials["username"],
+        api_auth_credentials["password"],
+    )
 
-        authenticated = manager.authenticate_user(
-            api_auth_credentials["username"],
-            api_auth_credentials["password"],
-        )
-
-        assert authenticated is None
-    finally:
-        AppSettings._instances.clear()
+    assert authenticated is None
 
 
 def test_auth_manager_defaults_canonical_eddsa_algorithm_to_hs256(
