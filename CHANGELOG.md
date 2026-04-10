@@ -5,6 +5,20 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.9.0](https://github.com/seapagan/cogitus/releases/tag/0.9.0) (April 10, 2026)
+
+**New Features**
+
+- Add fastapi api and remote backend mode ([#52](https://github.com/seapagan/cogitus/pull/52)) by [seapagan](https://github.com/seapagan)
+
+**Dependency Updates**
+
+- Deps: update cryptography and aiohttp to fix security alerts ([#54](https://github.com/seapagan/cogitus/pull/54)) by [seapagan](https://github.com/seapagan)
+- Chore(deps): update dependency pygments to v2.20.0 [security] ([#53](https://github.com/seapagan/cogitus/pull/53)) by [renovate[bot]](https://github.com/apps/renovate)
+
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.8.0...0.9.0) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.8.0...0.9.0.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.8.0...0.9.0.patch)
+
 ## [0.8.0](https://github.com/seapagan/cogitus/releases/tag/0.8.0) (March 28, 2026)
 
 **New Features**

@@ -26,6 +26,19 @@ Finally, if you just prefer to use `pip`:
 pip install cogitus
 ```
 
+## API Server Install
+
+If you want this machine to *serve* the optional Cogitus HTTP API, install the
+API extra:
+
+```bash
+pip install cogitus[api]
+```
+
+You only need this extra on the machine running `cogitus api serve`. A normal
+Cogitus TUI connecting to an already running remote server does not need the
+FastAPI server dependencies.
+
 ## Run
 
 ```bash

@@ -18,6 +18,27 @@ idea-body copy.
 - Create a new idea with `n`.
 - Ensure search is cleared (`/`, clear text, `Esc`).
 
+## Remote API Startup Fails
+
+If Cogitus cannot reach the remote API during startup, it shows a recovery
+dialog with these options:
+
+- Retry the remote connection.
+- Continue with cached remote data in read-only mode.
+- Switch to local mode for the current session.
+
+Cached remote mode changes the title to `Cogitus [remote: offline]` and blocks
+mutating actions until the API is reachable again.
+
+## Remote Mode Looks Stale or Read-Only
+
+- Confirm the API server is running and reachable at `remote_api_base_url`.
+- Check that `remote_api_username` and `remote_api_password` are correct.
+- If the title shows `Cogitus [remote: offline]`, you are using cached remote
+  data and write actions are intentionally disabled.
+- Once the API is reachable again, Cogitus retries sync and restores normal
+  remote mode automatically.
+
 ## Database Path and Local State
 
 Cogitus uses a local SQLite database and local config state. If behavior seems
