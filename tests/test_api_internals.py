@@ -193,21 +193,13 @@ def test_auth_manager_rejects_malformed_password_hash(
     assert authenticated is None
 
 
-def test_auth_manager_defaults_canonical_eddsa_algorithm_to_hs256(
+@pytest.mark.parametrize("configured_alg", ["EdDSA", "eddsa"])
+def test_auth_manager_defaults_non_hmac_jwt_algorithm_to_hs256(
     configured_api_settings: AppSettings,
+    configured_alg: str,
 ) -> None:
-    """Auth manager should reject non-HMAC JWT algorithms."""
-    configured_api_settings.api_auth_jwt_algorithm = "EdDSA"
-    manager = AuthManager(configured_api_settings)
-
-    assert manager.jwt_algorithm == DEFAULT_API_AUTH_JWT_ALGORITHM
-
-
-def test_auth_manager_defaults_invalid_jwt_algorithm_to_hs256(
-    configured_api_settings: AppSettings,
-) -> None:
-    """Auth manager should fall back when configured alg is invalid."""
-    configured_api_settings.api_auth_jwt_algorithm = "eddsa"
+    """Auth manager should fall back for non-HMAC JWT algorithms."""
+    configured_api_settings.api_auth_jwt_algorithm = configured_alg
     manager = AuthManager(configured_api_settings)
 
     assert manager.jwt_algorithm == DEFAULT_API_AUTH_JWT_ALGORITHM
