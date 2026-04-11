@@ -5,7 +5,7 @@ Ideas to add to Cogitus
 ## UI
 
 - Allow key customization (using the `Textual` built-in functionality and the
-  config file). eg Ctrl-S on my system is mapped to tmux
+  config file).
 - continue navigation and keybinding polish.
 - add contextual dynamic toolbar/actions by mode. [mostly implemented]
 - add toggle and hotkey for the left tree to expand/collapse all. `space` does
@@ -89,10 +89,6 @@ Ideas to add to Cogitus
 - add full undo ability (basically with git-like functionality, but not using
   git - a journal that we can unwind?) Include edited, created and deleted
   ideas at first, more as the need arises. How would we store this?
-- Allow linking to a Git repository holding the database. On change to the
-  database, create a commit mentioning the change (which Idea was
-  added/editied etc). Push either after any save, or more likely on exit (give
-  option? After create/edit/save is prob better)
 
 ## Profiles and Multi-Device
 
