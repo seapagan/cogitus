@@ -1629,3 +1629,27 @@ async def test_idea_view_show_and_empty(service: IdeaService) -> None:
         assert str(tags.content) == ""
         assert str(timestamps.content) == ""
         assert "Select an idea from the list" in body.source
+
+
+@pytest.mark.asyncio
+async def test_idea_view_tags_have_click_markup(
+    service: IdeaService,
+) -> None:
+    """Tags should render with @click markup for search-by-tag."""
+    idea = service.create_idea(
+        "Clickable",
+        body="Body text",
+        tags=["python", "testing"],
+    )
+    view = IdeaView(id="content-panel")
+    app = _WidgetApp(view)
+
+    async with app.run_test() as pilot:
+        view.show_idea(idea)
+        await pilot.pause()
+
+        tags = view.query_one("#idea-view-tags", Static)
+        content = str(tags.content)
+        assert "search_by_tag" in content
+        assert "python" in content
+        assert "testing" in content

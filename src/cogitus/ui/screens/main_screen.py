@@ -1140,6 +1140,11 @@ class MainScreen(Screen[None]):
         self.notify("Group deleted and ideas moved")
         self.refresh_ideas()
 
+    def action_search_by_tag(self, tag_name: str) -> None:
+        """Set search to tag:<tag_name> and focus the search input."""
+        panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        panel.set_search_query(f"tag:{tag_name}")
+
     def action_focus_search(self) -> None:
         """Focus the search input."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
