@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from textual.app import App, ScreenStackError, SystemCommand
+from textual.app import App, InvalidThemeError, ScreenStackError, SystemCommand
 
 from cogitus.backends import (
     BackendConfig,
@@ -15,6 +15,7 @@ from cogitus.backends import (
     RemoteIdeaBackend,
 )
 from cogitus.config import (
+    DEFAULT_THEME,
     VALID_NEW_IDEA_GROUP_MODES,
     DataBackendMode,
     get_settings,
@@ -109,8 +110,14 @@ class CogitusApp(App[None]):
         self._db_path = db_path
         self._injected_db = db
         self._settings = settings if settings is not None else get_settings()
+        self._theme: str
         self._load_settings_state()
-        self.theme = self._theme
+        try:
+            self.theme = self._theme
+        except InvalidThemeError:
+            self._theme = DEFAULT_THEME
+            self.theme = self._theme
+            self._settings.set("theme", self._theme)
         self._session_backend_mode_override: DataBackendMode | None = None
         self._remote_runtime_offline = False
         self._update_title()
@@ -131,7 +138,8 @@ class CogitusApp(App[None]):
 
     def _load_settings_state(self) -> None:
         """Load and normalize persisted settings values."""
-        self._theme = self._settings.theme
+        configured_theme = self._settings.theme.strip()
+        self._theme = configured_theme or DEFAULT_THEME
         self._edit_body_cursor_mode = normalize_edit_body_cursor_mode(
             self._settings.edit_body_cursor_mode
         )

@@ -7,9 +7,9 @@ without restarting the app.
 ## Switching Themes
 
 Open the Command Palette with `Ctrl+P`, then either type **theme** to filter the
-commands or use the arrow keys to scroll through the list, and select
-**Set theme**. A list of available themes appears — use the arrow keys or type
-to filter, then press `Enter` to apply.
+commands or use the arrow keys to scroll through the list, and select **Change
+the current theme**. A list of available themes appears — use the arrow keys or
+type to filter, then press `Enter` to apply.
 
 ## Available Themes
 
