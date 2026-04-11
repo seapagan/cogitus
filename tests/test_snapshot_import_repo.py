@@ -71,6 +71,16 @@ def _idea(
     )
 
 
+def _assert_first_search_hit_pk(
+    service: IdeaService,
+    query: str,
+) -> int:
+    """Assert a search query returns at least one result and return its PK."""
+    results = service.search_results(query)
+    assert results, f"Expected at least one search result for query: {query!r}"
+    return results[0].idea.pk
+
+
 def test_snapshot_import_replaces_db_and_preserves_cursor_state(
     db: SqliterDB,
 ) -> None:
@@ -109,7 +119,7 @@ def test_snapshot_import_replaces_db_and_preserves_cursor_state(
         "python",
     ]
     assert service.get_idea_cursor_position(1) == 9
-    assert service.search_results("tag:cli")[0].idea.pk == 1
+    assert _assert_first_search_hit_pk(service, "tag:cli") == 1
     assert service.get_idea_with_relations(extra_local.pk) is None
 
 
@@ -165,7 +175,7 @@ def test_snapshot_import_restores_previous_state_if_rebuild_fails(
     assert restored.title == "Local idea"
     assert [tag.name for tag in restored.tags.fetch_all()] == ["local"]
     assert service.get_idea_cursor_position(local.pk) == 7
-    assert service.search_results("tag:local")[0].idea.pk == local.pk
+    assert _assert_first_search_hit_pk(service, "tag:local") == local.pk
     same_pk = service.get_idea_with_relations(1)
     assert same_pk is not None
     assert same_pk.title == "Local idea"
@@ -230,7 +240,7 @@ def test_snapshot_import_restores_previous_state_if_cursor_restore_fails(
     assert restored.title == "Local idea"
     assert [tag.name for tag in restored.tags.fetch_all()] == ["local"]
     assert service.get_idea_cursor_position(local.pk) == 11
-    assert service.search_results("tag:local")[0].idea.pk == local.pk
+    assert _assert_first_search_hit_pk(service, "tag:local") == local.pk
     same_pk = service.get_idea_with_relations(1)
     assert same_pk is not None
     assert same_pk.title == "Local idea"
@@ -310,7 +320,7 @@ def test_snapshot_import_with_progress_callback_uses_rowwise_progress_path(
         "cli",
         "python",
     ]
-    assert service.search_results("tag:cli")[0].idea.pk == 1
+    assert _assert_first_search_hit_pk(service, "tag:cli") == 1
     assert bulk_insert.call_count == 0
     assert updates == [
         ("Groups", 0, 1),
