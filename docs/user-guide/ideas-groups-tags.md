@@ -36,3 +36,4 @@ An idea is the core record in Cogitus and contains:
 - Tags are entered as comma-separated values in the idea form.
 - Tags are normalized by the service layer.
 - Search can match against tag names as well as title/body.
+- Clicking a tag above the idea body opens a `tag:<name>` search.

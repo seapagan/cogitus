@@ -1014,6 +1014,44 @@ async def test_main_screen_toggle_focus_noop_when_search_focused(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_search_by_tag_action(
+    service: IdeaService,
+) -> None:
+    """action_search_by_tag should set search input and focus it."""
+    service.create_idea("Tagged", tags=["python"])
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        screen.action_search_by_tag("python")
+        await pilot.pause()
+
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        assert search.value == "tag:python"
+        assert search.has_focus
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_by_tag_quotes_multi_word_tags(
+    service: IdeaService,
+) -> None:
+    """Tag searches should quote multi-word tag values."""
+    service.create_idea("Tagged", tags=["api design"])
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        screen.action_search_by_tag("api design")
+        await pilot.pause()
+
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        assert search.value == "tag:'api design'"
+        assert search.has_focus
+
+
+@pytest.mark.asyncio
 async def test_main_screen_shows_custom_app_header(
     service: IdeaService,
 ) -> None:
@@ -2946,6 +2984,35 @@ async def test_main_screen_search_cancel_restores_previous_focus(
         assert search.value == ""
         focused = _focused_widget(app)
         assert focused is tree
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_by_tag_preserves_previous_focus(
+    service: IdeaService,
+) -> None:
+    """Tag-click searches should restore the pre-search content focus."""
+    service.create_idea("Tagged", tags=["python"])
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        content = screen.query_one("#content-panel", IdeaView)
+        view_container = content.query_one("#idea-view-container")
+        search = panel.query_one("#search-input", Input)
+
+        screen._active_pane = "content"
+        content.focus_content()
+        await pilot.pause()
+
+        screen.action_search_by_tag("python")
+        await pilot.pause()
+        assert app.focused is search
+
+        screen.action_cancel_search()
+        await pilot.pause()
+        assert search.value == ""
+        assert app.focused is view_container
 
 
 @pytest.mark.asyncio

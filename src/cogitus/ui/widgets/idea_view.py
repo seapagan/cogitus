@@ -23,6 +23,20 @@ def _format_full_timestamp(unix_ts: int) -> str:
     return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
+def _escape_label(name: str) -> str:
+    """Escape a tag name for safe Textual markup display."""
+    return name.replace("\\", "\\\\").replace("[", "\\[")
+
+
+def _tag_click_markup(name: str) -> str:
+    """Build @click markup for a tag with defensive escaping."""
+    label = _escape_label(name)
+    if "[" in name or "]" in name:
+        return f"\\[{label}"
+    action_arg = name.replace("\\", "\\\\").replace("'", "\\'")
+    return f"\\[[@click=screen.search_by_tag('{action_arg}')]{label}[/]]"
+
+
 class IdeaView(Vertical):
     """Right panel showing full detail of an idea."""
 
@@ -75,7 +89,9 @@ class IdeaView(Vertical):
         self._title_widget.update(idea.title)
 
         tags = idea.tags.fetch_all()
-        tag_str = " ".join(f"[green]\\[{t.name}][/green]" for t in tags)
+        tag_str = " ".join(
+            f"[green]{_tag_click_markup(t.name)}[/green]" for t in tags
+        )
         self._tags_widget.update(tag_str)
 
         created = _format_full_timestamp(idea.created_at)

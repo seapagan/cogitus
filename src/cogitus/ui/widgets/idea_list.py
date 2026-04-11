@@ -480,6 +480,20 @@ class IdeaListPanel(Vertical):
                 self.IdeaSelected(self._ideas_by_pk[data.idea_pk])
             )
 
+    def set_search_query(self, query: str) -> None:
+        """Set the search input to the given query and focus it."""
+        self._suspend_autocomplete_sync_once()
+        search = self.query_one("#search-input", Input)
+        search.value = query
+        self.dismiss_autocomplete()
+        search.focus()
+        self.call_later(self._clear_search_selection, len(query))
+
+    def _clear_search_selection(self, cursor_pos: int) -> None:
+        """Clear the select-on-focus highlight after focus settles."""
+        search = self.query_one("#search-input", Input)
+        search.cursor_position = cursor_pos
+
     def focus_search(self) -> None:
         """Focus the search input."""
         self.query_one("#search-input", Input).focus()
