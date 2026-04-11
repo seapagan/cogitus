@@ -5,11 +5,25 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased](https://github.com/seapagan/cogitus/tree/HEAD)
+
+**New Features**
+
+- Feat: make tags clickable to trigger tag search ([#60](https://github.com/seapagan/cogitus/pull/60)) by [seapagan](https://github.com/seapagan)
+- Add theming docs and persist selected theme across restarts ([#59](https://github.com/seapagan/cogitus/pull/59)) by [seapagan](https://github.com/seapagan)
+- Add remote-to-local clone flow ([#57](https://github.com/seapagan/cogitus/pull/57)) by [seapagan](https://github.com/seapagan)
+
+**Bug Fixes**
+
+- Fix app-owned database connection lifecycle ([#58](https://github.com/seapagan/cogitus/pull/58)) by [seapagan](https://github.com/seapagan)
+
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.9.0...HEAD) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.9.0...HEAD.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.9.0...HEAD.patch)
 
 ## [0.9.0](https://github.com/seapagan/cogitus/releases/tag/0.9.0) (April 10, 2026)
 
 **New Features**
 
+- Prepare 0.9.0 release ([#55](https://github.com/seapagan/cogitus/pull/55)) by [seapagan](https://github.com/seapagan)
 - Add fastapi api and remote backend mode ([#52](https://github.com/seapagan/cogitus/pull/52)) by [seapagan](https://github.com/seapagan)
 
 **Dependency Updates**
