@@ -105,11 +105,15 @@ class CogitusApp(App[None]):
         self._update_title()
         last_viewed = self._settings.last_viewed_idea_pk
         self._last_viewed_idea_pk = last_viewed if last_viewed > 0 else None
-        self._db = (
-            self._build_backend_db(db_path=db_path, db=db)
-            if backend is None
-            else db
-        )
+        self._db: SqliterDB | None = None
+        self._owns_db = False
+        if backend is None:
+            self._db, self._owns_db = self._build_backend_db(
+                db_path=db_path,
+                db=db,
+            )
+        else:
+            self._db = db
         self._service = backend or self._build_backend()
 
     def _load_settings_state(self) -> None:
@@ -202,32 +206,38 @@ class CogitusApp(App[None]):
         *,
         db_path: str | None,
         db: SqliterDB | None,
-    ) -> SqliterDB:
+    ) -> tuple[SqliterDB, bool]:
         """Return the configured database instance."""
         if db is not None:
             GroupRepository(db).get_or_create(self._default_group_name)
-            return db
+            return db, False
         if db_path is not None:
-            return get_db(
-                db_path,
-                default_group_name=self._default_group_name,
+            return (
+                get_db(
+                    db_path,
+                    default_group_name=self._default_group_name,
+                ),
+                True,
             )
-        return get_db(default_group_name=self._default_group_name)
+        return get_db(default_group_name=self._default_group_name), True
 
     def _build_remote_cache_db(
         self,
         *,
         db_path: str | None,
         db: SqliterDB | None,
-    ) -> SqliterDB:
+    ) -> tuple[SqliterDB, bool]:
         """Return the configured cache database for remote mode."""
         if db is not None:
             GroupRepository(db).get_or_create(self._default_group_name)
-            return db
+            return db, False
         cache_path = db_path or DEFAULT_REMOTE_CACHE_DB_PATH
-        return get_db(
-            cache_path,
-            default_group_name=self._default_group_name,
+        return (
+            get_db(
+                cache_path,
+                default_group_name=self._default_group_name,
+            ),
+            True,
         )
 
     def _build_backend_db(
@@ -236,12 +246,32 @@ class CogitusApp(App[None]):
         db_path: str | None,
         db: SqliterDB | None,
         mode: DataBackendMode | None = None,
-    ) -> SqliterDB:
+    ) -> tuple[SqliterDB, bool]:
         """Build the backing SQLite database for the selected mode."""
         resolved_mode = self._active_backend_mode() if mode is None else mode
         if resolved_mode == DataBackendMode.API:
             return self._build_remote_cache_db(db_path=db_path, db=db)
         return self._build_local_db(db_path=db_path, db=db)
+
+    def _close_owned_db(self) -> None:
+        """Close the current database when the app owns the connection."""
+        if self._db is None or not self._owns_db:
+            return
+        self._db.close()
+        self._db = None
+        self._owns_db = False
+
+    def _replace_backend(self, *, mode: DataBackendMode) -> None:
+        """Rebuild the active backend and swap in the correct database."""
+        if isinstance(self._service, RemoteIdeaBackend):
+            self._service.close()
+        self._close_owned_db()
+        self._db, self._owns_db = self._build_backend_db(
+            db_path=self._db_path,
+            db=self._injected_db,
+            mode=mode,
+        )
+        self._service = self._build_backend(mode=mode)
 
     def _build_backend(
         self,
@@ -280,8 +310,6 @@ class CogitusApp(App[None]):
 
     def apply_backend_config(self, config: BackendConfig) -> None:
         """Persist backend settings and rebuild the active backend."""
-        if isinstance(self._service, RemoteIdeaBackend):
-            self._service.close()
         self._settings.set(
             "data_backend_mode",
             config.mode.value,
@@ -307,12 +335,7 @@ class CogitusApp(App[None]):
         self._session_backend_mode_override = None
         self._remote_runtime_offline = False
         self._update_title()
-        self._db = self._build_backend_db(
-            db_path=self._db_path,
-            db=self._injected_db,
-            mode=self._data_backend_mode,
-        )
-        self._service = self._build_backend(mode=self._data_backend_mode)
+        self._replace_backend(mode=self._data_backend_mode)
         if isinstance(self.screen, MainScreen):
             self.screen.replace_service(self._service)
         self._notify_invalid_config()
@@ -333,16 +356,9 @@ class CogitusApp(App[None]):
 
     def activate_session_local_fallback(self) -> None:
         """Switch to local mode for the current session only."""
-        if isinstance(self._service, RemoteIdeaBackend):
-            self._service.close()
         self._session_backend_mode_override = DataBackendMode.LOCAL
         self._remote_runtime_offline = False
-        self._db = self._build_backend_db(
-            db_path=self._db_path,
-            db=self._injected_db,
-            mode=DataBackendMode.LOCAL,
-        )
-        self._service = self._build_backend(mode=DataBackendMode.LOCAL)
+        self._replace_backend(mode=DataBackendMode.LOCAL)
         self._update_title()
         if isinstance(self.screen, MainScreen):
             self.screen.replace_service(self._service)
@@ -463,6 +479,7 @@ class CogitusApp(App[None]):
         self._settings.save()
         if isinstance(self._service, RemoteIdeaBackend):
             self._service.close()
+        self._close_owned_db()
         super().exit(
             result=result,
             return_code=return_code,

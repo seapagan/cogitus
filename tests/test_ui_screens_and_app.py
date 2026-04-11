@@ -31,6 +31,7 @@ from textual.worker import WorkerState
 from cogitus.app import CSS_PATH, CogitusApp
 from cogitus.backends import BackendConfig, RemoteIdeaBackend
 from cogitus.config import DataBackendMode, EditBodyCursorMode, NewIdeaGroupMode
+from cogitus.db import get_db
 from cogitus.metadata import AppMetadata
 from cogitus.search import SearchResult
 from cogitus.ui.screens.idea_form_screen import (
@@ -3780,22 +3781,27 @@ async def test_cogitus_app_clone_remote_palette_command(
 
 def test_clone_remote_to_local_uses_default_local_target_in_api_mode(
     mocker: MockerFixture,
-    db: SqliterDB,
 ) -> None:
     """Remote-mode clone should import into the normal local DB path."""
+    cache_db = get_db(memory=True)
+    target_db = get_db(memory=True)
     client = mocker.Mock()
     client.fetch_snapshot.return_value = mocker.sentinel.snapshot
     remote_client_cls = mocker.patch(
         "cogitus.app.RemoteAPIClient",
         return_value=client,
     )
-    get_db = mocker.patch("cogitus.app.get_db", return_value=db)
+    get_db_mock = mocker.patch(
+        "cogitus.app.get_db",
+        side_effect=[cache_db, target_db],
+    )
     importer = mocker.Mock()
     importer_cls = mocker.patch(
         "cogitus.app.SnapshotImportRepository",
         return_value=importer,
     )
-    close_db = cast("Any", mocker.patch.object(db, "close"))
+    close_cache_db = mocker.spy(cache_db, "close")
+    close_target_db = mocker.spy(target_db, "close")
     progress_updates: list[tuple[str, int, int]] = []
     app = CogitusApp(
         settings=_FakeSettings(
@@ -3808,7 +3814,7 @@ def test_clone_remote_to_local_uses_default_local_target_in_api_mode(
         )
     )
     remote_client_cls.reset_mock()
-    get_db.reset_mock()
+    get_db_mock.reset_mock()
 
     app.clone_remote_to_local(
         progress_callback=lambda progress: progress_updates.append(
@@ -3817,11 +3823,11 @@ def test_clone_remote_to_local_uses_default_local_target_in_api_mode(
     )
 
     remote_client_cls.assert_called_once()
-    get_db.assert_called_with(
+    get_db_mock.assert_called_with(
         "~/.config/cogitus/cogitus.db",
         default_group_name="default",
     )
-    importer_cls.assert_called_once_with(db)
+    importer_cls.assert_called_once_with(target_db)
     importer.replace_snapshot.assert_called_once_with(
         mocker.sentinel.snapshot,
         progress_callback=mocker.ANY,
@@ -3831,7 +3837,10 @@ def test_clone_remote_to_local_uses_default_local_target_in_api_mode(
         ("Download", 1, 1),
     ]
     client.close.assert_called_once()
-    close_db.assert_called_once()
+    assert close_target_db.call_count == 1
+    assert close_cache_db.call_count == 0
+    app._close_owned_db()
+    assert close_cache_db.call_count == 1
 
 
 def test_cogitus_app_clone_remote_to_local_requires_config(
@@ -4532,6 +4541,40 @@ def test_cogitus_app_init_uses_default_db(
 
     get_db.assert_called_once_with(default_group_name="default")
     assert app.title == "Cogitus [local]"
+    app._close_owned_db()
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_exit_closes_owned_db(
+    mocker: MockerFixture,
+) -> None:
+    """App-owned database connections should close on app exit."""
+    db = get_db(memory=True)
+    close = mocker.spy(db, "close")
+    mocker.patch("cogitus.app.get_db", return_value=db)
+    app = CogitusApp(settings=_FakeSettings())
+
+    async with app.run_test() as pilot:
+        app.exit()
+        await pilot.pause()
+
+    assert close.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_exit_does_not_close_injected_db(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Injected database connections should remain caller-owned on exit."""
+    close = mocker.spy(db, "close")
+    app = CogitusApp(db=db, settings=_FakeSettings())
+
+    async with app.run_test() as pilot:
+        app.exit()
+        await pilot.pause()
+
+    assert close.call_count == 0
 
 
 def test_cogitus_app_init_normalizes_configured_default_group_name(
@@ -4542,9 +4585,10 @@ def test_cogitus_app_init_normalizes_configured_default_group_name(
     get_db = mocker.patch("cogitus.app.get_db", return_value=db)
     settings = _FakeSettings(default_group_name="  Inbox  ")
 
-    CogitusApp(settings=settings)
+    app = CogitusApp(settings=settings)
 
     get_db.assert_called_once_with(default_group_name="inbox")
+    app._close_owned_db()
 
 
 def test_cogitus_app_init_uses_remote_cache_db_when_api_mode(
@@ -4575,6 +4619,7 @@ def test_cogitus_app_init_uses_remote_cache_db_when_api_mode(
         api_username="api-user",
         api_password=_remote_secret(),
     )
+    app._close_owned_db()
 
 
 def test_cogitus_app_build_backend_raises_without_db(
@@ -4661,6 +4706,43 @@ async def test_cogitus_app_apply_backend_config_rebuilds_backend(
 
 
 @pytest.mark.asyncio
+async def test_cogitus_app_apply_backend_config_closes_owned_db_before_replace(
+    mocker: MockerFixture,
+) -> None:
+    """Owned database connections should close before backend rebuilds."""
+    initial_db = get_db(memory=True)
+    replacement_db = get_db(memory=True)
+    initial_close = mocker.spy(initial_db, "close")
+    replacement_close = mocker.spy(replacement_db, "close")
+    mocker.patch(
+        "cogitus.app.get_db",
+        side_effect=[initial_db, replacement_db],
+    )
+    mocker.patch.object(
+        RemoteIdeaBackend, "sync_from_remote", return_value=None
+    )
+    app = CogitusApp(settings=_FakeSettings())
+
+    async with app.run_test() as pilot:
+        app.apply_backend_config(
+            BackendConfig(
+                mode=DataBackendMode.API,
+                api_base_url="http://127.0.0.1:8000",
+                api_username="api-user",
+                api_password=_remote_secret(),
+            )
+        )
+
+        assert initial_close.call_count == 1
+        assert app._db is replacement_db
+        assert app._owns_db is True
+        app.exit()
+        await pilot.pause()
+
+    assert replacement_close.call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_cogitus_app_apply_backend_config_closes_remote_backend(
     db: SqliterDB,
     mocker: MockerFixture,
@@ -4677,6 +4759,7 @@ async def test_cogitus_app_apply_backend_config_closes_remote_backend(
 
     async with app.run_test() as pilot:
         close = mocker.patch.object(remote_backend, "close")
+        db_close = mocker.spy(db, "close")
         replace_service = mocker.patch.object(app.screen, "replace_service")
 
         app.apply_backend_config(
@@ -4690,6 +4773,7 @@ async def test_cogitus_app_apply_backend_config_closes_remote_backend(
 
         close.assert_called_once_with()
         replace_service.assert_called_once_with(app._service)
+        assert db_close.call_count == 0
         assert app.title == "Cogitus [local]"
         assert app.screen.title == "Cogitus [local]"
         app.exit()
@@ -4767,10 +4851,12 @@ async def test_cogitus_app_session_local_fallback_is_not_persisted(
     async with app.run_test() as pilot:
         assert isinstance(app._service, RemoteIdeaBackend)
         close = mocker.patch.object(app._service, "close")
+        db_close = mocker.spy(db, "close")
 
         app.activate_session_local_fallback()
 
         close.assert_called_once_with()
+        assert db_close.call_count == 0
         assert settings.data_backend_mode == DataBackendMode.API.value
         assert not isinstance(app._service, RemoteIdeaBackend)
         assert app.get_backend_config().mode == DataBackendMode.LOCAL
@@ -4778,6 +4864,44 @@ async def test_cogitus_app_session_local_fallback_is_not_persisted(
         assert app.screen.title == "Cogitus [local]"
         app.exit()
         await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_session_fallback_closes_owned_db(
+    mocker: MockerFixture,
+) -> None:
+    """Session-local fallback should close the previous owned DB."""
+    initial_db = get_db(memory=True)
+    replacement_db = get_db(memory=True)
+    initial_close = mocker.spy(initial_db, "close")
+    replacement_close = mocker.spy(replacement_db, "close")
+    mocker.patch(
+        "cogitus.app.get_db",
+        side_effect=[initial_db, replacement_db],
+    )
+    mocker.patch.object(
+        RemoteIdeaBackend, "sync_from_remote", return_value=None
+    )
+    settings = _FakeSettings(
+        backend_config=BackendConfig(
+            mode=DataBackendMode.API,
+            api_base_url="http://127.0.0.1:8000",
+            api_username="api-user",
+            api_password=_remote_secret(),
+        )
+    )
+    app = CogitusApp(settings=settings)
+
+    async with app.run_test() as pilot:
+        app.activate_session_local_fallback()
+
+        assert initial_close.call_count == 1
+        assert app._db is replacement_db
+        assert app._owns_db is True
+        app.exit()
+        await pilot.pause()
+
+    assert replacement_close.call_count == 1
 
 
 @pytest.mark.asyncio
