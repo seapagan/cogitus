@@ -202,7 +202,7 @@ pygments==2.20.0
     #   textual
 pyjwt==2.12.1
     # via pygithub
-pymdown-extensions==10.20.1
+pymdown-extensions==10.21.2
     # via mkdocs-material
 pynacl==1.6.2
     # via pygithub

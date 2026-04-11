@@ -29,10 +29,10 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.details
-  - pymdownx.superfences
   - pymdownx.highlight:
       linenums: false
       auto_title: false
+  - pymdownx.superfences
   - pymdownx.snippets:
       base_path:
         - docs
@@ -54,6 +54,7 @@ nav:
       - API: user-guide/api.md
       - Remote Clone: user-guide/remote-clone.md
       - Clipboard: user-guide/clipboard.md
+      - Theming: user-guide/theming.md
       - Settings: user-guide/settings.md
       - Troubleshooting: user-guide/troubleshooting.md
   - Changelog: project/changelog.md

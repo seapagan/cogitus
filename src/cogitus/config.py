@@ -49,6 +49,7 @@ VALID_DATA_BACKEND_MODES: tuple[str, ...] = tuple(
 DEFAULT_DATA_BACKEND_MODE = DataBackendMode.LOCAL
 DEFAULT_API_AUTH_JWT_ALGORITHM = "HS256"
 DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES = 30
+DEFAULT_THEME = "textual-dark"
 
 
 class AppSettings(TOMLSettings):
@@ -56,6 +57,7 @@ class AppSettings(TOMLSettings):
 
     # 0 means "no last-selected idea yet".
     last_viewed_idea_pk: int = 0
+    theme: str = DEFAULT_THEME
     edit_body_cursor_mode: str = DEFAULT_EDIT_BODY_CURSOR_MODE.value
     new_idea_group_mode: str = DEFAULT_NEW_IDEA_GROUP_MODE.value
     default_group_name: str = DEFAULT_GROUP_NAME

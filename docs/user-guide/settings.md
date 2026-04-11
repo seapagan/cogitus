@@ -9,6 +9,23 @@ Configuration is persisted under your XDG config directory for `cogitus`
 
 ## Current Settings
 
+### `theme`
+
+Stores the active Textual theme so it is restored on next launch.
+
+- Type: string
+- Default: `textual-dark`
+
+The value is set automatically whenever you change the theme via the Command
+Palette (`Ctrl+P` → **Set theme**). You can also set it manually. See
+[Theming](theming.md) for the list of available themes.
+
+Example:
+
+```toml
+theme="nord"
+```
+
 ### `last_viewed_idea_pk`
 
 Stores the last selected idea when the app exits.
