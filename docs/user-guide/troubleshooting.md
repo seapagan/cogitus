@@ -39,6 +39,18 @@ mutating actions until the API is reachable again.
 - Once the API is reachable again, Cogitus retries sync and restores normal
   remote mode automatically.
 
+## Remote Clone Fails
+
+If `Clone Remote To Local` fails:
+
+- Confirm the remote API is configured in backend settings.
+- Confirm the remote API server is reachable.
+- Re-check `remote_api_username` and `remote_api_password`.
+- If you expected the clone to update your remote session immediately, remember
+  that clone writes into the normal local database, not the remote cache.
+- If you started the clone from remote mode, you may still be in remote mode
+  after success unless you choose `Use Local` in the post-clone prompt.
+
 ## Database Path and Local State
 
 Cogitus uses a local SQLite database and local config state. If behavior seems

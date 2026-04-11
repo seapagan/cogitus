@@ -52,6 +52,7 @@ nav:
       - Search: user-guide/search.md
       - CLI Reference: user-guide/cli.md
       - API: user-guide/api.md
+      - Remote Clone: user-guide/remote-clone.md
       - Clipboard: user-guide/clipboard.md
       - Settings: user-guide/settings.md
       - Troubleshooting: user-guide/troubleshooting.md

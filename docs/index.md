@@ -21,6 +21,7 @@ ideas.
 - [Quickstart](getting-started/quickstart.md)
 - [Guide Overview](user-guide/overview.md)
 - [API](user-guide/api.md)
+- [Remote Clone](user-guide/remote-clone.md)
 - [Settings](user-guide/settings.md)
 - [Troubleshooting](user-guide/troubleshooting.md)
 - [Project TODO](project/todo.md)

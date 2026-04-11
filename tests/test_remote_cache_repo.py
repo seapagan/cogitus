@@ -359,8 +359,6 @@ def test_internal_helper_guards_cover_empty_and_missing_cache_paths(
     """Private guard helpers should fail clearly for missing cache rows."""
     repo = RemoteCacheRepository(db, default_group_name="default")
 
-    assert repo._bulk_insert_groups([]) == {}
-
     with pytest.raises(RuntimeError, match="Group 999 not found"):
         repo._require_group(999)
     with pytest.raises(RuntimeError, match="Tag 999 not found"):

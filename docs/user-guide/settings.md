@@ -171,8 +171,35 @@ Example:
 remote_api_password="your-password"
 ```
 
+### `prompt_after_clone`
+
+Controls whether Cogitus asks to switch the current session to local mode after
+successfully running `Clone Remote To Local` from remote mode.
+
+- Type: boolean
+- Default: `true`
+
+Behavior:
+
+- `true`
+  - After a successful clone started from remote mode, Cogitus shows a prompt
+    offering `Stay Remote` or `Use Local`.
+- `false`
+  - After a successful clone started from remote mode, Cogitus stays in remote
+    mode and only shows a success notification.
+
+This setting only affects the post-clone prompt for remote-mode sessions. It
+does not change the clone target database.
+
+Example:
+
+```toml
+prompt_after_clone=false
+```
+
 ## Notes
 
 - Settings are saved on app exit.
 - Remote-backend settings can also be edited from the in-app `Backend settings`
   dialog.
+- `Clone Remote To Local` is documented in [Remote Clone](remote-clone.md).

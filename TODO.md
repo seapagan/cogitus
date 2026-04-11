@@ -13,8 +13,7 @@ Ideas to add to Cogitus
   all (only to the group level, not the root node).
 - add a tag management dialog with usage counts, rename/edit support, and
   explicit stale-tag pruning (selected/all stale with confirmation).
-- ~~Add theming and a dark/light mode (also option to auto-detect the latter
-  from the OS setting)~~ Textual does this natively - document it.
+- Document the built in (Textual) Theming functionality.
 - clicking on any of the tags above the body window should open the search
   results as if `tag:<tag name>` was searched.
 - revisit the custom footer status widgets and replace the current private
@@ -42,6 +41,29 @@ Ideas to add to Cogitus
 - review `ty` type-checker findings in tests, especially whether intentionally
   invalid `SearchFilter` construction should use a clearer explicit escape hatch
   than `invalid_field: Any = "status"`.
+- fix the intermittent `ResourceWarning: unclosed database in
+  sqlite3.Connection` seen during test runs. Investigation summary:
+  `tests/conftest.py`'s shared `db` fixture closes correctly, and the warning
+  is not pinned to one specific UI test when rerun with `-W
+  error::ResourceWarning`; it appears during later GC/finalization. The real
+  issue is app-level DB ownership in `src/cogitus/app.py`, not just test
+  cleanup. `CogitusApp.__init__()` creates a SQLite DB when no injected `db` is
+  provided, but `CogitusApp.exit()` only closes the remote API client and does
+  not close the app-owned DB. There is a second leak path when
+  `apply_backend_config()` and `activate_session_local_fallback()` replace
+  `self._db` with a newly opened DB without first closing the previous owned
+  connection. `RemoteIdeaBackend.close()` also closes only the HTTP client,
+  which is correct if the backend does not own the DB, so the ownership fix
+  should stay in `CogitusApp` rather than pushing blind DB closes into the
+  backend. Fix plan:
+  introduce explicit app-side DB ownership tracking such as `_owns_db`; close
+  the previous DB before replacing it in backend rebuild/session-fallback paths;
+  close the owned DB in `CogitusApp.exit()` after shutting down the backend;
+  keep injected test DBs untouched. Regression tests to add:
+  app created without injected `db` closes its DB on exit; switching backend
+  mode with an app-owned DB closes the previous connection; session local
+  fallback with an app-owned DB closes the previous connection; UI test run with
+  `-W error::ResourceWarning` stays clean once fixed.
 
 ## Search and Filtering
 
@@ -67,12 +89,6 @@ Ideas to add to Cogitus
 
 ## API
 
-- add an API using `FastAPI` to expose the ideas. This can be toggled on/off, or
-  started from the CLI in a headless mode (imagine getting your ideas from a
-  remote server?) Will need Auth etc. Note that this is prob not good for hard
-  usage as we are using SQLite. See also the MCP server item below. Perhaps
-  enable a local `cogitus` app to use a remote server instead of local SQLite
-  file?
 - reevaluate the remote API cache design once there is less planned work and
   technical debt: can we simplify from the current file-backed local cache to a
   memory-backed cache without losing the needed sync, worker-thread, startup,

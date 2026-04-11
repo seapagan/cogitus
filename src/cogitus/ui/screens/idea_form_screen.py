@@ -17,6 +17,7 @@ from textual.widgets import (
     Input,
     Label,
     OptionList,
+    ProgressBar,
     Rule,
     Select,
     Static,
@@ -833,6 +834,131 @@ class RemoteStartupRecoveryScreen(
     def action_quit_app(self) -> None:
         """Dismiss with the quit action."""
         self.dismiss(RemoteStartupRecoveryAction.QUIT)
+
+
+class RemoteCloneModeAction(str, Enum):
+    """Actions offered after cloning remote data into the local DB."""
+
+    STAY_REMOTE = "stay_remote"
+    SWITCH_LOCAL = "switch_local"
+
+
+class RemoteCloneProgressScreen(ModalScreen[None]):
+    """Modal progress view for remote-to-local clone operations."""
+
+    def compose(self) -> ComposeResult:
+        """Compose the clone-progress dialog."""
+        with Vertical(id="remote-clone-container"):
+            yield Static("Clone Remote To Local", id="form-title")
+            yield Static(
+                "Downloading remote snapshot...",
+                id="remote-clone-status",
+            )
+            yield Label("Download")
+            yield ProgressBar(
+                total=None,
+                show_eta=False,
+                id="clone-download-progress",
+            )
+            yield Label("Groups")
+            yield ProgressBar(
+                total=1,
+                show_eta=False,
+                id="clone-groups-progress",
+            )
+            yield Label("Tags")
+            yield ProgressBar(
+                total=1,
+                show_eta=False,
+                id="clone-tags-progress",
+            )
+            yield Label("Ideas")
+            yield ProgressBar(
+                total=1,
+                show_eta=False,
+                id="clone-ideas-progress",
+            )
+
+    def mark_download_complete(self) -> None:
+        """Mark the snapshot download phase as complete."""
+        self.query_one("#remote-clone-status", Static).update(
+            "Applying snapshot to local database..."
+        )
+        self.query_one("#clone-download-progress", ProgressBar).update(
+            total=1,
+            progress=1,
+        )
+
+    def update_stage_progress(
+        self,
+        *,
+        stage: str,
+        completed: int,
+        total: int,
+    ) -> None:
+        """Update one of the per-section progress bars."""
+        progress_bar = self.query_one(
+            f"#clone-{stage.lower()}-progress",
+            ProgressBar,
+        )
+        resolved_total = total if total > 0 else 1
+        resolved_progress = completed if total > 0 else 1
+        progress_bar.update(
+            total=resolved_total,
+            progress=resolved_progress,
+        )
+
+
+class RemoteCloneSwitchModeScreen(
+    ModalScreen[RemoteCloneModeAction],
+):
+    """Prompt shown after cloning while currently in remote mode."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("s,escape", "stay_remote", "Stay Remote", show=False),
+        Binding("l", "switch_local", "Switch Local", show=False),
+    ]
+
+    def compose(self) -> ComposeResult:
+        """Compose the post-clone mode choice dialog."""
+        with Vertical(id="remote-clone-switch-container"):
+            yield Static("Local Database Updated", id="form-title")
+            yield Static(
+                (
+                    "The local database now matches the remote snapshot.\n\n"
+                    "You are still using the remote backend for this session."
+                ),
+                id="remote-clone-switch-message",
+            )
+            with Horizontal(id="remote-clone-switch-buttons"):
+                yield Button(
+                    "Stay Remote [S]",
+                    variant="default",
+                    id="stay-remote-btn",
+                )
+                yield Button(
+                    "Use Local [L]",
+                    variant="primary",
+                    id="switch-local-after-clone-btn",
+                )
+
+    @on(Button.Pressed, "#stay-remote-btn")
+    def _handle_stay_remote_button(self) -> None:
+        """Dismiss while keeping the current remote session."""
+        self.action_stay_remote()
+
+    @on(Button.Pressed, "#switch-local-after-clone-btn")
+    def _handle_switch_local_button(self) -> None:
+        """Dismiss and switch to local mode for this session."""
+        self.action_switch_local()
+
+    def action_stay_remote(self) -> None:
+        """Dismiss while keeping the current remote backend active."""
+        self.dismiss(RemoteCloneModeAction.STAY_REMOTE)
+
+    def action_switch_local(self) -> None:
+        """Dismiss and request a session-local switch."""
+        self.dismiss(RemoteCloneModeAction.SWITCH_LOCAL)
 
 
 class GroupFormScreen(ModalScreen[int | None]):

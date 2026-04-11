@@ -143,6 +143,21 @@ After saving, the app title changes to `Cogitus [remote]`. Local mode shows
 - Background syncing is paused while a modal screen is open.
 - Writes update the local cache immediately after a successful API request.
 
+### Clone Remote To Local
+
+Remote mode also exposes a separate `Clone Remote To Local` command in the
+command palette.
+
+That command is different from normal remote cache sync:
+
+- normal remote sync refreshes the remote cache database used by the active
+  remote session
+- `Clone Remote To Local` downloads a remote snapshot and overwrites the normal
+  local database
+
+Use this when you want a local-mode copy of the current remote data. See
+[Remote Clone](remote-clone.md) for the full workflow and caveats.
+
 ### Conflict Handling
 
 - Remote idea updates use optimistic locking based on the idea's last known

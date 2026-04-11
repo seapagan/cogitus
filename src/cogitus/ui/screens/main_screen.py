@@ -16,6 +16,7 @@ from cogitus.backends.protocols import SyncingIdeaBackend
 from cogitus.config import (
     DEFAULT_EDIT_BODY_CURSOR_MODE,
     DEFAULT_NEW_IDEA_GROUP_MODE,
+    DataBackendMode,
     EditBodyCursorMode,
     NewIdeaGroupMode,
 )
@@ -31,6 +32,9 @@ from cogitus.ui.screens.idea_form_screen import (
     HelpScreen,
     IdeaFormScreen,
     NameInputScreen,
+    RemoteCloneModeAction,
+    RemoteCloneProgressScreen,
+    RemoteCloneSwitchModeScreen,
     RemoteStartupRecoveryAction,
     RemoteStartupRecoveryScreen,
 )
@@ -48,6 +52,9 @@ if TYPE_CHECKING:
     from cogitus.backends.protocols import IdeaBackend
     from cogitus.models.group import Group
     from cogitus.models.idea import Idea
+    from cogitus.repositories.snapshot_import_repo import (
+        SnapshotImportProgress,
+    )
 
 
 class MainScreen(Screen[None]):
@@ -198,11 +205,16 @@ class MainScreen(Screen[None]):
         self._focus_before_search: str = "list"
         self._remote_sync_timer: Timer | None = None
         self._remote_sync_worker: Worker[None] | None = None
+        self._remote_clone_worker: Worker[None] | None = None
         self._remote_sync_error: str | None = None
         self._initial_remote_sync_pending = False
         self._remote_startup_modal_open = False
         self._remote_cached_read_only = False
         self._pending_pre_edit_action: Callable[[], None] | None = None
+        self._remote_clone_progress_screen: RemoteCloneProgressScreen | None = (
+            None
+        )
+        self._clone_started_in_remote_mode = False
         self._base_sub_title = ""
 
     def compose(self) -> ComposeResult:
@@ -246,6 +258,8 @@ class MainScreen(Screen[None]):
         self._initial_remote_sync_pending = False
         self._remote_startup_modal_open = False
         self._pending_pre_edit_action = None
+        self._remote_clone_progress_screen = None
+        self._clone_started_in_remote_mode = False
         self._clear_sync_indicator()
         if not self._syncing_backend():
             self._set_remote_cached_read_only(read_only=False)
@@ -299,6 +313,13 @@ class MainScreen(Screen[None]):
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         """Refresh the UI when a background remote sync completes."""
+        if event.worker is self._remote_clone_worker:
+            if event.state == WorkerState.SUCCESS:
+                self._handle_remote_clone_success()
+                return
+            if event.state == WorkerState.ERROR:
+                self._handle_remote_clone_error(event.worker)
+                return
         if event.worker is not self._remote_sync_worker:
             return
         if event.state == WorkerState.SUCCESS:
@@ -418,6 +439,101 @@ class MainScreen(Screen[None]):
     def _clear_sync_indicator(self) -> None:
         """Restore the default subtitle after a sync completes."""
         self.app.sub_title = self._base_sub_title
+
+    def _handle_remote_clone_success(self) -> None:
+        """Apply UI updates after a successful remote-to-local clone."""
+        self._dismiss_remote_clone_progress()
+        self._remote_clone_worker = None
+        if not self._clone_started_in_remote_mode:
+            self.refresh_ideas(select_pk=self._selected_idea_pk)
+            self.notify("Local database replaced from remote snapshot")
+            return
+
+        should_prompt_getter = getattr(
+            self.app,
+            "should_prompt_after_clone",
+            None,
+        )
+        should_prompt = (
+            should_prompt_getter() if callable(should_prompt_getter) else False
+        )
+        if should_prompt:
+            self.app.push_screen(
+                RemoteCloneSwitchModeScreen(),
+                callback=self._on_remote_clone_switch_dismiss,
+            )
+        else:
+            self.notify("Local database replaced from remote snapshot")
+
+    def _handle_remote_clone_error(self, worker: Worker[None]) -> None:
+        """Apply UI updates after a failed remote-to-local clone."""
+        self._dismiss_remote_clone_progress()
+        self._remote_clone_worker = None
+        message = (
+            str(worker.error)
+            if worker.error is not None
+            else "Remote clone failed"
+        )
+        self.notify(message, severity="error")
+
+    def _dismiss_remote_clone_progress(self) -> None:
+        """Close the clone progress modal when it is currently mounted."""
+        progress_screen = self._remote_clone_progress_screen
+        self._remote_clone_progress_screen = None
+        if progress_screen is None:
+            return
+        if self.app.screen is progress_screen:
+            self.app.pop_screen()
+
+    def _on_remote_clone_switch_dismiss(self, result: object) -> None:
+        """Handle the optional local-mode switch after clone success."""
+        if result != RemoteCloneModeAction.SWITCH_LOCAL:
+            self.notify("Local database replaced from remote snapshot")
+            return
+        get_backend_config = getattr(self.app, "get_backend_config", None)
+        apply_backend_config = getattr(self.app, "apply_backend_config", None)
+        if callable(get_backend_config) and callable(apply_backend_config):
+            apply_backend_config(
+                replace(
+                    get_backend_config(),
+                    mode=DataBackendMode.LOCAL,
+                )
+            )
+            self.notify("Switched to local mode")
+            return
+        self.notify("Local fallback is unavailable", severity="error")
+
+    def _update_remote_clone_progress(
+        self,
+        progress: SnapshotImportProgress,
+    ) -> None:
+        """Update the clone progress modal from worker-thread callbacks."""
+        progress_screen = self._remote_clone_progress_screen
+        if progress_screen is None or not progress_screen.is_mounted:
+            return
+        if progress.stage == "Download":
+            if progress.completed >= progress.total and progress.total > 0:
+                progress_screen.mark_download_complete()
+            return
+        progress_screen.update_stage_progress(
+            stage=progress.stage,
+            completed=progress.completed,
+            total=progress.total,
+        )
+
+    @work(thread=True, exclusive=True, exit_on_error=False)
+    def _run_remote_clone(self) -> None:
+        """Clone the current remote snapshot into the local database."""
+        clone_remote_to_local = getattr(self.app, "clone_remote_to_local", None)
+        if not callable(clone_remote_to_local):
+            msg = "Remote clone is unavailable"
+            raise TypeError(msg)
+        clone_remote_to_local(
+            progress_callback=lambda progress: self.app.call_from_thread(
+                self._update_remote_clone_progress,
+                progress,
+            )
+        )
 
     def _refresh_relative_timestamps(self) -> None:
         """Refresh in-place relative timestamps in the visible idea tree."""
@@ -1047,6 +1163,34 @@ class MainScreen(Screen[None]):
     def action_show_help(self) -> None:
         """Show the help overlay."""
         self.app.push_screen(HelpScreen())
+
+    def action_clone_remote_to_local(self) -> None:
+        """Confirm and start a destructive remote-to-local clone."""
+        if self._remote_clone_in_progress():
+            self.notify("Remote clone already in progress", severity="warning")
+            return
+        self.app.push_screen(
+            ConfirmDialog(
+                "Clone the current remote snapshot into the local database?\n\n"
+                "This will overwrite the existing local database."
+            ),
+            callback=self._on_clone_remote_to_local_confirm,
+        )
+
+    def _on_clone_remote_to_local_confirm(self, confirmed: object) -> None:
+        """Start the clone only after explicit user confirmation."""
+        if confirmed is not True:
+            return
+        self._clone_started_in_remote_mode = self._syncing_backend() is not None
+        progress_screen = RemoteCloneProgressScreen()
+        self._remote_clone_progress_screen = progress_screen
+        self.app.push_screen(progress_screen)
+        self._remote_clone_worker = self._run_remote_clone()
+
+    def _remote_clone_in_progress(self) -> bool:
+        """Return whether a remote-to-local clone worker is still running."""
+        worker = self._remote_clone_worker
+        return worker is not None and not worker.is_finished
 
     def action_show_backend_config(self) -> None:
         """Show the backend configuration modal."""

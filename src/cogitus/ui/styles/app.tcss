@@ -316,6 +316,14 @@ RemoteStartupRecoveryScreen {
     align: center middle;
 }
 
+RemoteCloneProgressScreen {
+    align: center middle;
+}
+
+RemoteCloneSwitchModeScreen {
+    align: center middle;
+}
+
 #confirm-container {
     width: 50;
     height: auto;
@@ -362,6 +370,34 @@ RemoteStartupRecoveryScreen {
 }
 
 #remote-startup-buttons Button {
+    min-width: 0;
+    padding: 0 1;
+    margin: 0 1;
+}
+
+#remote-clone-container,
+#remote-clone-switch-container {
+    width: 58;
+    max-width: 90%;
+    height: auto;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#remote-clone-status,
+#remote-clone-switch-message {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 1;
+}
+
+#remote-clone-switch-buttons {
+    height: 3;
+    align: center middle;
+}
+
+#remote-clone-switch-buttons Button {
     min-width: 0;
     padding: 0 1;
     margin: 0 1;
