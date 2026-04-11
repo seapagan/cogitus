@@ -15,6 +15,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 **Bug Fixes**
 
+- Fix: auto-focus backend mode select in backend settings modal ([#61](https://github.com/seapagan/cogitus/pull/61)) by [seapagan](https://github.com/seapagan)
 - Fix app-owned database connection lifecycle ([#58](https://github.com/seapagan/cogitus/pull/58)) by [seapagan](https://github.com/seapagan)
 
 [`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.9.0...HEAD) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.9.0...HEAD.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.9.0...HEAD.patch)

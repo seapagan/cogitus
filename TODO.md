@@ -87,11 +87,10 @@ Ideas to add to Cogitus
   git - a journal that we can unwind?) Include edited, created and deleted
   ideas at first, more as the need arises. How would we store this?
 
-## Profiles and Multi-Device
+## Profiles
 
-- add profiles, link ideas to a profile, optionally password protected.
-- cloud database, allows reading/writing from multiple machines (can probably be
-  suplanted by the API idea).
+- add profiles, link ideas to a profile, optionally password protected, allow
+  multiple profiles and dialogs to switch between profiles from inside the app.
 
 ## Relationships and Idea Graph
 
