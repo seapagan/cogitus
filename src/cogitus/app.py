@@ -278,7 +278,6 @@ class CogitusApp(App[None]):
     def _replace_backend(self, *, mode: DataBackendMode) -> None:
         """Rebuild the active backend and swap in the correct database."""
         new_handle: _DatabaseHandle | None = None
-        new_service: IdeaBackend | None = None
         try:
             new_handle = self._build_backend_db(
                 db_path=self._db_path,
@@ -290,8 +289,6 @@ class CogitusApp(App[None]):
                 mode=mode,
             )
         except Exception:
-            if isinstance(new_service, RemoteIdeaBackend):
-                new_service.close()
             if new_handle is not None and new_handle.owns_db:
                 new_handle.db.close()
             raise
