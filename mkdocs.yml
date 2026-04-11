@@ -29,10 +29,10 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.details
-  - pymdownx.superfences
   - pymdownx.highlight:
       linenums: false
       auto_title: false
+  - pymdownx.superfences
   - pymdownx.snippets:
       base_path:
         - docs
