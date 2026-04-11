@@ -2987,6 +2987,35 @@ async def test_main_screen_search_cancel_restores_previous_focus(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_search_by_tag_preserves_previous_focus(
+    service: IdeaService,
+) -> None:
+    """Tag-click searches should restore the pre-search content focus."""
+    service.create_idea("Tagged", tags=["python"])
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        content = screen.query_one("#content-panel", IdeaView)
+        view_container = content.query_one("#idea-view-container")
+        search = panel.query_one("#search-input", Input)
+
+        screen._active_pane = "content"
+        content.focus_content()
+        await pilot.pause()
+
+        screen.action_search_by_tag("python")
+        await pilot.pause()
+        assert app.focused is search
+
+        screen.action_cancel_search()
+        await pilot.pause()
+        assert search.value == ""
+        assert app.focused is view_container
+
+
+@pytest.mark.asyncio
 async def test_main_screen_cancel_search_noop_when_search_not_focused(
     service: IdeaService,
 ) -> None:

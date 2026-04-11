@@ -1144,6 +1144,8 @@ class MainScreen(Screen[None]):
     def action_search_by_tag(self, tag_name: str) -> None:
         """Set search to tag:<tag_name> and focus the search input."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
+        if not panel.is_search_input_focused():
+            self._focus_before_search = self._active_pane
         panel.set_search_query(f"tag:{shlex_quote(tag_name)}")
 
     def action_focus_search(self) -> None:
