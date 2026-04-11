@@ -319,8 +319,9 @@ def test_snapshot_import_sync_snapshot_idea_tags_requires_inserted_idea(
 ) -> None:
     """Snapshot tag relinking should fail clearly if an idea row is missing."""
     importer = SnapshotImportRepository(db)
-    default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
-    python_tag = _tag(pk=1, name="python", created_at=2, updated_at=2)
+    default_group = _group(pk=2, name="default-2", created_at=1, updated_at=1)
+    python_tag = _tag(pk=2, name="python", created_at=2, updated_at=2)
+    groups_by_pk = importer._bulk_insert_groups([default_group])
     tags_by_pk = importer._bulk_insert_tags([python_tag])
     ideas = [
         _idea(
@@ -332,15 +333,19 @@ def test_snapshot_import_sync_snapshot_idea_tags_requires_inserted_idea(
             timestamps=(4, 5),
         )
     ]
+    resolved_ideas = importer._resolve_snapshot_idea_relations(
+        ideas,
+        groups_by_pk=groups_by_pk,
+        tags_by_pk=tags_by_pk,
+    )
 
     with pytest.raises(
         RuntimeError,
         match="Idea 1 not found after snapshot insert",
     ):
         importer._sync_snapshot_idea_tags(
-            ideas,
+            resolved_ideas,
             cached_ideas_by_pk={},
-            tags_by_pk=tags_by_pk,
         )
 
 
@@ -376,6 +381,35 @@ def test_snapshot_import_progress_path_reports_missing_group(
         )
 
 
+def test_snapshot_import_bulk_path_reports_missing_group(
+    db: SqliterDB,
+) -> None:
+    """Bulk import should fail clearly on missing snapshot groups."""
+    importer = SnapshotImportRepository(db)
+    python_tag = _tag(pk=1, name="python", created_at=2, updated_at=2)
+    missing_group = _group(pk=99, name="missing", created_at=1, updated_at=1)
+    snapshot = RemoteSnapshot(
+        groups=[],
+        tags=[python_tag],
+        ideas=[
+            _idea(
+                pk=1,
+                title="Imported idea",
+                body="Local clone body",
+                group=missing_group,
+                tags=[python_tag],
+                timestamps=(4, 5),
+            )
+        ],
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="idea 1 references missing group 99",
+    ):
+        importer.replace_snapshot(snapshot)
+
+
 def test_snapshot_import_progress_path_reports_missing_tag(
     db: SqliterDB,
 ) -> None:
@@ -408,6 +442,35 @@ def test_snapshot_import_progress_path_reports_missing_tag(
         )
 
 
+def test_snapshot_import_bulk_path_reports_missing_tag(
+    db: SqliterDB,
+) -> None:
+    """Bulk import should fail clearly on missing snapshot tags."""
+    importer = SnapshotImportRepository(db)
+    default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
+    missing_tag = _tag(pk=99, name="missing", created_at=2, updated_at=2)
+    snapshot = RemoteSnapshot(
+        groups=[default_group],
+        tags=[],
+        ideas=[
+            _idea(
+                pk=1,
+                title="Imported idea",
+                body="Local clone body",
+                group=default_group,
+                tags=[missing_tag],
+                timestamps=(4, 5),
+            )
+        ],
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="idea 1 references missing tag 99",
+    ):
+        importer.replace_snapshot(snapshot)
+
+
 def test_snapshot_import_bulk_helpers_handle_empty_inputs(
     db: SqliterDB,
 ) -> None:
@@ -416,7 +479,7 @@ def test_snapshot_import_bulk_helpers_handle_empty_inputs(
 
     assert importer._bulk_insert_groups([]) == {}
     assert importer._bulk_insert_tags([]) == {}
-    assert importer._bulk_insert_ideas([], groups_by_pk={}) == {}
+    assert importer._bulk_insert_ideas([]) == {}
 
 
 def test_snapshot_import_reports_progress_when_callback_is_present() -> None:

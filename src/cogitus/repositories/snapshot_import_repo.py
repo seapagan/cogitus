@@ -212,48 +212,91 @@ class SnapshotImportRepository:
     ) -> None:
         """Insert snapshot ideas and restore their tag links."""
         if progress_callback is None:
-            cached_ideas_by_pk = self._bulk_insert_ideas(
+            resolved_ideas = self._resolve_snapshot_idea_relations(
                 ideas,
                 groups_by_pk=groups_by_pk,
+                tags_by_pk=tags_by_pk,
+            )
+            cached_ideas_by_pk = self._bulk_insert_ideas(
+                resolved_ideas,
             )
             self._sync_snapshot_idea_tags(
-                ideas,
+                resolved_ideas,
                 cached_ideas_by_pk=cached_ideas_by_pk,
-                tags_by_pk=tags_by_pk,
             )
             return
         self._report_progress("Ideas", 0, len(ideas), progress_callback)
         for index, idea in enumerate(ideas, start=1):
-            try:
-                group = groups_by_pk[idea.group.pk]
-            except KeyError:
-                msg = (
-                    "Snapshot is inconsistent: "
-                    f"idea {idea.pk} references missing group "
-                    f"{idea.group.pk}"
-                )
-                raise RuntimeError(msg) from None
+            resolved = self._resolve_snapshot_idea(
+                idea,
+                groups_by_pk=groups_by_pk,
+                tags_by_pk=tags_by_pk,
+            )
             cached_idea = self._db.insert(
-                self._idea_model(idea, group),
+                self._idea_model(idea, resolved.group),
                 timestamp_override=True,
             )
-            try:
-                cached_tags = [tags_by_pk[tag.pk] for tag in idea.tags]
-            except KeyError as exc:
-                missing_tag_pk = exc.args[0]
-                msg = (
-                    "Snapshot is inconsistent: "
-                    f"idea {idea.pk} references missing tag "
-                    f"{missing_tag_pk}"
-                )
-                raise RuntimeError(msg) from None
-            cached_idea.tags.set(*cached_tags)
+            cached_idea.tags.set(*resolved.tags)
             self._report_progress(
                 "Ideas",
                 index,
                 len(ideas),
                 progress_callback,
             )
+
+    @dataclass(frozen=True)
+    class _ResolvedSnapshotIdea:
+        """Snapshot idea with validated local group and tag references."""
+
+        idea: IdeaResponse
+        group: Group
+        tags: list[Tag]
+
+    def _resolve_snapshot_idea_relations(
+        self,
+        ideas: list[IdeaResponse],
+        *,
+        groups_by_pk: dict[int, Group],
+        tags_by_pk: dict[int, Tag],
+    ) -> list[_ResolvedSnapshotIdea]:
+        """Resolve and validate snapshot idea relations."""
+        return [
+            self._resolve_snapshot_idea(
+                idea,
+                groups_by_pk=groups_by_pk,
+                tags_by_pk=tags_by_pk,
+            )
+            for idea in ideas
+        ]
+
+    def _resolve_snapshot_idea(
+        self,
+        idea: IdeaResponse,
+        *,
+        groups_by_pk: dict[int, Group],
+        tags_by_pk: dict[int, Tag],
+    ) -> _ResolvedSnapshotIdea:
+        """Resolve one snapshot idea's group and tag relations."""
+        try:
+            group = groups_by_pk[idea.group.pk]
+        except KeyError:
+            msg = (
+                "Snapshot is inconsistent: "
+                f"idea {idea.pk} references missing group "
+                f"{idea.group.pk}"
+            )
+            raise RuntimeError(msg) from None
+        try:
+            tags = [tags_by_pk[tag.pk] for tag in idea.tags]
+        except KeyError as exc:
+            missing_tag_pk = exc.args[0]
+            msg = (
+                "Snapshot is inconsistent: "
+                f"idea {idea.pk} references missing tag "
+                f"{missing_tag_pk}"
+            )
+            raise RuntimeError(msg) from None
+        return self._ResolvedSnapshotIdea(idea=idea, group=group, tags=tags)
 
     def _bulk_insert_groups(
         self,
@@ -283,9 +326,7 @@ class SnapshotImportRepository:
 
     def _bulk_insert_ideas(
         self,
-        ideas: list[IdeaResponse],
-        *,
-        groups_by_pk: dict[int, Group],
+        ideas: list[_ResolvedSnapshotIdea],
     ) -> dict[int, Idea]:
         """Insert snapshot ideas in one batch."""
         if not ideas:
@@ -293,10 +334,10 @@ class SnapshotImportRepository:
         inserted = self._db.bulk_insert(
             [
                 self._idea_model(
-                    idea,
-                    groups_by_pk[idea.group.pk],
+                    resolved.idea,
+                    resolved.group,
                 )
-                for idea in ideas
+                for resolved in ideas
             ],
             timestamp_override=True,
         )
@@ -304,20 +345,17 @@ class SnapshotImportRepository:
 
     def _sync_snapshot_idea_tags(
         self,
-        ideas: list[IdeaResponse],
+        ideas: list[_ResolvedSnapshotIdea],
         *,
         cached_ideas_by_pk: dict[int, Idea],
-        tags_by_pk: dict[int, Tag],
     ) -> None:
         """Recreate snapshot idea-tag links through the ORM M2M API."""
-        for idea in ideas:
-            cached_idea = cached_ideas_by_pk.get(idea.pk)
+        for resolved in ideas:
+            cached_idea = cached_ideas_by_pk.get(resolved.idea.pk)
             if cached_idea is None:
-                msg = f"Idea {idea.pk} not found after snapshot insert"
+                msg = f"Idea {resolved.idea.pk} not found after snapshot insert"
                 raise RuntimeError(msg)
-            cached_idea.tags.set(
-                *(tags_by_pk[tag.pk] for tag in idea.tags),
-            )
+            cached_idea.tags.set(*resolved.tags)
 
     def _restore_cursor_positions(
         self,
