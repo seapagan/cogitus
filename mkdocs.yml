@@ -54,6 +54,7 @@ nav:
       - API: user-guide/api.md
       - Remote Clone: user-guide/remote-clone.md
       - Clipboard: user-guide/clipboard.md
+      - Theming: user-guide/theming.md
       - Settings: user-guide/settings.md
       - Troubleshooting: user-guide/troubleshooting.md
   - Changelog: project/changelog.md
