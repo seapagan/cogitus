@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -72,6 +73,14 @@ CSS_PATH = Path(__file__).parent / "ui" / "styles" / "app.tcss"
 DEFAULT_REMOTE_CACHE_DB_PATH = "~/.config/cogitus/cogitus-remote-cache.db"
 
 
+@dataclass(frozen=True)
+class _DatabaseHandle:
+    """Database connection plus ownership metadata."""
+
+    db: SqliterDB
+    owns_db: bool
+
+
 class CogitusApp(App[None]):
     """Cogitus — a terminal workspace for programming ideas."""
 
@@ -108,10 +117,12 @@ class CogitusApp(App[None]):
         self._db: SqliterDB | None = None
         self._owns_db = False
         if backend is None:
-            self._db, self._owns_db = self._build_backend_db(
+            handle = self._build_backend_db(
                 db_path=db_path,
                 db=db,
             )
+            self._db = handle.db
+            self._owns_db = handle.owns_db
         else:
             self._db = db
         self._service = backend or self._build_backend()
@@ -206,38 +217,41 @@ class CogitusApp(App[None]):
         *,
         db_path: str | None,
         db: SqliterDB | None,
-    ) -> tuple[SqliterDB, bool]:
-        """Return the configured database instance."""
+    ) -> _DatabaseHandle:
+        """Return the local database handle and ownership metadata."""
         if db is not None:
             GroupRepository(db).get_or_create(self._default_group_name)
-            return db, False
+            return _DatabaseHandle(db=db, owns_db=False)
         if db_path is not None:
-            return (
-                get_db(
+            return _DatabaseHandle(
+                db=get_db(
                     db_path,
                     default_group_name=self._default_group_name,
                 ),
-                True,
+                owns_db=True,
             )
-        return get_db(default_group_name=self._default_group_name), True
+        return _DatabaseHandle(
+            db=get_db(default_group_name=self._default_group_name),
+            owns_db=True,
+        )
 
     def _build_remote_cache_db(
         self,
         *,
         db_path: str | None,
         db: SqliterDB | None,
-    ) -> tuple[SqliterDB, bool]:
-        """Return the configured cache database for remote mode."""
+    ) -> _DatabaseHandle:
+        """Return the remote-cache database handle and ownership metadata."""
         if db is not None:
             GroupRepository(db).get_or_create(self._default_group_name)
-            return db, False
+            return _DatabaseHandle(db=db, owns_db=False)
         cache_path = db_path or DEFAULT_REMOTE_CACHE_DB_PATH
-        return (
-            get_db(
+        return _DatabaseHandle(
+            db=get_db(
                 cache_path,
                 default_group_name=self._default_group_name,
             ),
-            True,
+            owns_db=True,
         )
 
     def _build_backend_db(
@@ -246,8 +260,8 @@ class CogitusApp(App[None]):
         db_path: str | None,
         db: SqliterDB | None,
         mode: DataBackendMode | None = None,
-    ) -> tuple[SqliterDB, bool]:
-        """Build the backing SQLite database for the selected mode."""
+    ) -> _DatabaseHandle:
+        """Build the backend DB handle for the selected mode."""
         resolved_mode = self._active_backend_mode() if mode is None else mode
         if resolved_mode == DataBackendMode.API:
             return self._build_remote_cache_db(db_path=db_path, db=db)
@@ -266,11 +280,13 @@ class CogitusApp(App[None]):
         if isinstance(self._service, RemoteIdeaBackend):
             self._service.close()
         self._close_owned_db()
-        self._db, self._owns_db = self._build_backend_db(
+        handle = self._build_backend_db(
             db_path=self._db_path,
             db=self._injected_db,
             mode=mode,
         )
+        self._db = handle.db
+        self._owns_db = handle.owns_db
         self._service = self._build_backend(mode=mode)
 
     def _build_backend(
