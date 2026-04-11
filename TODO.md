@@ -13,8 +13,6 @@ Ideas to add to Cogitus
   all (only to the group level, not the root node).
 - add a tag management dialog with usage counts, rename/edit support, and
   explicit stale-tag pruning (selected/all stale with confirmation).
-- clicking on any of the tags above the body window should open the search
-  results as if `tag:<tag name>` was searched.
 - revisit the custom footer status widgets and replace the current private
   `textual.widgets._footer.FooterKey` dependency with a public Textual API or
   an internal equivalent once that can be done without reintroducing the past

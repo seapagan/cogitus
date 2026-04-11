@@ -20,7 +20,8 @@ Search supports ranked free-text matching plus inline structured operators.
 
 ## Usage
 
-1. Press `/` to focus search.
+1. Press `/` to focus search, or click any tag above the idea body to
+   start a `tag:<name>` search.
 2. Type your query text and optional operators.
 3. Use `Tab` to open/cycle autocomplete suggestions.
 4. Use `Shift+Tab`, `Up`, or `Down` to move between suggestions.
