@@ -277,25 +277,46 @@ class CogitusApp(App[None]):
 
     def _replace_backend(self, *, mode: DataBackendMode) -> None:
         """Rebuild the active backend and swap in the correct database."""
-        if isinstance(self._service, RemoteIdeaBackend):
-            self._service.close()
-        self._close_owned_db()
-        handle = self._build_backend_db(
-            db_path=self._db_path,
-            db=self._injected_db,
-            mode=mode,
-        )
-        self._db = handle.db
-        self._owns_db = handle.owns_db
-        self._service = self._build_backend(mode=mode)
+        new_handle: _DatabaseHandle | None = None
+        new_service: IdeaBackend | None = None
+        try:
+            new_handle = self._build_backend_db(
+                db_path=self._db_path,
+                db=self._injected_db,
+                mode=mode,
+            )
+            new_service = self._build_backend(
+                db=new_handle.db,
+                mode=mode,
+            )
+        except Exception:
+            if isinstance(new_service, RemoteIdeaBackend):
+                new_service.close()
+            if new_handle is not None and new_handle.owns_db:
+                new_handle.db.close()
+            raise
+
+        old_service = self._service
+        old_db = self._db
+        old_owns_db = self._owns_db
+        self._db = new_handle.db
+        self._owns_db = new_handle.owns_db
+        self._service = new_service
+
+        if isinstance(old_service, RemoteIdeaBackend):
+            old_service.close()
+        if old_db is not None and old_owns_db:
+            old_db.close()
 
     def _build_backend(
         self,
         *,
+        db: SqliterDB | None = None,
         mode: DataBackendMode | None = None,
     ) -> IdeaBackend:
         """Build the configured local or remote backend implementation."""
-        if self._db is None:
+        resolved_db = self._db if db is None else db
+        if resolved_db is None:
             msg = "Backend database is not initialized"
             raise RuntimeError(msg)
         resolved_mode = self._active_backend_mode() if mode is None else mode
@@ -306,12 +327,12 @@ class CogitusApp(App[None]):
                 password=self._remote_api_password,
             )
             return RemoteIdeaBackend(
-                self._db,
+                resolved_db,
                 default_group_name=self._default_group_name,
                 api_client=client,
             )
         return IdeaService(
-            self._db,
+            resolved_db,
             default_group_name=self._default_group_name,
         )
 

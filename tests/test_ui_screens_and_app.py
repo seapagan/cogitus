@@ -4743,6 +4743,84 @@ async def test_cogitus_app_apply_backend_config_closes_owned_db_before_replace(
 
 
 @pytest.mark.asyncio
+async def test_cogitus_app_replace_backend_preserves_old_backend(
+    mocker: MockerFixture,
+) -> None:
+    """Failed DB rebuilds should leave the current backend running."""
+    initial_db = get_db(memory=True)
+    initial_close = mocker.spy(initial_db, "close")
+    mocker.patch("cogitus.app.get_db", return_value=initial_db)
+    app = CogitusApp(settings=_FakeSettings())
+    old_service = app._service
+    mocker.patch.object(
+        app,
+        "_build_backend_db",
+        side_effect=RuntimeError("db build failed"),
+    )
+
+    async with app.run_test() as pilot:
+        with pytest.raises(RuntimeError, match="db build failed"):
+            app.apply_backend_config(
+                BackendConfig(
+                    mode=DataBackendMode.API,
+                    api_base_url="http://127.0.0.1:8000",
+                    api_username="api-user",
+                    api_password=_remote_secret(),
+                )
+            )
+
+        assert app._service is old_service
+        assert app._db is initial_db
+        assert app._owns_db is True
+        assert initial_close.call_count == 0
+        app.exit()
+        await pilot.pause()
+
+    assert initial_close.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_replace_backend_closes_new_owned_db_on_build_failure(
+    mocker: MockerFixture,
+) -> None:
+    """Failed backend construction should clean up the replacement DB."""
+    initial_db = get_db(memory=True)
+    replacement_db = get_db(memory=True)
+    initial_close = mocker.spy(initial_db, "close")
+    replacement_close = mocker.spy(replacement_db, "close")
+    mocker.patch("cogitus.app.get_db", return_value=initial_db)
+    app = CogitusApp(settings=_FakeSettings())
+    old_service = app._service
+    mocker.patch("cogitus.app.get_db", return_value=replacement_db)
+    mocker.patch.object(
+        app,
+        "_build_backend",
+        side_effect=RuntimeError("backend build failed"),
+    )
+
+    async with app.run_test() as pilot:
+        with pytest.raises(RuntimeError, match="backend build failed"):
+            app.apply_backend_config(
+                BackendConfig(
+                    mode=DataBackendMode.API,
+                    api_base_url="http://127.0.0.1:8000",
+                    api_username="api-user",
+                    api_password=_remote_secret(),
+                )
+            )
+
+        assert replacement_close.call_count == 1
+        assert app._service is old_service
+        assert app._db is initial_db
+        assert app._owns_db is True
+        assert initial_close.call_count == 0
+        app.exit()
+        await pilot.pause()
+
+    assert initial_close.call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_cogitus_app_apply_backend_config_closes_remote_backend(
     db: SqliterDB,
     mocker: MockerFixture,
