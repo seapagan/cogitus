@@ -23,12 +23,18 @@ def _format_full_timestamp(unix_ts: int) -> str:
     return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
+def _escape_label(name: str) -> str:
+    """Escape a tag name for safe Textual markup display."""
+    return name.replace("\\", "\\\\").replace("[", "\\[")
+
+
 def _tag_click_markup(name: str) -> str:
     """Build @click markup for a tag with defensive escaping."""
-    if "]" in name:
-        return f"\\[{name}"
-    escaped = name.replace("\\", "\\\\").replace("'", "\\'")
-    return f"\\[[@click=screen.search_by_tag('{escaped}')]{name}[/]]"
+    label = _escape_label(name)
+    if "[" in name or "]" in name:
+        return f"\\[{label}"
+    action_arg = name.replace("\\", "\\\\").replace("'", "\\'")
+    return f"\\[[@click=screen.search_by_tag('{action_arg}')]{label}[/]]"
 
 
 class IdeaView(Vertical):

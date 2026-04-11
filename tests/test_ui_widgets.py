@@ -1667,10 +1667,18 @@ def test_tag_click_markup_plain() -> None:
 
 
 def test_tag_click_markup_with_bracket() -> None:
-    """Tag names containing ] fall back to plain text."""
+    """Tag names containing brackets fall back to escaped plain text."""
     result = _tag_click_markup("tag]name")
     assert "search_by_tag" not in result
     assert "tag]name" in result
+
+
+def test_tag_click_markup_with_open_bracket() -> None:
+    """Tag names containing [ fall back to escaped plain text."""
+    result = _tag_click_markup("tag[name")
+    assert "search_by_tag" not in result
+    assert "tag\\[name" in result
+    assert result.startswith("\\[")
 
 
 def test_tag_click_markup_escapes_quotes() -> None:
