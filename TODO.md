@@ -41,29 +41,6 @@ Ideas to add to Cogitus
 - review `ty` type-checker findings in tests, especially whether intentionally
   invalid `SearchFilter` construction should use a clearer explicit escape hatch
   than `invalid_field: Any = "status"`.
-- fix the intermittent `ResourceWarning: unclosed database in
-  sqlite3.Connection` seen during test runs. Investigation summary:
-  `tests/conftest.py`'s shared `db` fixture closes correctly, and the warning
-  is not pinned to one specific UI test when rerun with `-W
-  error::ResourceWarning`; it appears during later GC/finalization. The real
-  issue is app-level DB ownership in `src/cogitus/app.py`, not just test
-  cleanup. `CogitusApp.__init__()` creates a SQLite DB when no injected `db` is
-  provided, but `CogitusApp.exit()` only closes the remote API client and does
-  not close the app-owned DB. There is a second leak path when
-  `apply_backend_config()` and `activate_session_local_fallback()` replace
-  `self._db` with a newly opened DB without first closing the previous owned
-  connection. `RemoteIdeaBackend.close()` also closes only the HTTP client,
-  which is correct if the backend does not own the DB, so the ownership fix
-  should stay in `CogitusApp` rather than pushing blind DB closes into the
-  backend. Fix plan:
-  introduce explicit app-side DB ownership tracking such as `_owns_db`; close
-  the previous DB before replacing it in backend rebuild/session-fallback paths;
-  close the owned DB in `CogitusApp.exit()` after shutting down the backend;
-  keep injected test DBs untouched. Regression tests to add:
-  app created without injected `db` closes its DB on exit; switching backend
-  mode with an app-owned DB closes the previous connection; session local
-  fallback with an app-owned DB closes the previous connection; UI test run with
-  `-W error::ResourceWarning` stays clean once fixed.
 
 ## Search and Filtering
 
