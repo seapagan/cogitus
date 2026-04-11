@@ -1033,6 +1033,25 @@ async def test_main_screen_search_by_tag_action(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_search_by_tag_quotes_multi_word_tags(
+    service: IdeaService,
+) -> None:
+    """Tag searches should quote multi-word tag values."""
+    service.create_idea("Tagged", tags=["api design"])
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        screen.action_search_by_tag("api design")
+        await pilot.pause()
+
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        assert search.value == "tag:'api design'"
+        assert search.has_focus
+
+
+@pytest.mark.asyncio
 async def test_main_screen_shows_custom_app_header(
     service: IdeaService,
 ) -> None:

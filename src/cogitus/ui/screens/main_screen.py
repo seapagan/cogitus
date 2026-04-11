@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from shlex import quote as shlex_quote
 from typing import TYPE_CHECKING, ClassVar
 
 from textual import work
@@ -1143,7 +1144,7 @@ class MainScreen(Screen[None]):
     def action_search_by_tag(self, tag_name: str) -> None:
         """Set search to tag:<tag_name> and focus the search input."""
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
-        panel.set_search_query(f"tag:{tag_name}")
+        panel.set_search_query(f"tag:{shlex_quote(tag_name)}")
 
     def action_focus_search(self) -> None:
         """Focus the search input."""
