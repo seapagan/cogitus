@@ -16,6 +16,9 @@ This guide covers day-to-day usage of Cogitus in the terminal UI.
 4. Re-open and edit with `e`.
 5. Search ideas with `/`.
 6. Copy body/selection with `y`.
+7. After configuring remote mode, clone a remote snapshot into your local
+   database with `Ctrl+P` and `Clone Remote To Local` when you need an offline
+   or local copy.
 
 ## Next Pages
 
@@ -24,6 +27,7 @@ This guide covers day-to-day usage of Cogitus in the terminal UI.
 - [Search](search.md)
 - [CLI Reference](cli.md)
 - [API](api.md)
+- [Remote Clone](remote-clone.md)
 - [Clipboard](clipboard.md)
 - [Settings](settings.md)
 - [Troubleshooting](troubleshooting.md)

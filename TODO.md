@@ -13,8 +13,7 @@ Ideas to add to Cogitus
   all (only to the group level, not the root node).
 - add a tag management dialog with usage counts, rename/edit support, and
   explicit stale-tag pruning (selected/all stale with confirmation).
-- ~~Add theming and a dark/light mode (also option to auto-detect the latter
-  from the OS setting)~~ Textual does this natively - document it.
+- Document the built in (Textual) Theming functionality.
 - clicking on any of the tags above the body window should open the search
   results as if `tag:<tag name>` was searched.
 - revisit the custom footer status widgets and replace the current private
@@ -90,12 +89,6 @@ Ideas to add to Cogitus
 
 ## API
 
-- add an API using `FastAPI` to expose the ideas. This can be toggled on/off, or
-  started from the CLI in a headless mode (imagine getting your ideas from a
-  remote server?) Will need Auth etc. Note that this is prob not good for hard
-  usage as we are using SQLite. See also the MCP server item below. Perhaps
-  enable a local `cogitus` app to use a remote server instead of local SQLite
-  file?
 - reevaluate the remote API cache design once there is less planned work and
   technical debt: can we simplify from the current file-backed local cache to a
   memory-backed cache without losing the needed sync, worker-thread, startup,
