@@ -30,7 +30,12 @@ from textual.worker import WorkerState
 
 from cogitus.app import CSS_PATH, CogitusApp
 from cogitus.backends import BackendConfig, RemoteIdeaBackend
-from cogitus.config import DataBackendMode, EditBodyCursorMode, NewIdeaGroupMode
+from cogitus.config import (
+    DEFAULT_THEME,
+    DataBackendMode,
+    EditBodyCursorMode,
+    NewIdeaGroupMode,
+)
 from cogitus.db import get_db
 from cogitus.metadata import AppMetadata
 from cogitus.search import SearchResult
@@ -116,7 +121,7 @@ class _FakeSettings:
             api_password="",
         )
         self.last_viewed_idea_pk = last_viewed_idea_pk
-        self.theme = "textual-dark"
+        self.theme = DEFAULT_THEME
         self.edit_body_cursor_mode = edit_body_cursor_mode
         self.new_idea_group_mode = new_idea_group_mode
         self.default_group_name = default_group_name
@@ -4508,6 +4513,37 @@ async def test_cogitus_app_mount_warns_on_invalid_data_backend_mode(
             "Invalid config 'data_backend_mode=broken-mode'; using 'local'.",
             severity="warning",
         )
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_restores_non_default_theme(
+    db: SqliterDB,
+) -> None:
+    """App should restore a non-default persisted theme on startup."""
+    settings = _FakeSettings()
+    settings.theme = "nord"
+    app = CogitusApp(db=db, settings=settings)
+
+    async with app.run_test() as pilot:
+        assert app.theme == "nord"
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_persists_theme_change(
+    db: SqliterDB,
+) -> None:
+    """Changing the theme at runtime should immediately persist to settings."""
+    settings = _FakeSettings()
+    app = CogitusApp(db=db, settings=settings)
+
+    async with app.run_test() as pilot:
+        app.theme = "gruvbox"
+        await pilot.pause()
+        assert settings.theme == "gruvbox"
         app.exit()
         await pilot.pause()
 

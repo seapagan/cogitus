@@ -181,6 +181,8 @@ class CogitusApp(App[None]):
 
     def watch_theme(self, theme: str) -> None:
         """Persist theme changes to settings immediately."""
+        if self._settings.theme == theme:
+            return
         self._settings.set("theme", theme)
 
     def get_system_commands(
