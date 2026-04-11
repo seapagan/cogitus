@@ -304,6 +304,13 @@ def test_snapshot_import_with_progress_callback_uses_rowwise_progress_path(
 
     imported = service.get_idea_with_relations(1)
     assert imported is not None
+    assert imported.title == "Imported idea"
+    assert imported.group.name == "default"
+    assert sorted(tag.name for tag in imported.tags.fetch_all()) == [
+        "cli",
+        "python",
+    ]
+    assert service.search_results("tag:cli")[0].idea.pk == 1
     assert bulk_insert.call_count == 0
     assert updates == [
         ("Groups", 0, 1),
