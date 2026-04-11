@@ -482,7 +482,7 @@ class IdeaListPanel(Vertical):
 
     def set_search_query(self, query: str) -> None:
         """Set the search input to the given query and focus it."""
-        self._suspend_autocomplete_sync = True
+        self._suspend_autocomplete_sync_once()
         search = self.query_one("#search-input", Input)
         search.value = query
         self.dismiss_autocomplete()
