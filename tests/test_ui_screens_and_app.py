@@ -116,6 +116,7 @@ class _FakeSettings:
             api_password="",
         )
         self.last_viewed_idea_pk = last_viewed_idea_pk
+        self.theme = "textual-dark"
         self.edit_body_cursor_mode = edit_body_cursor_mode
         self.new_idea_group_mode = new_idea_group_mode
         self.default_group_name = default_group_name

@@ -30,10 +30,3 @@ typically include:
 
 Open the Command Palette in a running Cogitus session to see the exact list for
 your installation.
-
-## Persistence
-
-!!! note
-    Theme selection is not persisted across restarts. Cogitus will return to the
-    default `textual-dark` theme each time it launches. Theme persistence may be
-    added as a setting in a future release.

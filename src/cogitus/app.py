@@ -47,6 +47,7 @@ if TYPE_CHECKING:
         """Settings interface required by the app."""
 
         last_viewed_idea_pk: int
+        theme: str
         edit_body_cursor_mode: str
         new_idea_group_mode: str
         default_group_name: str
@@ -109,6 +110,7 @@ class CogitusApp(App[None]):
         self._injected_db = db
         self._settings = settings if settings is not None else get_settings()
         self._load_settings_state()
+        self.theme = self._theme
         self._session_backend_mode_override: DataBackendMode | None = None
         self._remote_runtime_offline = False
         self._update_title()
@@ -129,6 +131,7 @@ class CogitusApp(App[None]):
 
     def _load_settings_state(self) -> None:
         """Load and normalize persisted settings values."""
+        self._theme = self._settings.theme
         self._edit_body_cursor_mode = normalize_edit_body_cursor_mode(
             self._settings.edit_body_cursor_mode
         )
@@ -167,6 +170,10 @@ class CogitusApp(App[None]):
         """Push the main screen on mount."""
         self.push_screen(self._build_main_screen())
         self._notify_invalid_config()
+
+    def watch_theme(self, theme: str) -> None:
+        """Persist theme changes to settings immediately."""
+        self._settings.set("theme", theme)
 
     def get_system_commands(
         self,
