@@ -23,7 +23,11 @@ from cogitus.ui.widgets.idea_list import (
     _token_bounds,
     _truncate_snippet,
 )
-from cogitus.ui.widgets.idea_view import IdeaView, _format_full_timestamp
+from cogitus.ui.widgets.idea_view import (
+    IdeaView,
+    _format_full_timestamp,
+    _tag_click_markup,
+)
 from cogitus.ui.widgets.search_results import (
     SearchResultSelection,
     SearchResultsList,
@@ -1653,3 +1657,40 @@ async def test_idea_view_tags_have_click_markup(
         assert "search_by_tag" in content
         assert "python" in content
         assert "testing" in content
+
+
+def test_tag_click_markup_plain() -> None:
+    """Normal tag names produce @click markup."""
+    result = _tag_click_markup("python")
+    assert "search_by_tag('python')" in result
+    assert "python" in result
+
+
+def test_tag_click_markup_with_bracket() -> None:
+    """Tag names containing ] fall back to plain text."""
+    result = _tag_click_markup("tag]name")
+    assert "search_by_tag" not in result
+    assert "tag]name" in result
+
+
+def test_tag_click_markup_escapes_quotes() -> None:
+    """Single quotes in tag names are escaped in the action string."""
+    result = _tag_click_markup("it's")
+    assert "\\'" in result
+    assert "search_by_tag" in result
+
+
+@pytest.mark.asyncio
+async def test_set_search_query_updates_input() -> None:
+    """set_search_query sets the search value and focuses the input."""
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.set_search_query("tag:python")
+        await pilot.pause()
+
+        search = panel.query_one("#search-input", Input)
+        assert search.value == "tag:python"
+        assert search.has_focus
+        assert search.cursor_position == len("tag:python")
