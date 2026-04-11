@@ -78,6 +78,7 @@ def test_snapshot_import_replaces_db_and_preserves_cursor_state(
     service = IdeaService(db)
     importer = SnapshotImportRepository(db)
     placeholder = service.create_idea("Placeholder")
+    extra_local = service.create_idea("Should be removed")
     service.set_idea_cursor_position(placeholder.pk, 9)
 
     default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
@@ -109,6 +110,7 @@ def test_snapshot_import_replaces_db_and_preserves_cursor_state(
     ]
     assert service.get_idea_cursor_position(1) == 9
     assert service.search_results("tag:cli")[0].idea.pk == 1
+    assert service.get_idea_with_relations(extra_local.pk) is None
 
 
 def test_snapshot_import_restores_previous_state_if_rebuild_fails(
