@@ -4541,9 +4541,32 @@ async def test_cogitus_app_persists_theme_change(
     app = CogitusApp(db=db, settings=settings)
 
     async with app.run_test() as pilot:
+        settings.saved = False
+        app.theme = DEFAULT_THEME
+        await pilot.pause()
+        assert settings.saved is False
+
         app.theme = "gruvbox"
         await pilot.pause()
         assert settings.theme == "gruvbox"
+        assert settings.saved is True
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_invalid_stored_theme_falls_back_to_default(
+    db: SqliterDB,
+) -> None:
+    """An unrecognised stored theme should fall back to DEFAULT_THEME."""
+    settings = _FakeSettings()
+    settings.theme = "not-a-real-theme"
+    app = CogitusApp(db=db, settings=settings)
+
+    async with app.run_test() as pilot:
+        assert app.theme == DEFAULT_THEME
+        assert settings.theme == DEFAULT_THEME
+        assert settings.saved is True
         app.exit()
         await pilot.pause()
 
