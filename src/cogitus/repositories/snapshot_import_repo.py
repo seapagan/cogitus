@@ -6,6 +6,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from cogitus.api.mappers import (
+    to_group_response,
+    to_idea_response,
+    to_tag_response,
+)
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.idea_cursor_state import IdeaCursorState
@@ -36,6 +41,15 @@ class SnapshotImportProgress:
 SnapshotImportCallback = Callable[[SnapshotImportProgress], None]
 
 
+@dataclass(frozen=True)
+class _StoredSnapshot:
+    """Local snapshot used to restore state after post-swap failures."""
+
+    groups: list[GroupResponse]
+    tags: list[TagResponse]
+    ideas: list[IdeaResponse]
+
+
 class SnapshotImportRepository:
     """Replace a target database with a full remote snapshot."""
 
@@ -52,8 +66,40 @@ class SnapshotImportRepository:
         progress_callback: SnapshotImportCallback | None = None,
     ) -> None:
         """Replace the target database with one full remote snapshot."""
+        previous_snapshot = self._current_snapshot()
         cursor_positions = self._cursor_repo.list_positions()
+        swap_completed = False
 
+        try:
+            self._replace_relational_snapshot(
+                snapshot,
+                progress_callback=progress_callback,
+            )
+            swap_completed = True
+            self._search_backend.rebuild()
+            self._restore_cursor_positions(
+                cursor_positions,
+                valid_idea_pks={idea.pk for idea in snapshot.ideas},
+            )
+        # Intentionally catch broad Exception here so any ordinary post-swap
+        # failure triggers rollback instead of leaving committed data with a
+        # stale or empty search index.
+        except Exception:
+            if not swap_completed:
+                raise
+            self._restore_previous_snapshot(
+                previous_snapshot,
+                cursor_positions=cursor_positions,
+            )
+            raise
+
+    def _replace_relational_snapshot(
+        self,
+        snapshot: RemoteSnapshot | _StoredSnapshot,
+        *,
+        progress_callback: SnapshotImportCallback | None,
+    ) -> None:
+        """Replace only the relational tables for one snapshot."""
         with self._db.connect():
             self._db.select(IdeaCursorState).delete()
             self._db.select(Idea).delete()
@@ -75,10 +121,35 @@ class SnapshotImportRepository:
                 progress_callback=progress_callback,
             )
 
+    def _restore_previous_snapshot(
+        self,
+        snapshot: _StoredSnapshot,
+        *,
+        cursor_positions: dict[int, int],
+    ) -> None:
+        """Restore the previous snapshot after a post-swap failure."""
+        self._replace_relational_snapshot(snapshot, progress_callback=None)
         self._search_backend.rebuild()
         self._restore_cursor_positions(
             cursor_positions,
             valid_idea_pks={idea.pk for idea in snapshot.ideas},
+        )
+
+    def _current_snapshot(self) -> _StoredSnapshot:
+        """Return the current local dataset as a snapshot."""
+        return _StoredSnapshot(
+            groups=[
+                to_group_response(group)
+                for group in self._db.select(Group).order("pk").fetch_all()
+            ],
+            tags=[
+                to_tag_response(tag)
+                for tag in self._db.select(Tag).order("pk").fetch_all()
+            ],
+            ideas=[
+                to_idea_response(idea)
+                for idea in self._db.select(Idea).order("pk").fetch_all()
+            ],
         )
 
     def _insert_groups(

@@ -111,6 +111,129 @@ def test_snapshot_import_replaces_db_and_preserves_cursor_state(
     assert service.search_results("tag:cli")[0].idea.pk == 1
 
 
+def test_snapshot_import_restores_previous_state_if_rebuild_fails(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """A rebuild failure should restore the pre-import data and search index."""
+    service = IdeaService(db)
+    importer = SnapshotImportRepository(db)
+    local = service.create_idea("Local idea", body="Keep this", tags=["local"])
+    service.set_idea_cursor_position(local.pk, 7)
+
+    default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
+    remote_tag = _tag(pk=1, name="remote", created_at=2, updated_at=2)
+    snapshot = RemoteSnapshot(
+        groups=[default_group],
+        tags=[remote_tag],
+        ideas=[
+            _idea(
+                pk=1,
+                title="Imported idea",
+                body="Replaced body",
+                group=default_group,
+                tags=[remote_tag],
+                timestamps=(4, 5),
+            )
+        ],
+    )
+
+    original_rebuild = importer._search_backend.rebuild
+    calls = 0
+
+    def fail_first_rebuild() -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            msg = "fts rebuild failed"
+            raise RuntimeError(msg)
+        original_rebuild()
+
+    mocker.patch.object(
+        importer._search_backend,
+        "rebuild",
+        side_effect=fail_first_rebuild,
+    )
+
+    with pytest.raises(RuntimeError, match="fts rebuild failed"):
+        importer.replace_snapshot(snapshot)
+
+    restored = service.get_idea_with_relations(local.pk)
+    assert restored is not None
+    assert restored.title == "Local idea"
+    assert [tag.name for tag in restored.tags.fetch_all()] == ["local"]
+    assert service.get_idea_cursor_position(local.pk) == 7
+    assert service.search_results("tag:local")[0].idea.pk == local.pk
+    same_pk = service.get_idea_with_relations(1)
+    assert same_pk is not None
+    assert same_pk.title == "Local idea"
+
+
+def test_snapshot_import_restores_previous_state_if_cursor_restore_fails(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """A cursor-restore failure should also restore the pre-import state."""
+    service = IdeaService(db)
+    importer = SnapshotImportRepository(db)
+    local = service.create_idea("Local idea", body="Keep this", tags=["local"])
+    service.set_idea_cursor_position(local.pk, 11)
+
+    default_group = _group(pk=1, name="default", created_at=1, updated_at=1)
+    remote_tag = _tag(pk=1, name="remote", created_at=2, updated_at=2)
+    snapshot = RemoteSnapshot(
+        groups=[default_group],
+        tags=[remote_tag],
+        ideas=[
+            _idea(
+                pk=1,
+                title="Imported idea",
+                body="Replaced body",
+                group=default_group,
+                tags=[remote_tag],
+                timestamps=(4, 5),
+            )
+        ],
+    )
+
+    original_restore = importer._restore_cursor_positions
+    calls = 0
+
+    def fail_first_restore(
+        cursor_positions: dict[int, int],
+        *,
+        valid_idea_pks: set[int],
+    ) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            msg = "cursor restore failed"
+            raise RuntimeError(msg)
+        original_restore(
+            cursor_positions,
+            valid_idea_pks=valid_idea_pks,
+        )
+
+    mocker.patch.object(
+        importer,
+        "_restore_cursor_positions",
+        side_effect=fail_first_restore,
+    )
+
+    with pytest.raises(RuntimeError, match="cursor restore failed"):
+        importer.replace_snapshot(snapshot)
+
+    restored = service.get_idea_with_relations(local.pk)
+    assert restored is not None
+    assert restored.title == "Local idea"
+    assert [tag.name for tag in restored.tags.fetch_all()] == ["local"]
+    assert service.get_idea_cursor_position(local.pk) == 11
+    assert service.search_results("tag:local")[0].idea.pk == local.pk
+    same_pk = service.get_idea_with_relations(1)
+    assert same_pk is not None
+    assert same_pk.title == "Local idea"
+
+
 def test_snapshot_import_uses_bulk_insert_without_progress_callback(
     db: SqliterDB,
     mocker: MockerFixture,
