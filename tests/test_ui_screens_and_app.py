@@ -1545,6 +1545,25 @@ async def test_backend_config_screen_is_centered_modal() -> None:
 
 
 @pytest.mark.asyncio
+async def test_backend_config_screen_focuses_mode_select_on_mount() -> None:
+    """Backend config modal should auto-focus the mode select on mount."""
+    screen = BackendConfigScreen(
+        BackendConfig(
+            mode=DataBackendMode.LOCAL,
+            api_base_url="",
+            api_username="",
+            api_password="",
+        )
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        mode_select = screen.query_one("#backend-mode-select", Select)
+        assert _focused_widget(app) is mode_select
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_backend_config_screen_returns_selected_config(
     mocker: MockerFixture,
 ) -> None:

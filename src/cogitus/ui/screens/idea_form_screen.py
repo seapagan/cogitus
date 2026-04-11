@@ -1132,6 +1132,10 @@ class BackendConfigScreen(ModalScreen[BackendConfig | None]):
         super().__init__()
         self._config = config
 
+    def on_mount(self) -> None:
+        """Focus the backend mode select widget."""
+        self.query_one("#backend-mode-select", Select).focus()
+
     def compose(self) -> ComposeResult:
         """Compose the backend settings form."""
         with VerticalScroll(id="backend-config-container"):
