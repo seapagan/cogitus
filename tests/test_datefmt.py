@@ -439,6 +439,11 @@ def test_is_valid_timezone_rejects_invalid() -> None:
     assert is_valid_timezone("Not/ARealZone") is False
 
 
+def test_is_valid_timezone_rejects_malformed() -> None:
+    """Malformed timezone string (raises ValueError) returns False."""
+    assert is_valid_timezone("America/../New_York") is False
+
+
 def test_is_valid_timezone_accepts_empty() -> None:
     """Empty string is valid (means auto-detect)."""
     assert is_valid_timezone("") is True

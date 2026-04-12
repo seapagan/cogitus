@@ -86,7 +86,7 @@ def resolve_timezone(override: str = "") -> tzinfo:
     if stripped:
         try:
             return ZoneInfo(stripped)
-        except ZoneInfoNotFoundError:
+        except (ZoneInfoNotFoundError, ValueError):
             pass
     try:
         local_tz = datetime.now().astimezone().tzinfo

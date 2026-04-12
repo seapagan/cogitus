@@ -155,7 +155,7 @@ def is_valid_timezone(tz_str: str) -> bool:
         return True
     try:
         ZoneInfo(stripped)
-    except ZoneInfoNotFoundError:
+    except (ZoneInfoNotFoundError, ValueError):
         return False
     return True
 
