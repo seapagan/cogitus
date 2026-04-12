@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timezone
 from functools import cached_property
 from typing import TYPE_CHECKING
 
@@ -41,8 +42,8 @@ class IdeaView(Vertical):
     """Right panel showing full detail of an idea."""
 
     can_focus = False
-    _display_tz: tzinfo
-    _display_order: DateOrder
+    _display_tz: tzinfo = timezone.utc
+    _display_order: DateOrder = DateOrder.ISO
 
     def on_mount(self) -> None:
         """Resolve date formatting config from app settings."""
