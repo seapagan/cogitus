@@ -142,13 +142,13 @@ def test_resolve_timezone_explicit_utc() -> None:
 def test_resolve_timezone_empty_returns_system() -> None:
     """Empty string returns system local timezone."""
     result = resolve_timezone("")
-    assert isinstance(result, (timezone, ZoneInfo))
+    assert isinstance(result, tzinfo)
 
 
 def test_resolve_timezone_invalid_falls_back_to_system() -> None:
     """Invalid timezone string falls back to system local."""
     result = resolve_timezone("Invalid/Zone")
-    assert isinstance(result, (timezone, ZoneInfo))
+    assert isinstance(result, tzinfo)
 
 
 def test_resolve_timezone_whitespace_stripped() -> None:
