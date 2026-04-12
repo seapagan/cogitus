@@ -41,7 +41,12 @@ def test_detect_locale_date_order_mdy() -> None:
             "setlocale",
             side_effect=["C", "en_US.UTF-8", "C"],
         ),
-        patch.object(locale, "nl_langinfo", return_value="%m/%d/%Y"),
+        patch.object(
+            locale,
+            "nl_langinfo",
+            return_value="%m/%d/%Y",
+            create=True,
+        ),
     ):
         assert detect_locale_date_order() == DateOrder.MDY
 
@@ -54,7 +59,12 @@ def test_detect_locale_date_order_dmy() -> None:
             "setlocale",
             side_effect=["C", "en_GB.UTF-8", "C"],
         ),
-        patch.object(locale, "nl_langinfo", return_value="%d/%m/%Y"),
+        patch.object(
+            locale,
+            "nl_langinfo",
+            return_value="%d/%m/%Y",
+            create=True,
+        ),
     ):
         assert detect_locale_date_order() == DateOrder.DMY
 
@@ -67,7 +77,12 @@ def test_detect_locale_date_order_dmy_with_percent_e() -> None:
             "setlocale",
             side_effect=["C", "en_GB.UTF-8", "C"],
         ),
-        patch.object(locale, "nl_langinfo", return_value="%e/%m/%Y"),
+        patch.object(
+            locale,
+            "nl_langinfo",
+            return_value="%e/%m/%Y",
+            create=True,
+        ),
     ):
         assert detect_locale_date_order() == DateOrder.DMY
 
@@ -80,7 +95,12 @@ def test_detect_locale_date_order_mdy_with_flag() -> None:
             "setlocale",
             side_effect=["C", "en_US.UTF-8", "C"],
         ),
-        patch.object(locale, "nl_langinfo", return_value="%-m/%-d/%Y"),
+        patch.object(
+            locale,
+            "nl_langinfo",
+            return_value="%-m/%-d/%Y",
+            create=True,
+        ),
     ):
         assert detect_locale_date_order() == DateOrder.MDY
 
@@ -93,7 +113,12 @@ def test_detect_locale_date_order_dmy_with_flag() -> None:
             "setlocale",
             side_effect=["C", "en_GB.UTF-8", "C"],
         ),
-        patch.object(locale, "nl_langinfo", return_value="%_d.%_m.%Y"),
+        patch.object(
+            locale,
+            "nl_langinfo",
+            return_value="%_d.%_m.%Y",
+            create=True,
+        ),
     ):
         assert detect_locale_date_order() == DateOrder.DMY
 
@@ -106,7 +131,12 @@ def test_detect_locale_date_order_iso_when_starts_with_year() -> None:
             "setlocale",
             side_effect=["C", "sv_SE.UTF-8", "C"],
         ),
-        patch.object(locale, "nl_langinfo", return_value="%Y-%m-%d"),
+        patch.object(
+            locale,
+            "nl_langinfo",
+            return_value="%Y-%m-%d",
+            create=True,
+        ),
     ):
         assert detect_locale_date_order() == DateOrder.ISO
 
@@ -119,7 +149,12 @@ def test_detect_locale_date_order_iso_on_empty_fmt() -> None:
             "setlocale",
             side_effect=["C", "C", "C"],
         ),
-        patch.object(locale, "nl_langinfo", return_value=""),
+        patch.object(
+            locale,
+            "nl_langinfo",
+            return_value="",
+            create=True,
+        ),
     ):
         assert detect_locale_date_order() == DateOrder.ISO
 
@@ -150,7 +185,12 @@ def test_resolve_date_order_empty_falls_back_to_locale() -> None:
             "setlocale",
             side_effect=["C", "en_GB.UTF-8", "C"],
         ),
-        patch.object(locale, "nl_langinfo", return_value="%d/%m/%Y"),
+        patch.object(
+            locale,
+            "nl_langinfo",
+            return_value="%d/%m/%Y",
+            create=True,
+        ),
     ):
         assert resolve_date_order("") == DateOrder.DMY
 
@@ -163,7 +203,12 @@ def test_resolve_date_order_invalid_falls_back_to_locale() -> None:
             "setlocale",
             side_effect=["C", "en_US.UTF-8", "C"],
         ),
-        patch.object(locale, "nl_langinfo", return_value="%m/%d/%Y"),
+        patch.object(
+            locale,
+            "nl_langinfo",
+            return_value="%m/%d/%Y",
+            create=True,
+        ),
     ):
         assert resolve_date_order("nonsense") == DateOrder.MDY
 
