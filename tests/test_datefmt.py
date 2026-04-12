@@ -231,91 +231,66 @@ def test_format_relative_timestamp_zero_returns_empty() -> None:
     )
 
 
-def test_format_relative_timestamp_just_now() -> None:
-    """Current time returns 'just now'."""
-    now = datetime.now(tz=timezone.utc)
-    result = format_relative_timestamp(
-        _to_unix(now), tz=timezone.utc, date_order=DateOrder.ISO
-    )
-    assert result == "just now"
+_FROZEN_NOW = datetime(2025, 2, 8, 12, 0, tzinfo=timezone.utc)
 
 
-def test_format_relative_timestamp_minutes_ago() -> None:
-    """Two minutes ago returns '2m ago'."""
-    now = datetime.now(tz=timezone.utc)
-    result = format_relative_timestamp(
-        _to_unix(now - timedelta(minutes=2)),
-        tz=timezone.utc,
-        date_order=DateOrder.ISO,
-    )
-    assert result == "2m ago"
+@pytest.mark.parametrize(
+    ("offset", "expected"),
+    [
+        (timedelta(0), "just now"),
+        (timedelta(minutes=2), "2m ago"),
+        (timedelta(hours=2), "2h ago"),
+        (timedelta(days=1), "yesterday"),
+        (timedelta(days=3), "3d ago"),
+    ],
+    ids=["just-now", "minutes", "hours", "yesterday", "days"],
+)
+def test_format_relative_timestamp_branches(
+    offset: timedelta, expected: str
+) -> None:
+    """Relative labels use frozen clock to avoid wall-clock flakiness."""
+    ts = _to_unix(_FROZEN_NOW - offset)
+    with patch("cogitus.datefmt.datetime") as mock_dt:
+        mock_dt.now.return_value = _FROZEN_NOW
+        mock_dt.fromtimestamp.side_effect = datetime.fromtimestamp
+        result = format_relative_timestamp(
+            ts, tz=timezone.utc, date_order=DateOrder.ISO
+        )
+    assert result == expected
 
 
-def test_format_relative_timestamp_hours_ago() -> None:
-    """Two hours ago returns '2h ago'."""
-    now = datetime.now(tz=timezone.utc)
-    result = format_relative_timestamp(
-        _to_unix(now - timedelta(hours=2)),
-        tz=timezone.utc,
-        date_order=DateOrder.ISO,
-    )
-    assert result == "2h ago"
-
-
-def test_format_relative_timestamp_yesterday() -> None:
-    """One day ago returns 'yesterday'."""
-    now = datetime.now(tz=timezone.utc)
-    result = format_relative_timestamp(
-        _to_unix(now - timedelta(days=1)),
-        tz=timezone.utc,
-        date_order=DateOrder.ISO,
-    )
-    assert result == "yesterday"
-
-
-def test_format_relative_timestamp_days_ago() -> None:
-    """Three days ago returns '3d ago'."""
-    now = datetime.now(tz=timezone.utc)
-    result = format_relative_timestamp(
-        _to_unix(now - timedelta(days=3)),
-        tz=timezone.utc,
-        date_order=DateOrder.ISO,
-    )
-    assert result == "3d ago"
-
-
-def test_format_relative_timestamp_absolute_fallback_iso() -> None:
-    """Older than 7 days uses ISO date format."""
-    now = datetime.now(tz=timezone.utc)
-    older = now - timedelta(days=10)
-    result = format_relative_timestamp(
-        _to_unix(older),
-        tz=timezone.utc,
-        date_order=DateOrder.ISO,
-    )
-    assert result == older.strftime("%Y-%m-%d")
-
-
-def test_format_relative_timestamp_absolute_fallback_dmy() -> None:
-    """Older than 7 days uses DMY date format."""
-    now = datetime.now(tz=timezone.utc)
-    older = now - timedelta(days=10)
-    result = format_relative_timestamp(
-        _to_unix(older),
-        tz=timezone.utc,
-        date_order=DateOrder.DMY,
-    )
-    assert result == older.strftime("%d/%m/%Y")
+@pytest.mark.parametrize(
+    ("order", "expected"),
+    [
+        (DateOrder.ISO, "2025-01-29"),
+        (DateOrder.DMY, "29/01/2025"),
+    ],
+    ids=["iso", "dmy"],
+)
+def test_format_relative_timestamp_absolute_fallback(
+    order: DateOrder, expected: str
+) -> None:
+    """Older than 7 days uses regional date format."""
+    older = _FROZEN_NOW - timedelta(days=10)
+    ts = _to_unix(older)
+    with patch("cogitus.datefmt.datetime") as mock_dt:
+        mock_dt.now.return_value = _FROZEN_NOW
+        mock_dt.fromtimestamp.side_effect = datetime.fromtimestamp
+        result = format_relative_timestamp(
+            ts, tz=timezone.utc, date_order=order
+        )
+    assert result == expected
 
 
 def test_format_relative_timestamp_absolute_fallback_local_tz() -> None:
     """Absolute fallback converts to the local timezone."""
-    ts = _to_unix(datetime(2025, 2, 7, 23, 30, tzinfo=timezone.utc))
+    ts = _to_unix(datetime(2025, 1, 28, 23, 30, tzinfo=timezone.utc))
     tz = ZoneInfo("America/New_York")
-    now = datetime.now(tz=timezone.utc)
-    assert now - datetime.fromtimestamp(ts, tz=timezone.utc) > timedelta(days=7)
-    result = format_relative_timestamp(ts, tz=tz, date_order=DateOrder.MDY)
-    assert result == "02/07/2025"
+    with patch("cogitus.datefmt.datetime") as mock_dt:
+        mock_dt.now.return_value = _FROZEN_NOW
+        mock_dt.fromtimestamp.side_effect = datetime.fromtimestamp
+        result = format_relative_timestamp(ts, tz=tz, date_order=DateOrder.MDY)
+    assert result == "01/28/2025"
 
 
 def test_format_relative_timestamp_yesterday_respects_local_tz() -> None:
