@@ -33,6 +33,7 @@ from cogitus.app import CSS_PATH, CogitusApp
 from cogitus.backends import BackendConfig, RemoteIdeaBackend
 from cogitus.config import (
     DEFAULT_THEME,
+    VALID_DATE_FORMATS,
     DataBackendMode,
     EditBodyCursorMode,
     NewIdeaGroupMode,
@@ -104,7 +105,7 @@ class _StyledSingleScreenApp(_SingleScreenApp):
 class _FakeSettings:
     """Minimal settings double for CogitusApp tests."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         last_viewed_idea_pk: int = 0,
         edit_body_cursor_mode: str = "remember",
@@ -113,6 +114,8 @@ class _FakeSettings:
         backend_config: BackendConfig | None = None,
         *,
         prompt_after_clone: bool = True,
+        timezone: str = "",
+        date_format: str = "",
     ) -> None:
         resolved_backend = backend_config or BackendConfig(
             mode=DataBackendMode.LOCAL,
@@ -130,8 +133,8 @@ class _FakeSettings:
         self.remote_api_username = resolved_backend.api_username
         self.remote_api_password = resolved_backend.api_password
         self.prompt_after_clone = prompt_after_clone
-        self.timezone = ""
-        self.date_format = ""
+        self.timezone = timezone
+        self.date_format = date_format
         self.saved = False
 
     def save(self) -> None:
@@ -4599,6 +4602,49 @@ async def test_cogitus_app_mount_warns_on_invalid_data_backend_mode(
         assert app.get_backend_config().mode == DataBackendMode.LOCAL
         notify.assert_called_once_with(
             "Invalid config 'data_backend_mode=broken-mode'; using 'local'.",
+            severity="warning",
+        )
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_mount_warns_on_invalid_timezone(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Invalid timezone should notify and fallback to system."""
+    settings = _FakeSettings(timezone="Not/ARealTimezone")
+    app = CogitusApp(db=db, settings=settings)
+    notify = mocker.patch.object(app, "notify")
+
+    async with app.run_test() as pilot:
+        notify.assert_any_call(
+            "Invalid config "
+            "'timezone=Not/ARealTimezone'; "
+            "using system timezone.",
+            severity="warning",
+        )
+        app.exit()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_mount_warns_on_invalid_date_format(
+    db: SqliterDB,
+    mocker: MockerFixture,
+) -> None:
+    """Invalid date format should notify and fallback to system locale."""
+    settings = _FakeSettings(date_format="ymd")
+    app = CogitusApp(db=db, settings=settings)
+    notify = mocker.patch.object(app, "notify")
+
+    async with app.run_test() as pilot:
+        valid_values = ", ".join(f"'{value}'" for value in VALID_DATE_FORMATS)
+        notify.assert_any_call(
+            "Invalid config 'date_format=ymd'; "
+            "using system locale. "
+            f"Valid values: {valid_values}.",
             severity="warning",
         )
         app.exit()

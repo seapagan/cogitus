@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import locale
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+from cogitus.config import is_valid_date_format, is_valid_timezone
 from cogitus.datefmt import (
     DateOrder,
+    _tz_abbr,
     detect_locale_date_order,
     format_full_timestamp,
     format_relative_timestamp,
@@ -362,3 +364,92 @@ def test_format_relative_timestamp_same_utc_day_different_local_day() -> None:
         mock_dt.fromtimestamp.return_value = datetime.fromtimestamp(ts, tz=tz)
         result = format_relative_timestamp(ts, tz=tz, date_order=DateOrder.ISO)
     assert result == "yesterday"
+
+
+# ---- resolve_timezone edge cases ----
+
+
+def test_resolve_timezone_falls_back_to_utc_on_system_error() -> None:
+    """Return UTC when system tz detection raises."""
+    with patch("cogitus.datefmt.datetime") as mock_dt:
+        mock_dt.now.side_effect = OSError("no tz")
+        result = resolve_timezone("")
+    assert result == timezone.utc
+
+
+# ---- _tz_abbr edge cases ----
+
+
+class _OffsetOnlyTz(tzinfo):
+    """A tzinfo with an offset but no abbreviation name."""
+
+    def utcoffset(self, _dt: datetime | None = None) -> timedelta:
+        """Return a fixed +05:30 offset."""
+        return timedelta(hours=5, minutes=30)
+
+    def dst(self, _dt: datetime | None = None) -> timedelta | None:
+        """No DST."""
+        return timedelta(0)
+
+    def tzname(self, _dt: datetime | None = None) -> str | None:
+        """Return no abbreviation to trigger the fallback path."""
+        return None
+
+
+class _NoInfoTz(tzinfo):
+    """A tzinfo with neither offset nor abbreviation."""
+
+    def utcoffset(self, _dt: datetime | None = None) -> timedelta | None:
+        """Return None to trigger full fallback."""
+        return None
+
+    def dst(self, _dt: datetime | None = None) -> timedelta | None:
+        """No DST."""
+        return None
+
+    def tzname(self, _dt: datetime | None = None) -> str | None:
+        """Return no abbreviation."""
+        return None
+
+
+def test_tz_abbr_uses_offset_when_abbr_empty() -> None:
+    """When %Z is empty, format the UTC offset instead."""
+    dt = datetime(2025, 1, 1, 12, 0, tzinfo=_OffsetOnlyTz())
+    result = _tz_abbr(dt)
+    assert result == "UTC+05:30"
+
+
+def test_tz_abbr_returns_utc_when_both_empty() -> None:
+    """When both %Z and %z are empty, return 'UTC'."""
+    dt = datetime(2025, 1, 1, 12, 0, tzinfo=_NoInfoTz())
+    result = _tz_abbr(dt)
+    assert result == "UTC"
+
+
+# ---- config validators ----
+
+
+def test_is_valid_timezone_accepts_iana_name() -> None:
+    """Valid IANA timezone name returns True."""
+    assert is_valid_timezone("Europe/London") is True
+
+
+def test_is_valid_timezone_rejects_invalid() -> None:
+    """Invalid timezone string returns False."""
+    assert is_valid_timezone("Not/ARealZone") is False
+
+
+def test_is_valid_timezone_accepts_empty() -> None:
+    """Empty string is valid (means auto-detect)."""
+    assert is_valid_timezone("") is True
+
+
+def test_is_valid_date_format_accepts_known_values() -> None:
+    """Known format strings return True."""
+    for value in ("", "iso", "mdy", "dmy"):
+        assert is_valid_date_format(value) is True
+
+
+def test_is_valid_date_format_rejects_unknown() -> None:
+    """Unknown format string returns False."""
+    assert is_valid_date_format("ymd") is False

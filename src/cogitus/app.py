@@ -16,9 +16,12 @@ from cogitus.backends import (
 )
 from cogitus.config import (
     DEFAULT_THEME,
+    VALID_DATE_FORMATS,
     VALID_NEW_IDEA_GROUP_MODES,
     DataBackendMode,
     get_settings,
+    is_valid_date_format,
+    is_valid_timezone,
     normalize_data_backend_mode,
     normalize_date_format,
     normalize_default_group_name,
@@ -181,6 +184,12 @@ class CogitusApp(App[None]):
         self._timezone = normalize_timezone(self._settings.timezone)
         self._configured_date_format = self._settings.date_format
         self._date_format = normalize_date_format(self._settings.date_format)
+        self._invalid_timezone = not is_valid_timezone(
+            self._configured_timezone
+        )
+        self._invalid_date_format = not is_valid_date_format(
+            self._configured_date_format
+        )
 
     def on_mount(self) -> None:
         """Push the main screen on mount."""
@@ -520,6 +529,24 @@ class CogitusApp(App[None]):
                 "'data_backend_mode="
                 f"{self._configured_data_backend_mode}'; "
                 f"using '{self._data_backend_mode.value}'.",
+                severity="warning",
+            )
+        if self._invalid_timezone:
+            self.notify(
+                "Invalid config "
+                f"'timezone={self._configured_timezone}'; "
+                "using system timezone.",
+                severity="warning",
+            )
+        if self._invalid_date_format:
+            valid_values = ", ".join(
+                f"'{value}'" for value in VALID_DATE_FORMATS
+            )
+            self.notify(
+                "Invalid config "
+                f"'date_format={self._configured_date_format}'; "
+                "using system locale. "
+                f"Valid values: {valid_values}.",
                 severity="warning",
             )
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from simple_toml_settings import TOMLSettings
 
@@ -145,6 +146,23 @@ def normalize_date_format(fmt: str) -> str:
     if normalized in VALID_DATE_FORMATS:
         return normalized
     return DEFAULT_DATE_FORMAT
+
+
+def is_valid_timezone(tz_str: str) -> bool:
+    """Return whether the string is a valid IANA timezone name."""
+    stripped = tz_str.strip()
+    if not stripped:
+        return True
+    try:
+        ZoneInfo(stripped)
+    except ZoneInfoNotFoundError:
+        return False
+    return True
+
+
+def is_valid_date_format(fmt: str) -> bool:
+    """Return whether the string is a recognized date format value."""
+    return fmt.strip().lower() in VALID_DATE_FORMATS
 
 
 def get_settings() -> AppSettings:
