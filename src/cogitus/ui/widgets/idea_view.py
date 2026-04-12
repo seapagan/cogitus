@@ -2,25 +2,25 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from functools import cached_property
 from typing import TYPE_CHECKING
 
 from textual.containers import Vertical, VerticalScroll
 from textual.widgets import Markdown, Static
 
+from cogitus.datefmt import (
+    DateOrder,
+    format_full_timestamp,
+    resolve_date_order,
+    resolve_timezone,
+)
+
 if TYPE_CHECKING:
+    from datetime import tzinfo
+
     from textual.app import ComposeResult
 
     from cogitus.models.idea import Idea
-
-
-def _format_full_timestamp(unix_ts: int) -> str:
-    """Format a unix timestamp as a full date-time."""
-    if unix_ts == 0:
-        return "\u2014"
-    dt = datetime.fromtimestamp(unix_ts, tz=timezone.utc)
-    return dt.strftime("%Y-%m-%d %H:%M UTC")
 
 
 def _escape_label(name: str) -> str:
@@ -41,6 +41,15 @@ class IdeaView(Vertical):
     """Right panel showing full detail of an idea."""
 
     can_focus = False
+    _display_tz: tzinfo
+    _display_order: DateOrder
+
+    def on_mount(self) -> None:
+        """Resolve date formatting config from app settings."""
+        tz_override = getattr(self.app, "_timezone", "")
+        fmt_override = getattr(self.app, "_date_format", "")
+        self._display_tz = resolve_timezone(tz_override)
+        self._display_order = resolve_date_order(fmt_override)
 
     def compose(self) -> ComposeResult:
         """Compose the idea detail view."""
@@ -94,8 +103,16 @@ class IdeaView(Vertical):
         )
         self._tags_widget.update(tag_str)
 
-        created = _format_full_timestamp(idea.created_at)
-        updated = _format_full_timestamp(idea.updated_at)
+        created = format_full_timestamp(
+            idea.created_at,
+            tz=self._display_tz,
+            date_order=self._display_order,
+        )
+        updated = format_full_timestamp(
+            idea.updated_at,
+            tz=self._display_tz,
+            date_order=self._display_order,
+        )
         self._timestamps_widget.update(
             f"Created: {created}  |  Updated: {updated}"
         )

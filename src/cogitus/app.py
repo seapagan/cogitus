@@ -20,10 +20,12 @@ from cogitus.config import (
     DataBackendMode,
     get_settings,
     normalize_data_backend_mode,
+    normalize_date_format,
     normalize_default_group_name,
     normalize_edit_body_cursor_mode,
     normalize_new_idea_group_mode,
     normalize_remote_api_base_url,
+    normalize_timezone,
 )
 from cogitus.db import DEFAULT_DB_PATH, get_db
 from cogitus.metadata import get_app_metadata
@@ -57,6 +59,8 @@ if TYPE_CHECKING:
         remote_api_username: str
         remote_api_password: str
         prompt_after_clone: bool
+        timezone: str
+        date_format: str
 
         def set(
             self,
@@ -173,6 +177,10 @@ class CogitusApp(App[None]):
         self._invalid_data_backend_mode = (
             configured_backend_mode != self._data_backend_mode.value
         )
+        self._configured_timezone = self._settings.timezone
+        self._timezone = normalize_timezone(self._settings.timezone)
+        self._configured_date_format = self._settings.date_format
+        self._date_format = normalize_date_format(self._settings.date_format)
 
     def on_mount(self) -> None:
         """Push the main screen on mount."""

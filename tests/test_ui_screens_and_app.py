@@ -28,6 +28,7 @@ from textual.widgets import (
 )
 from textual.worker import WorkerState
 
+from cogitus import datefmt as datefmt_module
 from cogitus.app import CSS_PATH, CogitusApp
 from cogitus.backends import BackendConfig, RemoteIdeaBackend
 from cogitus.config import (
@@ -55,7 +56,6 @@ from cogitus.ui.screens.idea_form_screen import (
     RemoteStartupRecoveryScreen,
 )
 from cogitus.ui.screens.main_screen import MainScreen
-from cogitus.ui.widgets import idea_list as idea_list_module
 from cogitus.ui.widgets.footer import CogitusStatusBar, FooterNotice
 from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
@@ -130,6 +130,8 @@ class _FakeSettings:
         self.remote_api_username = resolved_backend.api_username
         self.remote_api_password = resolved_backend.api_password
         self.prompt_after_clone = prompt_after_clone
+        self.timezone = ""
+        self.date_format = ""
         self.saved = False
 
     def save(self) -> None:
@@ -2212,7 +2214,7 @@ async def test_main_screen_focus_and_resume_refresh_relative_timestamps(
     """Focus/resume should refresh labels without reloading ideas."""
     base_time = datetime(2025, 2, 7, 14, 5, tzinfo=timezone.utc)
     _FrozenDateTime.current = base_time
-    monkeypatch.setattr(idea_list_module, "datetime", _FrozenDateTime)
+    monkeypatch.setattr(datefmt_module, "datetime", _FrozenDateTime)
 
     service.create_idea("Fresh")
     screen = MainScreen(service)
