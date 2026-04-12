@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import contextlib
 import locale
+import re
 from datetime import datetime, timezone, tzinfo
 from enum import Enum
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 _DAYS_IN_WEEK = 7
+_FIRST_DIRECTIVE_RE = re.compile(r"%(?:[-_0^#]*)([A-Za-z])")
 
 
 class DateOrder(str, Enum):
@@ -50,9 +52,11 @@ def detect_locale_date_order() -> DateOrder:
                 locale.setlocale(locale.LC_TIME, previous)
     if not fmt:
         return DateOrder.ISO
-    if fmt.startswith("%m"):
+    match = _FIRST_DIRECTIVE_RE.search(fmt)
+    first = match.group(1).lower() if match else ""
+    if first == "m":
         return DateOrder.MDY
-    if fmt.startswith("%d"):
+    if first in {"d", "e"}:
         return DateOrder.DMY
     return DateOrder.ISO
 

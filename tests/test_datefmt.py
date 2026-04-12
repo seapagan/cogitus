@@ -59,6 +59,45 @@ def test_detect_locale_date_order_dmy() -> None:
         assert detect_locale_date_order() == DateOrder.DMY
 
 
+def test_detect_locale_date_order_dmy_with_percent_e() -> None:
+    """Detect DMY order when locale uses %e (space-padded day)."""
+    with (
+        patch.object(
+            locale,
+            "setlocale",
+            side_effect=["C", "en_GB.UTF-8", "C"],
+        ),
+        patch.object(locale, "nl_langinfo", return_value="%e/%m/%Y"),
+    ):
+        assert detect_locale_date_order() == DateOrder.DMY
+
+
+def test_detect_locale_date_order_mdy_with_flag() -> None:
+    """Detect MDY order when locale uses flag-modified %-m."""
+    with (
+        patch.object(
+            locale,
+            "setlocale",
+            side_effect=["C", "en_US.UTF-8", "C"],
+        ),
+        patch.object(locale, "nl_langinfo", return_value="%-m/%-d/%Y"),
+    ):
+        assert detect_locale_date_order() == DateOrder.MDY
+
+
+def test_detect_locale_date_order_dmy_with_flag() -> None:
+    """Detect DMY order when locale uses flag-modified %_d."""
+    with (
+        patch.object(
+            locale,
+            "setlocale",
+            side_effect=["C", "en_GB.UTF-8", "C"],
+        ),
+        patch.object(locale, "nl_langinfo", return_value="%_d.%_m.%Y"),
+    ):
+        assert detect_locale_date_order() == DateOrder.DMY
+
+
 def test_detect_locale_date_order_iso_when_starts_with_year() -> None:
     """Detect ISO order when the format string starts with %Y."""
     with (
