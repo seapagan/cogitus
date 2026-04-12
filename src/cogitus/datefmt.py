@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import locale
 from datetime import datetime, timezone, tzinfo
 from enum import Enum
@@ -30,14 +31,23 @@ _DATE_FMT: dict[DateOrder, str] = {
 def detect_locale_date_order() -> DateOrder:
     """Detect date ordering from the system locale.
 
+    Restores the previous LC_TIME value after reading so the
+    process-global locale is not permanently mutated.
+
     Falls back to ISO when locale information is unavailable
     or cannot be parsed.
     """
+    previous: str | None = None
     try:
+        previous = locale.setlocale(locale.LC_TIME)
         locale.setlocale(locale.LC_TIME, "")
         fmt = locale.nl_langinfo(locale.D_FMT)
     except (locale.Error, AttributeError, ValueError):
         return DateOrder.ISO
+    finally:
+        if previous is not None:
+            with contextlib.suppress(locale.Error):
+                locale.setlocale(locale.LC_TIME, previous)
     if not fmt:
         return DateOrder.ISO
     if fmt.startswith("%m"):
@@ -134,9 +144,12 @@ def format_relative_timestamp(
     ``yesterday``, ``3d ago``) for recent timestamps. Falls back to a
     regional short date for anything older than one week.
 
+    Day-boundary decisions ("yesterday", "Xd ago") are made in the
+    display timezone so that labels match what the user sees locally.
+
     Args:
         unix_ts: Unix timestamp in seconds (0 returns empty string).
-        tz: Display timezone (used for the absolute-date fallback).
+        tz: Display timezone for day-boundary and fallback formatting.
         date_order: Regional date component ordering.
 
     Returns:
@@ -144,18 +157,22 @@ def format_relative_timestamp(
     """
     if unix_ts == 0:
         return ""
-    dt = datetime.fromtimestamp(unix_ts, tz=timezone.utc)
-    now = datetime.now(tz=timezone.utc)
-    delta = now - dt
-    if delta.days == 0:
-        hours = delta.seconds // 3600
+    dt_local = datetime.fromtimestamp(unix_ts, tz=tz)
+    now_local = datetime.now(tz=tz)
+    delta = now_local - dt_local
+    total_seconds = int(delta.total_seconds())
+    total_seconds = max(total_seconds, 0)
+    local_date = dt_local.date()
+    today = now_local.date()
+    days_apart = (today - local_date).days
+    if days_apart <= 0:
+        hours = total_seconds // 3600
         if hours == 0:
-            minutes = delta.seconds // 60
+            minutes = total_seconds // 60
             return "just now" if minutes == 0 else f"{minutes}m ago"
         return f"{hours}h ago"
-    if delta.days == 1:
+    if days_apart == 1:
         return "yesterday"
-    if delta.days < _DAYS_IN_WEEK:
-        return f"{delta.days}d ago"
-    local_dt = datetime.fromtimestamp(unix_ts, tz=tz)
-    return local_dt.strftime(_DATE_FMT[date_order])
+    if days_apart < _DAYS_IN_WEEK:
+        return f"{days_apart}d ago"
+    return dt_local.strftime(_DATE_FMT[date_order])

@@ -26,7 +26,7 @@ def _to_unix(dt: datetime) -> int:
 
 
 def test_detect_locale_date_order_returns_iso_on_error() -> None:
-    """Locale detection returns ISO when nl_langinfo is unavailable."""
+    """Locale detection returns ISO when setlocale raises."""
     with patch.object(locale, "setlocale", side_effect=locale.Error):
         assert detect_locale_date_order() == DateOrder.ISO
 
@@ -34,7 +34,11 @@ def test_detect_locale_date_order_returns_iso_on_error() -> None:
 def test_detect_locale_date_order_mdy() -> None:
     """Detect MDY order from a US-style locale format string."""
     with (
-        patch.object(locale, "setlocale", return_value="en_US.UTF-8"),
+        patch.object(
+            locale,
+            "setlocale",
+            side_effect=["C", "en_US.UTF-8", "C"],
+        ),
         patch.object(locale, "nl_langinfo", return_value="%m/%d/%Y"),
     ):
         assert detect_locale_date_order() == DateOrder.MDY
@@ -43,7 +47,11 @@ def test_detect_locale_date_order_mdy() -> None:
 def test_detect_locale_date_order_dmy() -> None:
     """Detect DMY order from a UK-style locale format string."""
     with (
-        patch.object(locale, "setlocale", return_value="en_GB.UTF-8"),
+        patch.object(
+            locale,
+            "setlocale",
+            side_effect=["C", "en_GB.UTF-8", "C"],
+        ),
         patch.object(locale, "nl_langinfo", return_value="%d/%m/%Y"),
     ):
         assert detect_locale_date_order() == DateOrder.DMY
@@ -52,7 +60,11 @@ def test_detect_locale_date_order_dmy() -> None:
 def test_detect_locale_date_order_iso_when_starts_with_year() -> None:
     """Detect ISO order when the format string starts with %Y."""
     with (
-        patch.object(locale, "setlocale", return_value="sv_SE.UTF-8"),
+        patch.object(
+            locale,
+            "setlocale",
+            side_effect=["C", "sv_SE.UTF-8", "C"],
+        ),
         patch.object(locale, "nl_langinfo", return_value="%Y-%m-%d"),
     ):
         assert detect_locale_date_order() == DateOrder.ISO
@@ -61,7 +73,11 @@ def test_detect_locale_date_order_iso_when_starts_with_year() -> None:
 def test_detect_locale_date_order_iso_on_empty_fmt() -> None:
     """Return ISO when nl_langinfo returns an empty string."""
     with (
-        patch.object(locale, "setlocale", return_value="C"),
+        patch.object(
+            locale,
+            "setlocale",
+            side_effect=["C", "C", "C"],
+        ),
         patch.object(locale, "nl_langinfo", return_value=""),
     ):
         assert detect_locale_date_order() == DateOrder.ISO
@@ -88,7 +104,11 @@ def test_resolve_date_order_override_dmy() -> None:
 def test_resolve_date_order_empty_falls_back_to_locale() -> None:
     """Empty string triggers locale detection."""
     with (
-        patch.object(locale, "setlocale", return_value="en_GB.UTF-8"),
+        patch.object(
+            locale,
+            "setlocale",
+            side_effect=["C", "en_GB.UTF-8", "C"],
+        ),
         patch.object(locale, "nl_langinfo", return_value="%d/%m/%Y"),
     ):
         assert resolve_date_order("") == DateOrder.DMY
@@ -97,7 +117,11 @@ def test_resolve_date_order_empty_falls_back_to_locale() -> None:
 def test_resolve_date_order_invalid_falls_back_to_locale() -> None:
     """Invalid override string triggers locale detection."""
     with (
-        patch.object(locale, "setlocale", return_value="en_US.UTF-8"),
+        patch.object(
+            locale,
+            "setlocale",
+            side_effect=["C", "en_US.UTF-8", "C"],
+        ),
         patch.object(locale, "nl_langinfo", return_value="%m/%d/%Y"),
     ):
         assert resolve_date_order("nonsense") == DateOrder.MDY
@@ -121,8 +145,6 @@ def test_resolve_timezone_explicit_zone() -> None:
 def test_resolve_timezone_explicit_utc() -> None:
     """Explicit UTC string resolves to a UTC tzinfo."""
     result = resolve_timezone("UTC")
-    # ZoneInfo("UTC") and timezone.utc are different objects
-    # but represent the same timezone.
     assert isinstance(result, ZoneInfo)
     assert str(result) == "UTC"
 
@@ -189,7 +211,6 @@ def test_format_full_timestamp_local_tz_shows_abbr() -> None:
     ts = _to_unix(datetime(2025, 2, 7, 14, 5, tzinfo=timezone.utc))
     tz = ZoneInfo("Europe/London")
     result = format_full_timestamp(ts, tz=tz, date_order=DateOrder.DMY)
-    # Winter time in London is GMT
     assert result == "07/02/2025 14:05 GMT"
 
 
@@ -278,7 +299,9 @@ def test_format_relative_timestamp_absolute_fallback_iso() -> None:
     now = datetime.now(tz=timezone.utc)
     older = now - timedelta(days=10)
     result = format_relative_timestamp(
-        _to_unix(older), tz=timezone.utc, date_order=DateOrder.ISO
+        _to_unix(older),
+        tz=timezone.utc,
+        date_order=DateOrder.ISO,
     )
     assert result == older.strftime("%Y-%m-%d")
 
@@ -288,18 +311,54 @@ def test_format_relative_timestamp_absolute_fallback_dmy() -> None:
     now = datetime.now(tz=timezone.utc)
     older = now - timedelta(days=10)
     result = format_relative_timestamp(
-        _to_unix(older), tz=timezone.utc, date_order=DateOrder.DMY
+        _to_unix(older),
+        tz=timezone.utc,
+        date_order=DateOrder.DMY,
     )
     assert result == older.strftime("%d/%m/%Y")
 
 
 def test_format_relative_timestamp_absolute_fallback_local_tz() -> None:
     """Absolute fallback converts to the local timezone."""
-    # 2025-02-07 23:30 UTC = 2025-02-07 18:30 EST
     ts = _to_unix(datetime(2025, 2, 7, 23, 30, tzinfo=timezone.utc))
     tz = ZoneInfo("America/New_York")
     now = datetime.now(tz=timezone.utc)
-    # Ensure this is "old enough" (>7 days)
     assert now - datetime.fromtimestamp(ts, tz=timezone.utc) > timedelta(days=7)
     result = format_relative_timestamp(ts, tz=tz, date_order=DateOrder.MDY)
     assert result == "02/07/2025"
+
+
+def test_format_relative_timestamp_yesterday_respects_local_tz() -> None:
+    """Near midnight UTC, 'yesterday' uses local timezone day boundary.
+
+    Item at 2025-02-08 00:30 UTC. In America/New_York that is
+    2025-02-07 19:30 EST. Current time 2025-02-08 02:00 UTC = Feb 7
+    21:00 EST. Same local date, so should be '1h ago' not
+    'yesterday'.
+    """
+    tz = ZoneInfo("America/New_York")
+    ts = _to_unix(datetime(2025, 2, 8, 0, 30, tzinfo=timezone.utc))
+    now = datetime(2025, 2, 8, 2, 0, tzinfo=timezone.utc)
+    with patch("cogitus.datefmt.datetime") as mock_dt:
+        mock_dt.now.return_value = now.astimezone(tz)
+        mock_dt.fromtimestamp.return_value = datetime.fromtimestamp(ts, tz=tz)
+        result = format_relative_timestamp(ts, tz=tz, date_order=DateOrder.ISO)
+    assert result == "1h ago"
+
+
+def test_format_relative_timestamp_same_utc_day_different_local_day() -> None:
+    """Different local day should show 'yesterday' even within 24h.
+
+    Item at 2025-02-08 04:00 UTC. In America/New_York that is
+    2025-02-07 23:00 EST. Current time 2025-02-08 05:00 UTC = Feb 8
+    00:00 EST. Item is local-date Feb 7, now is local-date Feb 8, so
+    'yesterday' is correct despite being only 1h apart.
+    """
+    tz = ZoneInfo("America/New_York")
+    ts = _to_unix(datetime(2025, 2, 8, 4, 0, tzinfo=timezone.utc))
+    now = datetime(2025, 2, 8, 5, 0, tzinfo=timezone.utc)
+    with patch("cogitus.datefmt.datetime") as mock_dt:
+        mock_dt.now.return_value = now.astimezone(tz)
+        mock_dt.fromtimestamp.return_value = datetime.fromtimestamp(ts, tz=tz)
+        result = format_relative_timestamp(ts, tz=tz, date_order=DateOrder.ISO)
+    assert result == "yesterday"
