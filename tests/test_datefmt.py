@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from cogitus.config import is_valid_date_format, is_valid_timezone
 from cogitus.datefmt import (
     DateOrder,
@@ -33,116 +35,29 @@ def test_detect_locale_date_order_returns_iso_on_error() -> None:
         assert detect_locale_date_order() == DateOrder.ISO
 
 
-def test_detect_locale_date_order_mdy() -> None:
-    """Detect MDY order from a US-style locale format string."""
-    with (
-        patch.object(
-            locale,
-            "setlocale",
-            side_effect=["C", "en_US.UTF-8", "C"],
-        ),
-        patch.object(
-            locale,
-            "nl_langinfo",
-            return_value="%m/%d/%Y",
-            create=True,
-        ),
-    ):
-        assert detect_locale_date_order() == DateOrder.MDY
-
-
-def test_detect_locale_date_order_dmy() -> None:
-    """Detect DMY order from a UK-style locale format string."""
-    with (
-        patch.object(
-            locale,
-            "setlocale",
-            side_effect=["C", "en_GB.UTF-8", "C"],
-        ),
-        patch.object(
-            locale,
-            "nl_langinfo",
-            return_value="%d/%m/%Y",
-            create=True,
-        ),
-    ):
-        assert detect_locale_date_order() == DateOrder.DMY
-
-
-def test_detect_locale_date_order_dmy_with_percent_e() -> None:
-    """Detect DMY order when locale uses %e (space-padded day)."""
-    with (
-        patch.object(
-            locale,
-            "setlocale",
-            side_effect=["C", "en_GB.UTF-8", "C"],
-        ),
-        patch.object(
-            locale,
-            "nl_langinfo",
-            return_value="%e/%m/%Y",
-            create=True,
-        ),
-    ):
-        assert detect_locale_date_order() == DateOrder.DMY
-
-
-def test_detect_locale_date_order_mdy_with_flag() -> None:
-    """Detect MDY order when locale uses flag-modified %-m."""
-    with (
-        patch.object(
-            locale,
-            "setlocale",
-            side_effect=["C", "en_US.UTF-8", "C"],
-        ),
-        patch.object(
-            locale,
-            "nl_langinfo",
-            return_value="%-m/%-d/%Y",
-            create=True,
-        ),
-    ):
-        assert detect_locale_date_order() == DateOrder.MDY
-
-
-def test_detect_locale_date_order_dmy_with_flag() -> None:
-    """Detect DMY order when locale uses flag-modified %_d."""
-    with (
-        patch.object(
-            locale,
-            "setlocale",
-            side_effect=["C", "en_GB.UTF-8", "C"],
-        ),
-        patch.object(
-            locale,
-            "nl_langinfo",
-            return_value="%_d.%_m.%Y",
-            create=True,
-        ),
-    ):
-        assert detect_locale_date_order() == DateOrder.DMY
-
-
-def test_detect_locale_date_order_iso_when_starts_with_year() -> None:
-    """Detect ISO order when the format string starts with %Y."""
-    with (
-        patch.object(
-            locale,
-            "setlocale",
-            side_effect=["C", "sv_SE.UTF-8", "C"],
-        ),
-        patch.object(
-            locale,
-            "nl_langinfo",
-            return_value="%Y-%m-%d",
-            create=True,
-        ),
-    ):
-        assert detect_locale_date_order() == DateOrder.ISO
-
-
-def test_detect_locale_date_order_iso_on_empty_fmt() -> None:
-    """Return ISO when nl_langinfo returns an empty string."""
+@pytest.mark.parametrize(
+    ("fmt", "expected"),
+    [
+        ("%m/%d/%Y", DateOrder.MDY),
+        ("%d/%m/%Y", DateOrder.DMY),
+        ("%e/%m/%Y", DateOrder.DMY),
+        ("%-m/%-d/%Y", DateOrder.MDY),
+        ("%_d.%_m.%Y", DateOrder.DMY),
+        ("%Y-%m-%d", DateOrder.ISO),
+        ("", DateOrder.ISO),
+    ],
+    ids=[
+        "mdy",
+        "dmy",
+        "dmy-percent-e",
+        "mdy-flag-minus",
+        "dmy-flag-underscore",
+        "iso-year-first",
+        "iso-empty-fmt",
+    ],
+)
+def test_detect_locale_date_order(fmt: str, expected: DateOrder) -> None:
+    """Detect date ordering from various locale D_FMT values."""
     with (
         patch.object(
             locale,
@@ -152,70 +67,59 @@ def test_detect_locale_date_order_iso_on_empty_fmt() -> None:
         patch.object(
             locale,
             "nl_langinfo",
-            return_value="",
+            return_value=fmt,
             create=True,
         ),
     ):
-        assert detect_locale_date_order() == DateOrder.ISO
+        assert detect_locale_date_order() == expected
 
 
 # ---- resolve_date_order ----
 
 
-def test_resolve_date_order_override_iso() -> None:
-    """Explicit ISO override takes precedence over locale."""
-    assert resolve_date_order("iso") == DateOrder.ISO
+@pytest.mark.parametrize(
+    ("override", "expected"),
+    [
+        ("iso", DateOrder.ISO),
+        ("mdy", DateOrder.MDY),
+        ("dmy", DateOrder.DMY),
+        ("  dmy  ", DateOrder.DMY),
+    ],
+    ids=["iso", "mdy", "dmy", "whitespace-stripped"],
+)
+def test_resolve_date_order_override(
+    override: str, expected: DateOrder
+) -> None:
+    """Explicit override takes precedence over locale."""
+    assert resolve_date_order(override) == expected
 
 
-def test_resolve_date_order_override_mdy() -> None:
-    """Explicit MDY override takes precedence over locale."""
-    assert resolve_date_order("mdy") == DateOrder.MDY
-
-
-def test_resolve_date_order_override_dmy() -> None:
-    """Explicit DMY override takes precedence over locale."""
-    assert resolve_date_order("dmy") == DateOrder.DMY
-
-
-def test_resolve_date_order_empty_falls_back_to_locale() -> None:
-    """Empty string triggers locale detection."""
+@pytest.mark.parametrize(
+    ("override", "fmt", "expected"),
+    [
+        ("", "%d/%m/%Y", DateOrder.DMY),
+        ("nonsense", "%m/%d/%Y", DateOrder.MDY),
+    ],
+    ids=["empty-falls-back", "invalid-falls-back"],
+)
+def test_resolve_date_order_falls_back_to_locale(
+    override: str, fmt: str, expected: DateOrder
+) -> None:
+    """Empty or invalid override triggers locale detection."""
     with (
         patch.object(
             locale,
             "setlocale",
-            side_effect=["C", "en_GB.UTF-8", "C"],
+            side_effect=["C", "C", "C"],
         ),
         patch.object(
             locale,
             "nl_langinfo",
-            return_value="%d/%m/%Y",
+            return_value=fmt,
             create=True,
         ),
     ):
-        assert resolve_date_order("") == DateOrder.DMY
-
-
-def test_resolve_date_order_invalid_falls_back_to_locale() -> None:
-    """Invalid override string triggers locale detection."""
-    with (
-        patch.object(
-            locale,
-            "setlocale",
-            side_effect=["C", "en_US.UTF-8", "C"],
-        ),
-        patch.object(
-            locale,
-            "nl_langinfo",
-            return_value="%m/%d/%Y",
-            create=True,
-        ),
-    ):
-        assert resolve_date_order("nonsense") == DateOrder.MDY
-
-
-def test_resolve_date_order_whitespace_stripped() -> None:
-    """Whitespace is stripped before checking the override."""
-    assert resolve_date_order("  dmy  ") == DateOrder.DMY
+        assert resolve_date_order(override) == expected
 
 
 # ---- resolve_timezone ----
