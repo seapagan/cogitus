@@ -4619,6 +4619,9 @@ async def test_cogitus_app_mount_warns_on_invalid_timezone(
     notify = mocker.patch.object(app, "notify")
 
     async with app.run_test() as pilot:
+        assert app._configured_timezone == "Not/ARealTimezone"
+        assert app._invalid_timezone is True
+        assert app._timezone == "Not/ARealTimezone"
         notify.assert_any_call(
             "Invalid config "
             "'timezone=Not/ARealTimezone'; "
@@ -4640,6 +4643,9 @@ async def test_cogitus_app_mount_warns_on_invalid_date_format(
     notify = mocker.patch.object(app, "notify")
 
     async with app.run_test() as pilot:
+        assert app._configured_date_format == "ymd"
+        assert app._date_format == ""
+        assert app._invalid_date_format is True
         valid_values = ", ".join(f"'{value}'" for value in VALID_DATE_FORMATS)
         notify.assert_any_call(
             "Invalid config 'date_format=ymd'; "
