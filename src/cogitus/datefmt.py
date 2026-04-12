@@ -142,7 +142,7 @@ def format_relative_timestamp(
 
     Produces relative labels (``just now``, ``5m ago``, ``2h ago``,
     ``yesterday``, ``3d ago``) for recent timestamps. Falls back to a
-    regional short date for anything older than one week.
+    regional short date for timestamps 7 days old or older.
 
     Day-boundary decisions ("yesterday", "Xd ago") are made in the
     display timezone so that labels match what the user sees locally.
