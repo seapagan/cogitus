@@ -6,7 +6,8 @@ on:
   pull_request:
     branches: ["main"]
   workflow_dispatch:
-
+permissions:
+  contents: read
 jobs:
   testing:
     # uncomment the line before to disable this job if needed.
