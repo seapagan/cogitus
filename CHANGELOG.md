@@ -9,6 +9,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 **New Features**
 
+- Feat: use regional date formats and local timezone for display ([#62](https://github.com/seapagan/cogitus/pull/62)) by [seapagan](https://github.com/seapagan)
 - Feat: make tags clickable to trigger tag search ([#60](https://github.com/seapagan/cogitus/pull/60)) by [seapagan](https://github.com/seapagan)
 - Add theming docs and persist selected theme across restarts ([#59](https://github.com/seapagan/cogitus/pull/59)) by [seapagan](https://github.com/seapagan)
 - Add remote-to-local clone flow ([#57](https://github.com/seapagan/cogitus/pull/57)) by [seapagan](https://github.com/seapagan)
