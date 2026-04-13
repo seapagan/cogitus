@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from simple_toml_settings import TOMLSettings
 
@@ -50,6 +51,9 @@ DEFAULT_DATA_BACKEND_MODE = DataBackendMode.LOCAL
 DEFAULT_API_AUTH_JWT_ALGORITHM = "HS256"
 DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES = 30
 DEFAULT_THEME = "textual-dark"
+DEFAULT_TIMEZONE = ""
+DEFAULT_DATE_FORMAT = ""
+VALID_DATE_FORMATS: tuple[str, ...] = ("", "iso", "mdy", "dmy")
 
 
 class AppSettings(TOMLSettings):
@@ -71,6 +75,8 @@ class AppSettings(TOMLSettings):
     api_auth_jwt_secret: str = ""
     api_auth_jwt_algorithm: str = DEFAULT_API_AUTH_JWT_ALGORITHM
     api_auth_token_expire_minutes: int = DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES
+    timezone: str = DEFAULT_TIMEZONE
+    date_format: str = DEFAULT_DATE_FORMAT
 
 
 def normalize_edit_body_cursor_mode(mode: str) -> EditBodyCursorMode:
@@ -127,6 +133,36 @@ def normalize_api_auth_token_expire_minutes(minutes: int) -> int:
     if minutes > 0:
         return minutes
     return DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES
+
+
+def normalize_timezone(tz_str: str) -> str:
+    """Normalize configured timezone override with safe default."""
+    return tz_str.strip()
+
+
+def normalize_date_format(fmt: str) -> str:
+    """Normalize configured date format with safe default."""
+    normalized = fmt.strip().lower()
+    if normalized in VALID_DATE_FORMATS:
+        return normalized
+    return DEFAULT_DATE_FORMAT
+
+
+def is_valid_timezone(tz_str: str) -> bool:
+    """Return whether the string is a valid IANA timezone name."""
+    stripped = tz_str.strip()
+    if not stripped:
+        return True
+    try:
+        ZoneInfo(stripped)
+    except (ZoneInfoNotFoundError, ValueError):
+        return False
+    return True
+
+
+def is_valid_date_format(fmt: str) -> bool:
+    """Return whether the string is a recognized date format value."""
+    return fmt.strip().lower() in VALID_DATE_FORMATS
 
 
 def get_settings() -> AppSettings:

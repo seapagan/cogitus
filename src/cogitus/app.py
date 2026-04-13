@@ -16,14 +16,19 @@ from cogitus.backends import (
 )
 from cogitus.config import (
     DEFAULT_THEME,
+    VALID_DATE_FORMATS,
     VALID_NEW_IDEA_GROUP_MODES,
     DataBackendMode,
     get_settings,
+    is_valid_date_format,
+    is_valid_timezone,
     normalize_data_backend_mode,
+    normalize_date_format,
     normalize_default_group_name,
     normalize_edit_body_cursor_mode,
     normalize_new_idea_group_mode,
     normalize_remote_api_base_url,
+    normalize_timezone,
 )
 from cogitus.db import DEFAULT_DB_PATH, get_db
 from cogitus.metadata import get_app_metadata
@@ -57,6 +62,8 @@ if TYPE_CHECKING:
         remote_api_username: str
         remote_api_password: str
         prompt_after_clone: bool
+        timezone: str
+        date_format: str
 
         def set(
             self,
@@ -172,6 +179,16 @@ class CogitusApp(App[None]):
         )
         self._invalid_data_backend_mode = (
             configured_backend_mode != self._data_backend_mode.value
+        )
+        self._configured_timezone = self._settings.timezone
+        self._timezone = normalize_timezone(self._settings.timezone)
+        self._configured_date_format = self._settings.date_format
+        self._date_format = normalize_date_format(self._settings.date_format)
+        self._invalid_timezone = not is_valid_timezone(
+            self._configured_timezone
+        )
+        self._invalid_date_format = not is_valid_date_format(
+            self._configured_date_format
         )
 
     def on_mount(self) -> None:
@@ -512,6 +529,24 @@ class CogitusApp(App[None]):
                 "'data_backend_mode="
                 f"{self._configured_data_backend_mode}'; "
                 f"using '{self._data_backend_mode.value}'.",
+                severity="warning",
+            )
+        if self._invalid_timezone:
+            self.notify(
+                "Invalid config "
+                f"'timezone={self._configured_timezone}'; "
+                "using system timezone.",
+                severity="warning",
+            )
+        if self._invalid_date_format:
+            valid_values = ", ".join(
+                f"'{value}'" for value in VALID_DATE_FORMATS
+            )
+            self.notify(
+                "Invalid config "
+                f"'date_format={self._configured_date_format}'; "
+                "using system locale. "
+                f"Valid values: {valid_values}.",
                 severity="warning",
             )
 

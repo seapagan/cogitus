@@ -12,20 +12,23 @@ from textual.app import App, ComposeResult
 from textual.widgets import Input, Markdown, OptionList, Static, Tree
 from textual.widgets.option_list import Option
 
+from cogitus import datefmt as datefmt_module
+from cogitus.datefmt import (
+    DateOrder,
+    format_full_timestamp,
+    format_relative_timestamp,
+)
 from cogitus.search import SearchMatchFragment, SearchResult
-from cogitus.ui.widgets import idea_list as idea_list_module
 from cogitus.ui.widgets.autocomplete import _AutocompleteState
 from cogitus.ui.widgets.idea_list import (
     IdeaListPanel,
     IdeaTreeNodeData,
-    _format_timestamp,
     _resolve_autocomplete_state,
     _token_bounds,
     _truncate_snippet,
 )
 from cogitus.ui.widgets.idea_view import (
     IdeaView,
-    _format_full_timestamp,
     _tag_click_markup,
 )
 from cogitus.ui.widgets.search_results import (
@@ -98,22 +101,66 @@ def _fake_idea_tree_node(line: int, pk: int) -> TreeNode[IdeaTreeNodeData]:
 def test_format_timestamp_branches() -> None:
     """Relative timestamp helper should cover all formatting branches."""
     now = datetime.now(tz=timezone.utc)
-    assert _format_timestamp(0) == ""
-    assert _format_timestamp(_to_unix(now)) == "just now"
-    assert _format_timestamp(_to_unix(now - timedelta(minutes=2))) == "2m ago"
-    assert _format_timestamp(_to_unix(now - timedelta(hours=2))) == "2h ago"
-    assert _format_timestamp(_to_unix(now - timedelta(days=1))) == "yesterday"
-    assert _format_timestamp(_to_unix(now - timedelta(days=3))) == "3d ago"
+    assert (
+        format_relative_timestamp(0, tz=timezone.utc, date_order=DateOrder.ISO)
+        == ""
+    )
+    assert (
+        format_relative_timestamp(
+            _to_unix(now), tz=timezone.utc, date_order=DateOrder.ISO
+        )
+        == "just now"
+    )
+    assert (
+        format_relative_timestamp(
+            _to_unix(now - timedelta(minutes=2)),
+            tz=timezone.utc,
+            date_order=DateOrder.ISO,
+        )
+        == "2m ago"
+    )
+    assert (
+        format_relative_timestamp(
+            _to_unix(now - timedelta(hours=2)),
+            tz=timezone.utc,
+            date_order=DateOrder.ISO,
+        )
+        == "2h ago"
+    )
+    assert (
+        format_relative_timestamp(
+            _to_unix(now - timedelta(days=1)),
+            tz=timezone.utc,
+            date_order=DateOrder.ISO,
+        )
+        == "yesterday"
+    )
+    assert (
+        format_relative_timestamp(
+            _to_unix(now - timedelta(days=3)),
+            tz=timezone.utc,
+            date_order=DateOrder.ISO,
+        )
+        == "3d ago"
+    )
 
     older = now - timedelta(days=10)
-    assert _format_timestamp(_to_unix(older)) == older.strftime("%Y-%m-%d")
+    assert format_relative_timestamp(
+        _to_unix(older), tz=timezone.utc, date_order=DateOrder.ISO
+    ) == older.strftime("%Y-%m-%d")
 
 
 def test_format_full_timestamp_branches() -> None:
     """Full timestamp helper should return fallback and formatted values."""
-    assert _format_full_timestamp(0) == "—"
+    assert (
+        format_full_timestamp(0, tz=timezone.utc, date_order=DateOrder.ISO)
+        == "—"
+    )
     ts = _to_unix(datetime(2025, 2, 7, 14, 5, tzinfo=timezone.utc))
-    assert _format_full_timestamp(ts) == "2025-02-07 14:05 UTC"
+    assert (
+        format_full_timestamp(ts, tz=timezone.utc, date_order=DateOrder.ISO)
+        == "2025-02-07 14:05 UTC"
+    )
 
 
 @pytest.mark.asyncio
@@ -269,7 +316,7 @@ async def test_idea_list_panel_refreshes_relative_timestamps_in_place(
     """Relative timestamps should update without rebuilding the tree."""
     base_time = datetime(2025, 2, 7, 14, 5, tzinfo=timezone.utc)
     _FrozenDateTime.current = base_time
-    monkeypatch.setattr(idea_list_module, "datetime", _FrozenDateTime)
+    monkeypatch.setattr(datefmt_module, "datetime", _FrozenDateTime)
 
     idea = service.create_idea("Fresh")
     panel = IdeaListPanel(id="idea-list-panel")
@@ -308,7 +355,7 @@ async def test_idea_list_panel_relative_timestamp_refresh_keeps_selection(
     """In-place timestamp refresh should not disturb current selection."""
     base_time = datetime(2025, 2, 7, 14, 5, tzinfo=timezone.utc)
     _FrozenDateTime.current = base_time
-    monkeypatch.setattr(idea_list_module, "datetime", _FrozenDateTime)
+    monkeypatch.setattr(datefmt_module, "datetime", _FrozenDateTime)
 
     first = service.create_idea("First")
     second = service.create_idea("Second")
@@ -350,7 +397,7 @@ async def test_idea_list_panel_relative_timestamp_refresh_skips_search_mode(
     """Active search should suppress the background timestamp relabel."""
     base_time = datetime(2025, 2, 7, 14, 5, tzinfo=timezone.utc)
     _FrozenDateTime.current = base_time
-    monkeypatch.setattr(idea_list_module, "datetime", _FrozenDateTime)
+    monkeypatch.setattr(datefmt_module, "datetime", _FrozenDateTime)
 
     idea = service.create_idea("Fresh")
     panel = IdeaListPanel(id="idea-list-panel")

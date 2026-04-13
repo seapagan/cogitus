@@ -214,6 +214,42 @@ Example:
 prompt_after_clone=false
 ```
 
+### `timezone`
+
+Overrides the display timezone for timestamps shown in the TUI.
+
+- Type: string
+- Default: `""` (auto-detect from system)
+
+When empty, Cogitus uses the system's local timezone. Set to an IANA timezone
+name to force a specific timezone regardless of system configuration.
+
+Example:
+
+```toml
+timezone="Europe/London"
+```
+
+### `date_format`
+
+Overrides the date component ordering used when displaying dates in the TUI.
+
+- Type: string
+- Default: `""` (auto-detect from system locale)
+
+When empty, Cogitus detects the ordering from the system locale. Valid
+options are:
+
+- `"iso"` — `YYYY-MM-DD`
+- `"mdy"` — `MM/DD/YYYY` (US convention)
+- `"dmy"` — `DD/MM/YYYY` (UK/EU convention)
+
+Example:
+
+```toml
+date_format="dmy"
+```
+
 ## Notes
 
 - Settings are saved on app exit.

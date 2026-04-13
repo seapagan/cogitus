@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import timezone, tzinfo
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from rich.text import Text
@@ -12,6 +12,12 @@ from textual.containers import Vertical
 from textual.message import Message
 from textual.widgets import Input, OptionList, Tree
 
+from cogitus.datefmt import (
+    DateOrder,
+    format_relative_timestamp,
+    resolve_date_order,
+    resolve_timezone,
+)
 from cogitus.ui.widgets.autocomplete import (
     _AutocompleteState,
     apply_highlighted_autocomplete,
@@ -34,7 +40,6 @@ if TYPE_CHECKING:
     from cogitus.models.idea import Idea
     from cogitus.search import SearchResult
 
-_DAYS_IN_WEEK = 7
 _MAX_SNIPPET_LENGTH = 88
 _RELATIVE_TIMESTAMP_REFRESH_INTERVAL = 30.0
 _SEARCH_OPERATORS: tuple[str, ...] = ("tag:", "group:")
@@ -60,39 +65,10 @@ class _TokenContext:
     colon_at: int
 
 
-def _format_timestamp(unix_ts: int) -> str:
-    """Format a unix timestamp as a relative string."""
-    if unix_ts == 0:
-        return ""
-    dt = datetime.fromtimestamp(unix_ts, tz=timezone.utc)
-    now = datetime.now(tz=timezone.utc)
-    delta = now - dt
-    if delta.days == 0:
-        hours = delta.seconds // 3600
-        if hours == 0:
-            minutes = delta.seconds // 60
-            return "just now" if minutes == 0 else f"{minutes}m ago"
-        return f"{hours}h ago"
-    if delta.days == 1:
-        return "yesterday"
-    if delta.days < _DAYS_IN_WEEK:
-        return f"{delta.days}d ago"
-    return dt.strftime("%Y-%m-%d")
-
-
 def _format_group_label(name: str, idea_count: int) -> Text:
     """Build a group label with stronger emphasis and a dimmed count."""
     label = Text(name, style="bold")
     label.append(f" ({idea_count})", style="not bold dim")
-    return label
-
-
-def _format_idea_label(idea: Idea) -> Text:
-    """Build an idea label with a secondary timestamp suffix."""
-    ts = _format_timestamp(idea.updated_at)
-    label = Text(idea.title)
-    if ts:
-        label.append(f" [{ts}]", style="dim")
     return label
 
 
@@ -161,6 +137,8 @@ class IdeaListPanel(Vertical):
         self._autocomplete_state: _AutocompleteState | None = None
         self._relative_timestamp_timer: Timer | None = None
         self._suspend_autocomplete_sync = False
+        self._display_tz: tzinfo = timezone.utc
+        self._display_order: DateOrder = DateOrder.ISO
 
     def compose(self) -> ComposeResult:
         """Compose the idea list panel."""
@@ -179,7 +157,11 @@ class IdeaListPanel(Vertical):
         yield SearchResultsList(id="search-results", classes="-hidden")
 
     def on_mount(self) -> None:
-        """Start lightweight periodic refreshes for relative timestamps."""
+        """Resolve date formatting config and start timestamp refreshes."""
+        tz_override = getattr(self.app, "_timezone", "")
+        fmt_override = getattr(self.app, "_date_format", "")
+        self._display_tz = resolve_timezone(tz_override)
+        self._display_order = resolve_date_order(fmt_override)
         self._relative_timestamp_timer = self.set_interval(
             _RELATIVE_TIMESTAMP_REFRESH_INTERVAL,
             self.refresh_relative_timestamps,
@@ -289,6 +271,18 @@ class IdeaListPanel(Vertical):
             tree.select_node(first_idea_node)
             tree.move_cursor(first_idea_node, animate=False)
 
+    def _format_idea_label(self, idea: Idea) -> Text:
+        """Build an idea label with a secondary timestamp suffix."""
+        ts = format_relative_timestamp(
+            idea.updated_at,
+            tz=self._display_tz,
+            date_order=self._display_order,
+        )
+        label = Text(idea.title)
+        if ts:
+            label.append(f" [{ts}]", style="dim")
+        return label
+
     def _add_idea_node(
         self,
         parent: TreeNode[IdeaTreeNodeData],
@@ -297,7 +291,7 @@ class IdeaListPanel(Vertical):
         group_pk: int | None = None,
     ) -> TreeNode[IdeaTreeNodeData]:
         """Add an idea leaf node under parent and track it by primary key."""
-        label = _format_idea_label(idea)
+        label = self._format_idea_label(idea)
         node = parent.add_leaf(
             label,
             data=IdeaTreeNodeData(
@@ -318,7 +312,7 @@ class IdeaListPanel(Vertical):
             idea = self._ideas_by_pk.get(idea_pk)
             if idea is None:
                 continue
-            label = _format_idea_label(idea)
+            label = self._format_idea_label(idea)
             current_label = node.label
             if (
                 not isinstance(current_label, Text)
