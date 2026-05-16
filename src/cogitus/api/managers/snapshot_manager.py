@@ -5,7 +5,10 @@ from cogitus.api.mappers import (
     to_idea_response,
     to_tag_response,
 )
-from cogitus.api.schemas.response.snapshot import SnapshotResponse
+from cogitus.api.schemas.response.snapshot import (
+    SnapshotResponse,
+    SnapshotStateResponse,
+)
 from cogitus.services.idea_service import IdeaService
 
 
@@ -32,3 +35,9 @@ class SnapshotManager:
                     for idea in self._service.list_snapshot_ideas()
                 ],
             )
+
+    def get_state(self) -> SnapshotStateResponse:
+        """Return the current dataset state hash."""
+        return SnapshotStateResponse(
+            dataset_hash=self._service.get_dataset_hash()
+        )

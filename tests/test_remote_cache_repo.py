@@ -10,6 +10,7 @@ from cogitus.api.schemas.response.group import GroupResponse
 from cogitus.api.schemas.response.idea import IdeaResponse
 from cogitus.api.schemas.response.tag import TagResponse
 from cogitus.backends.types import RemoteSnapshot
+from cogitus.hashing import idea_detail_hash
 from cogitus.models.group import Group
 from cogitus.models.tag import Tag
 from cogitus.repositories.remote_cache_repo import RemoteCacheRepository
@@ -67,6 +68,13 @@ def _idea(
         updated_at=timestamps[1],
         title=title,
         body=body,
+        detail_hash=idea_detail_hash(
+            title=title,
+            body=body,
+            tag_names=[tag.name for tag in tags],
+            created_at=timestamps[0],
+            updated_at=timestamps[1],
+        ),
         group=group,
         tags=tags,
     )
@@ -170,7 +178,7 @@ def test_replace_snapshot_preserves_cursor_and_tags(
         ],
     )
 
-    repo.replace_snapshot(snapshot)
+    repo.replace_snapshot(snapshot, dataset_hash="hash-one")
 
     synced = service.get_idea_with_relations(1)
     assert synced is not None
@@ -197,7 +205,8 @@ def test_replace_snapshot_handles_empty_tag_and_idea_lists(
             groups=[_group(pk=1, name="default", created_at=1, updated_at=1)],
             tags=[],
             ideas=[],
-        )
+        ),
+        dataset_hash="hash-empty",
     )
 
     assert service.list_groups()[0].name == "default"

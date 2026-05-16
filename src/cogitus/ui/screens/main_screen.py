@@ -14,6 +14,7 @@ from textual.worker import Worker, WorkerState
 
 from cogitus.backends import BackendConfig
 from cogitus.backends.protocols import SyncingIdeaBackend
+from cogitus.backends.types import RemoteSyncResult
 from cogitus.config import (
     DEFAULT_EDIT_BODY_CURSOR_MODE,
     DEFAULT_NEW_IDEA_GROUP_MODE,
@@ -205,7 +206,7 @@ class MainScreen(Screen[None]):
         self._active_pane: str = "list"
         self._focus_before_search: str = "list"
         self._remote_sync_timer: Timer | None = None
-        self._remote_sync_worker: Worker[None] | None = None
+        self._remote_sync_worker: Worker[RemoteSyncResult] | None = None
         self._remote_clone_worker: Worker[None] | None = None
         self._remote_sync_error: str | None = None
         self._initial_remote_sync_pending = False
@@ -236,12 +237,10 @@ class MainScreen(Screen[None]):
     def on_app_focus(self, _event: AppFocus) -> None:
         """Refresh visible relative timestamps when the app regains focus."""
         self._refresh_relative_timestamps()
-        self._request_remote_sync()
 
     def on_screen_resume(self, _event: ScreenResume) -> None:
         """Refresh visible relative timestamps when this screen resumes."""
         self._refresh_relative_timestamps()
-        self._request_remote_sync()
 
     def replace_service(self, service: IdeaBackend) -> None:
         """Swap in a new backend and refresh the visible state."""
@@ -296,7 +295,6 @@ class MainScreen(Screen[None]):
             return
         if self._remote_sync_in_progress():
             return
-        self._set_sync_indicator()
         self._remote_sync_worker = self._run_remote_sync()
 
     def _remote_sync_in_progress(self) -> bool:
@@ -305,12 +303,12 @@ class MainScreen(Screen[None]):
         return worker is not None and not worker.is_finished
 
     @work(thread=True, exclusive=True, exit_on_error=False)
-    def _run_remote_sync(self) -> None:
+    def _run_remote_sync(self) -> RemoteSyncResult:
         """Refresh the remote cache without blocking the UI."""
         backend = self._syncing_backend()
         if backend is None:
-            return
-        backend.sync_from_remote()
+            return RemoteSyncResult(changed=False)
+        return backend.sync_from_remote()
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         """Refresh the UI when a background remote sync completes."""
@@ -325,7 +323,9 @@ class MainScreen(Screen[None]):
             return
         if event.state == WorkerState.SUCCESS:
             self._handle_remote_sync_success()
-            self._refresh_after_remote_sync()
+            result = event.worker.result
+            if not isinstance(result, RemoteSyncResult) or result.changed:
+                self._refresh_after_remote_sync()
             self._run_pending_pre_edit_action()
             return
         if event.state == WorkerState.ERROR:
@@ -350,7 +350,10 @@ class MainScreen(Screen[None]):
             restore_remote_mode()
         self.notify("Remote API reconnected")
 
-    def _handle_remote_sync_error(self, worker: Worker[None]) -> None:
+    def _handle_remote_sync_error(
+        self,
+        worker: Worker[RemoteSyncResult],
+    ) -> None:
         """Apply UI state updates after a failed remote sync."""
         self._clear_sync_indicator()
         message = (

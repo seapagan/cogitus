@@ -30,7 +30,7 @@ from textual.worker import WorkerState
 
 from cogitus import datefmt as datefmt_module
 from cogitus.app import CSS_PATH, CogitusApp
-from cogitus.backends import BackendConfig, RemoteIdeaBackend
+from cogitus.backends import BackendConfig, RemoteIdeaBackend, RemoteSyncResult
 from cogitus.config import (
     DEFAULT_THEME,
     VALID_DATE_FORMATS,
@@ -2237,6 +2237,10 @@ async def test_main_screen_focus_and_resume_refresh_relative_timestamps(
         assert node.label.plain == f"{idea.title} [just now]"
 
         refresh_ideas = mocker.patch.object(screen, "refresh_ideas")
+        request_remote_sync = mocker.patch.object(
+            screen,
+            "_request_remote_sync",
+        )
 
         _FrozenDateTime.current = base_time + timedelta(hours=2)
         screen.on_app_focus(events.AppFocus())
@@ -2249,6 +2253,7 @@ async def test_main_screen_focus_and_resume_refresh_relative_timestamps(
         assert node.label.plain == f"{idea.title} [3h ago]"
 
         refresh_ideas.assert_not_called()
+        request_remote_sync.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -5379,14 +5384,14 @@ async def test_main_screen_request_remote_sync_schedules_when_idle_and_visible(
             return_value=remote_backend,
         )
         screen._request_remote_sync()
-        set_indicator.assert_called_once_with()
+        set_indicator.assert_not_called()
         run_remote_sync.assert_called_once_with()
 
         set_indicator.reset_mock()
         run_remote_sync.reset_mock()
         screen._remote_sync_worker = mocker.Mock(is_finished=True)
         screen._request_remote_sync()
-        set_indicator.assert_called_once_with()
+        set_indicator.assert_not_called()
         run_remote_sync.assert_called_once_with()
 
         set_indicator.reset_mock()
@@ -5459,7 +5464,7 @@ async def test_main_screen_remote_sync_helper_branches(
 
         worker_runner = inspect.unwrap(MainScreen._run_remote_sync)
         mocker.patch.object(screen, "_syncing_backend", return_value=None)
-        assert worker_runner(screen) is None
+        assert worker_runner(screen) == RemoteSyncResult(changed=False)
         await pilot.pause()
 
 
@@ -5526,6 +5531,60 @@ async def test_main_screen_worker_success_refreshes_after_remote_sync(
 
         refresh_after_sync.assert_called_once_with()
         assert app.sub_title == ""
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_worker_unchanged_sync_skips_refresh(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Unchanged remote sync should clear indicators without reloading UI."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        refresh_after_sync = mocker.patch.object(
+            screen,
+            "_refresh_after_remote_sync",
+        )
+        worker = mocker.Mock(result=RemoteSyncResult(changed=False))
+        screen._remote_sync_worker = worker
+        screen._set_sync_indicator()
+
+        screen.on_worker_state_changed(
+            mocker.Mock(worker=worker, state=WorkerState.SUCCESS)
+        )
+
+        refresh_after_sync.assert_not_called()
+        assert app.sub_title == ""
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_tree_selection_does_not_request_remote_sync(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Tree navigation should read local cache without remote refresh calls."""
+    first = service.create_idea("First")
+    second = service.create_idea("Second")
+    screen = MainScreen(service, initial_select_pk=first.pk)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        request_remote_sync = mocker.patch.object(
+            screen,
+            "_request_remote_sync",
+        )
+        run_remote_sync = mocker.patch.object(screen, "_run_remote_sync")
+
+        screen.on_idea_list_panel_idea_selected(
+            IdeaListPanel.IdeaSelected(second)
+        )
+
+        request_remote_sync.assert_not_called()
+        run_remote_sync.assert_not_called()
         await pilot.pause()
 
 

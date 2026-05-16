@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from cogitus.config import normalize_default_group_name
 from cogitus.constants import DEFAULT_GROUP_NAME
+from cogitus.repositories.dataset_state_repo import DatasetStateRepository
 from cogitus.repositories.group_repo import GroupRepository
 from cogitus.repositories.idea_cursor_state_repo import (
     IdeaCursorStateRepository,
@@ -52,6 +53,7 @@ class IdeaService:
         )
         self._group_repo = GroupRepository(db)
         self._tag_repo = TagRepository(db)
+        self._dataset_state_repo = DatasetStateRepository(db)
         self._cursor_state_repo = IdeaCursorStateRepository(db)
         self._idea_repo = IdeaRepository(
             db,
@@ -87,12 +89,14 @@ class IdeaService:
         Returns:
             The newly created Idea.
         """
-        return self._idea_repo.create(
+        idea = self._idea_repo.create(
             title=title,
             body=body,
             tag_names=self._normalize_tags(tags),
             group_pk=group_pk,
         )
+        self._dataset_state_repo.invalidate()
+        return idea
 
     def update_idea(
         self,
@@ -116,7 +120,7 @@ class IdeaService:
         Returns:
             The updated Idea, or None if not found.
         """
-        return self._idea_repo.update(
+        idea = self._idea_repo.update(
             pk=pk,
             title=title,
             body=body,
@@ -124,6 +128,9 @@ class IdeaService:
             group_pk=group_pk,
             last_known_updated_at=last_known_updated_at,
         )
+        if idea is not None:
+            self._dataset_state_repo.invalidate()
+        return idea
 
     def rename_idea(self, pk: int, title: str) -> Idea | None:
         """Rename an existing idea without rewriting other fields.
@@ -136,13 +143,17 @@ class IdeaService:
             The updated Idea, or None if not found.
         """
         try:
-            return self._idea_repo.rename(pk=pk, title=title)
+            idea = self._idea_repo.rename(pk=pk, title=title)
+            if idea is not None:
+                self._dataset_state_repo.invalidate()
         except ValueError:
             raise
         except Exception as exc:
             logger.exception("Failed to rename idea pk=%s", pk)
             msg = "Failed to rename idea"
             raise ValueError(msg) from exc
+        else:
+            return idea
 
     def delete_idea(
         self,
@@ -160,6 +171,7 @@ class IdeaService:
             pk,
             last_known_updated_at=last_known_updated_at,
         )
+        self._dataset_state_repo.invalidate()
 
     def get_idea(self, pk: int) -> Idea | None:
         """Fetch a single idea.
@@ -175,6 +187,17 @@ class IdeaService:
     def get_idea_with_relations(self, pk: int) -> Idea | None:
         """Fetch one idea with group and tags eagerly loaded."""
         return self._idea_repo.get_with_relations(pk)
+
+    def get_idea_detail_hash(self, pk: int) -> str | None:
+        """Return one idea's rendered-detail hash."""
+        idea = self._idea_repo.get(pk)
+        if idea is None:
+            return None
+        return idea.detail_hash
+
+    def get_dataset_hash(self) -> str:
+        """Return the current API-visible dataset hash."""
+        return self._dataset_state_repo.get_hash()
 
     def list_ideas(
         self,
@@ -227,19 +250,25 @@ class IdeaService:
 
     def create_tag(self, name: str) -> Tag:
         """Create a standalone tag."""
-        return self._tag_repo.create(self._normalize_tag_name(name))
+        tag = self._tag_repo.create(self._normalize_tag_name(name))
+        self._dataset_state_repo.invalidate()
+        return tag
 
     def rename_tag(self, pk: int, name: str) -> Tag | None:
         """Rename an existing tag and refresh search data."""
         tag = self._tag_repo.rename(pk, self._normalize_tag_name(name))
         if tag is not None:
+            self._idea_repo.refresh_all_detail_hashes()
             self._idea_repo.rebuild_search_index()
+            self._dataset_state_repo.invalidate()
         return tag
 
     def delete_tag(self, pk: int) -> None:
         """Delete a tag and refresh search data."""
         self._tag_repo.delete(pk)
+        self._idea_repo.refresh_all_detail_hashes()
         self._idea_repo.rebuild_search_index()
+        self._dataset_state_repo.invalidate()
 
     def list_tags_in_use(self) -> list[Tag]:
         """List tags currently linked to at least one idea."""
@@ -267,7 +296,9 @@ class IdeaService:
 
     def create_group(self, name: str) -> Group:
         """Create a new group."""
-        return self._group_repo.create(name)
+        group = self._group_repo.create(name)
+        self._dataset_state_repo.invalidate()
+        return group
 
     def rename_group(self, pk: int, name: str) -> Group | None:
         """Rename an existing group."""
@@ -281,6 +312,7 @@ class IdeaService:
             renamed = self._group_repo.rename(pk, name)
             if renamed is not None:
                 self._idea_repo.rebuild_search_index()
+                self._dataset_state_repo.invalidate()
         except ValueError:
             raise
         except Exception as exc:
@@ -366,6 +398,7 @@ class IdeaService:
 
         self._idea_repo.bulk_move_group(group_pk, target_group.pk)
         self._group_repo.delete(group_pk)
+        self._dataset_state_repo.invalidate()
 
     @staticmethod
     def _group_sort_key(

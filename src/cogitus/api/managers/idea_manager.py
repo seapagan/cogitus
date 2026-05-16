@@ -9,7 +9,7 @@ from cogitus.api.schemas.request.idea import (
     IdeaCreateRequest,
     IdeaUpdateRequest,
 )
-from cogitus.api.schemas.response.idea import IdeaResponse
+from cogitus.api.schemas.response.idea import IdeaHashResponse, IdeaResponse
 from cogitus.services.idea_service import IdeaService
 
 
@@ -41,6 +41,13 @@ class IdeaManager:
         if idea is None:
             raise_not_found("Idea", idea_pk)
         return to_idea_response(idea)
+
+    def get_idea_hash(self, idea_pk: int) -> IdeaHashResponse:
+        """Return the rendered-detail hash for one idea."""
+        detail_hash = self._service.get_idea_detail_hash(idea_pk)
+        if detail_hash is None:
+            raise_not_found("Idea", idea_pk)
+        return IdeaHashResponse(pk=idea_pk, detail_hash=detail_hash)
 
     def create_idea(self, payload: IdeaCreateRequest) -> IdeaResponse:
         """Create a new idea."""

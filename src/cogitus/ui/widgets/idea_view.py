@@ -44,6 +44,8 @@ class IdeaView(Vertical):
     can_focus = False
     _display_tz: tzinfo = timezone.utc
     _display_order: DateOrder = DateOrder.ISO
+    _displayed_idea_pk: int | None = None
+    _displayed_detail_hash = ""
 
     def on_mount(self) -> None:
         """Resolve date formatting config from app settings."""
@@ -96,6 +98,11 @@ class IdeaView(Vertical):
 
     def show_idea(self, idea: Idea) -> None:
         """Display the given idea in the view."""
+        same_idea = self._displayed_idea_pk == idea.pk
+        if same_idea and self._displayed_detail_hash == idea.detail_hash:
+            return
+
+        scroll_y = self._content_container.scroll_y if same_idea else 0
         self._title_widget.update(idea.title)
 
         tags = idea.tags.fetch_all()
@@ -119,14 +126,32 @@ class IdeaView(Vertical):
         )
 
         self._body_widget.update(idea.body or "*No content*")
+        self._displayed_idea_pk = idea.pk
+        self._displayed_detail_hash = idea.detail_hash
+        self.call_after_refresh(
+            lambda: self._content_container.scroll_to(
+                y=scroll_y,
+                animate=False,
+                immediate=True,
+            )
+        )
 
     def show_empty(self) -> None:
         """Show the empty state."""
+        self._displayed_idea_pk = None
+        self._displayed_detail_hash = ""
         self._title_widget.update("")
         self._tags_widget.update("")
         self._timestamps_widget.update("")
         self._body_widget.update(
             "*Select an idea from the list, or press* `n` *to create one.*"
+        )
+        self.call_after_refresh(
+            lambda: self._content_container.scroll_to(
+                y=0,
+                animate=False,
+                immediate=True,
+            )
         )
 
     def selected_body_text(self) -> str | None:

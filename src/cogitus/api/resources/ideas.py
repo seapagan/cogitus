@@ -11,7 +11,7 @@ from cogitus.api.schemas.request.idea import (
     IdeaDeleteRequest,
     IdeaUpdateRequest,
 )
-from cogitus.api.schemas.response.idea import IdeaResponse
+from cogitus.api.schemas.response.idea import IdeaHashResponse, IdeaResponse
 
 router = APIRouter(
     prefix="/api/v1/ideas",
@@ -41,6 +41,15 @@ async def create_idea(
 ) -> IdeaResponse:
     """Create a new idea."""
     return manager.create_idea(payload)
+
+
+@router.get("/{idea_pk}/hash")
+async def get_idea_hash(
+    idea_pk: int,
+    manager: Annotated[IdeaManager, Depends(get_idea_manager)],
+) -> IdeaHashResponse:
+    """Return a single idea rendered-detail hash."""
+    return manager.get_idea_hash(idea_pk)
 
 
 @router.get("/{idea_pk}")

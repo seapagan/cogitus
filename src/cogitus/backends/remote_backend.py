@@ -13,6 +13,7 @@ from cogitus.api.schemas.request.idea import (
     IdeaUpdateRequest,
 )
 from cogitus.backends.protocols import SyncingIdeaBackend
+from cogitus.backends.types import RemoteSyncResult
 from cogitus.db import enable_wal_mode
 from cogitus.repositories.remote_cache_repo import RemoteCacheRepository
 from cogitus.services.idea_service import IdeaService
@@ -72,6 +73,7 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
                 )
             )
             self._cache_repo.upsert_idea(created)
+            self._invalidate_cache_dataset_hash()
             return self._require_cached_idea(created.pk)
 
     def update_idea(
@@ -129,6 +131,7 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
                 ),
             )
             self._cache_repo.delete_idea(pk)
+            self._invalidate_cache_dataset_hash()
 
     def get_idea(self, pk: int) -> Idea | None:
         """Fetch one cached idea."""
@@ -163,6 +166,7 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         with self._sync_lock:
             created = self._api_client.create_group(name)
             self._cache_repo.upsert_group(created)
+            self._invalidate_cache_dataset_hash()
             return self._require_cached_group(created.pk)
 
     def rename_group(self, pk: int, name: str) -> Group | None:
@@ -174,6 +178,7 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
             renamed = self._api_client.rename_group(pk, name)
             self._cache_repo.upsert_group(renamed)
             self._cache_repo.rebuild_search_index()
+            self._invalidate_cache_dataset_hash()
             return self._require_cached_group(renamed.pk)
 
     def has_ideas_in_group(self, group_pk: int) -> bool:
@@ -206,14 +211,21 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
                 group_pk,
                 move_to_group_pk=move_to_group_pk,
             )
+            self._invalidate_cache_dataset_hash()
 
-    def sync_from_remote(self) -> None:
+    def sync_from_remote(self) -> RemoteSyncResult:
         """Replace the local cache with the latest remote snapshot."""
         with self._sync_lock:
-            snapshot = self._api_client.fetch_snapshot()
+            state = self._api_client.fetch_snapshot_state()
             if threading.get_ident() == self._owner_thread_id:
-                self._cache_repo.replace_snapshot(snapshot)
-                return
+                if self._cache_repo.get_dataset_hash() == state.dataset_hash:
+                    return RemoteSyncResult(changed=False)
+                snapshot = self._api_client.fetch_snapshot()
+                self._cache_repo.replace_snapshot(
+                    snapshot,
+                    dataset_hash=state.dataset_hash,
+                )
+                return RemoteSyncResult(changed=True)
             if self._cache_db.is_memory:
                 msg = "Worker-thread sync requires a file-backed cache database"
                 raise RuntimeError(msg)
@@ -224,9 +236,16 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
                 default_group_name=self.default_group_name,
             )
             try:
-                worker_repo.replace_snapshot(snapshot)
+                if worker_repo.get_dataset_hash() == state.dataset_hash:
+                    return RemoteSyncResult(changed=False)
+                snapshot = self._api_client.fetch_snapshot()
+                worker_repo.replace_snapshot(
+                    snapshot,
+                    dataset_hash=state.dataset_hash,
+                )
             finally:
                 worker_db.close()
+            return RemoteSyncResult(changed=True)
 
     def close(self) -> None:
         """Close the underlying HTTP client."""
@@ -245,6 +264,20 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         worker_db = SqliterDB(db_path)
         enable_wal_mode(worker_db)
         return worker_db
+
+    def _invalidate_cache_dataset_hash(self) -> None:
+        """Mark the cache dataset hash stale using a thread-local DB."""
+        if threading.get_ident() == self._owner_thread_id:
+            self._cache_repo.invalidate_dataset_hash()
+            return
+        worker_db = self._build_worker_cache_db()
+        try:
+            RemoteCacheRepository(
+                worker_db,
+                default_group_name=self.default_group_name,
+            ).invalidate_dataset_hash()
+        finally:
+            worker_db.close()
 
     def _require_cached_group(self, group_pk: int) -> Group:
         """Return a cached group after an API write."""
@@ -287,4 +320,5 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
             IdeaUpdateRequest(**request_kwargs),
         )
         self._cache_repo.upsert_idea(updated)
+        self._invalidate_cache_dataset_hash()
         return self._require_cached_idea(updated.pk)

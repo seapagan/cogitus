@@ -418,5 +418,6 @@ class SnapshotImportRepository:
             updated_at=idea.updated_at,
             title=idea.title,
             body=idea.body,
+            detail_hash=idea.detail_hash,
             group=group,
         )

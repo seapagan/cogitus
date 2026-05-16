@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.tag import Tag
+from cogitus.repositories.dataset_state_repo import DatasetStateRepository
 from cogitus.repositories.group_repo import GroupRepository
 from cogitus.repositories.snapshot_import_repo import SnapshotImportRepository
 from cogitus.search.backend import FtsSearchBackend
@@ -33,12 +34,27 @@ class RemoteCacheRepository:
         self._db = db
         self._default_group_name = default_group_name
         self._group_repo = GroupRepository(db)
+        self._dataset_state_repo = DatasetStateRepository(db)
         self._snapshot_importer = SnapshotImportRepository(db)
         self._search_backend = FtsSearchBackend(db)
 
-    def replace_snapshot(self, snapshot: RemoteSnapshot) -> None:
+    def replace_snapshot(
+        self,
+        snapshot: RemoteSnapshot,
+        *,
+        dataset_hash: str,
+    ) -> None:
         """Replace the entire cache with a fresh remote snapshot."""
         self._snapshot_importer.replace_snapshot(snapshot)
+        self._dataset_state_repo.set_hash(dataset_hash)
+
+    def get_dataset_hash(self) -> str:
+        """Return the locally cached remote dataset hash."""
+        return self._dataset_state_repo.get_hash()
+
+    def invalidate_dataset_hash(self) -> None:
+        """Mark the locally cached dataset hash as stale."""
+        self._dataset_state_repo.set_hash("")
 
     def upsert_group(self, group: GroupResponse) -> None:
         """Insert or update one cached group with remote timestamps."""
@@ -99,6 +115,7 @@ class RemoteCacheRepository:
                     "updated_at": idea.updated_at,
                     "title": idea.title,
                     "body": idea.body,
+                    "detail_hash": idea.detail_hash,
                     "group_id": cached_group.pk,
                 },
             )
@@ -192,6 +209,7 @@ class RemoteCacheRepository:
             updated_at=idea.updated_at,
             title=idea.title,
             body=idea.body,
+            detail_hash=idea.detail_hash,
             group=group,
         )
 

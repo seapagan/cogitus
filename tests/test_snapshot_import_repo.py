@@ -10,6 +10,7 @@ from cogitus.api.schemas.response.group import GroupResponse
 from cogitus.api.schemas.response.idea import IdeaResponse
 from cogitus.api.schemas.response.tag import TagResponse
 from cogitus.backends.types import RemoteSnapshot
+from cogitus.hashing import idea_detail_hash
 from cogitus.repositories.snapshot_import_repo import SnapshotImportRepository
 from cogitus.services.idea_service import IdeaService
 
@@ -66,6 +67,13 @@ def _idea(
         updated_at=timestamps[1],
         title=title,
         body=body,
+        detail_hash=idea_detail_hash(
+            title=title,
+            body=body,
+            tag_names=[tag.name for tag in tags],
+            created_at=timestamps[0],
+            updated_at=timestamps[1],
+        ),
         group=group,
         tags=tags,
     )

@@ -9,6 +9,8 @@ from urllib.parse import parse_qs
 
 import httpx
 
+from cogitus.hashing import dataset_hash, idea_detail_hash
+
 ProtectedRouteHandler = Callable[[httpx.Request], httpx.Response]
 
 REMOTE_USERNAME = "api-user"
@@ -67,6 +69,7 @@ class MockRemoteAPI:
         self._next_tag_pk = 2
         self._next_idea_pk = 2
         self.snapshot_requests = 0
+        self.snapshot_state_requests = 0
         self.list_group_requests = 0
         self.list_tag_requests = 0
         self.list_idea_requests = 0
@@ -161,6 +164,7 @@ class MockRemoteAPI:
     ) -> dict[tuple[str, str], ProtectedRouteHandler]:
         """Return exact-match handlers for authenticated fake API routes."""
         return {
+            ("GET", "/api/v1/snapshot/state"): self._handle_snapshot_state,
             ("GET", "/api/v1/snapshot"): self._handle_snapshot,
             ("GET", "/api/v1/groups"): self._handle_list_groups,
             ("GET", "/api/v1/tags"): self._handle_list_tags,
@@ -174,6 +178,7 @@ class MockRemoteAPI:
     ) -> tuple[tuple[str, str, ProtectedRouteHandler], ...]:
         """Return prefix handlers for authenticated fake API routes."""
         return (
+            ("GET", "/api/v1/ideas/", self._handle_idea_request),
             ("PUT", "/api/v1/ideas/", self._handle_idea_request),
             ("DELETE", "/api/v1/ideas/", self._handle_idea_request),
             ("PUT", "/api/v1/groups/", self._handle_group_request),
@@ -242,6 +247,12 @@ class MockRemoteAPI:
             },
         )
 
+    def _handle_snapshot_state(self, request: httpx.Request) -> httpx.Response:
+        """Return the lightweight dataset hash."""
+        del request
+        self.snapshot_state_requests += 1
+        return self._json_response(200, {"dataset_hash": self.dataset_hash()})
+
     def _handle_token_request(self, request: httpx.Request) -> httpx.Response:
         """Authenticate the fixed test user."""
         parsed = parse_qs(request.content.decode())
@@ -308,13 +319,16 @@ class MockRemoteAPI:
 
     def _handle_idea_request(self, request: httpx.Request) -> httpx.Response:
         """Handle PUT and DELETE requests for one idea."""
-        idea_pk = int(request.url.path.rsplit("/", 1)[1])
+        path_parts = request.url.path.strip("/").split("/")
+        idea_pk = int(path_parts[3])
         idea = self.ideas.get(idea_pk)
         if idea is None:
             return self._json_response(
                 404,
                 {"detail": f"Idea {idea_pk} not found"},
             )
+        if request.method == "GET":
+            return self._handle_get_idea_request(request, idea)
         payload = self._json_payload(request)
         if payload.get("last_known_updated_at") != idea.updated_at:
             return self._json_response(
@@ -343,6 +357,22 @@ class MockRemoteAPI:
                 self._payload_list(payload, "tags")
             )
         idea.updated_at = self._tick
+        return self._json_response(200, self._idea_payload(idea))
+
+    def _handle_get_idea_request(
+        self,
+        request: httpx.Request,
+        idea: StoredIdea,
+    ) -> httpx.Response:
+        """Handle GET requests for one idea or one idea hash."""
+        if request.url.path.endswith("/hash"):
+            return self._json_response(
+                200,
+                {
+                    "pk": idea.pk,
+                    "detail_hash": self._idea_detail_hash(idea),
+                },
+            )
         return self._json_response(200, self._idea_payload(idea))
 
     def _handle_create_group(self, request: httpx.Request) -> httpx.Response:
@@ -505,11 +535,39 @@ class MockRemoteAPI:
             "updated_at": idea.updated_at,
             "title": idea.title,
             "body": idea.body,
+            "detail_hash": self._idea_detail_hash(idea),
             "group": self._group_payload(self.groups[idea.group_pk]),
             "tags": [
                 self._tag_payload(self.tags[tag_pk]) for tag_pk in idea.tag_pks
             ],
         }
+
+    def dataset_hash(self) -> str:
+        """Return a deterministic hash for the fake remote dataset."""
+        group_parts = [
+            f"group:{group.pk}:{group.created_at}:{group.updated_at}:"
+            f"{group.name}"
+            for group in self.groups.values()
+        ]
+        tag_parts = [
+            f"tag:{tag.pk}:{tag.created_at}:{tag.updated_at}:{tag.name}"
+            for tag in self.tags.values()
+        ]
+        idea_parts = [
+            f"idea:{idea.pk}:{self._idea_detail_hash(idea)}"
+            for idea in self.ideas.values()
+        ]
+        return dataset_hash([*group_parts, *tag_parts, *idea_parts])
+
+    def _idea_detail_hash(self, idea: StoredIdea) -> str:
+        """Return the fake remote rendered-detail hash for one idea."""
+        return idea_detail_hash(
+            title=idea.title,
+            body=idea.body,
+            tag_names=[self.tags[tag_pk].name for tag_pk in idea.tag_pks],
+            created_at=idea.created_at,
+            updated_at=idea.updated_at,
+        )
 
     @staticmethod
     def _json_response(

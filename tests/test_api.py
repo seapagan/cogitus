@@ -99,6 +99,30 @@ def test_snapshot_returns_full_remote_dataset(api_client: TestClient) -> None:
         "snapshot",
     ]
     assert [idea["title"] for idea in body["ideas"]] == ["Snapshot idea"]
+    assert len(body["ideas"][0]["detail_hash"]) == 64
+
+
+def test_hash_endpoints_return_lightweight_state(
+    api_client: TestClient,
+) -> None:
+    """Hash endpoints should expose lightweight remote refresh tokens."""
+    created = api_client.post(
+        "/api/v1/ideas",
+        json={"title": "Hash idea", "body": "Tracked body"},
+    )
+    assert created.status_code == 201
+    idea_pk = created.json()["pk"]
+
+    snapshot_state = api_client.get("/api/v1/snapshot/state")
+    idea_hash = api_client.get(f"/api/v1/ideas/{idea_pk}/hash")
+
+    assert snapshot_state.status_code == 200
+    assert len(snapshot_state.json()["dataset_hash"]) == 64
+    assert idea_hash.status_code == 200
+    assert idea_hash.json() == {
+        "pk": idea_pk,
+        "detail_hash": created.json()["detail_hash"],
+    }
 
 
 def test_protected_routes_reject_invalid_tokens(

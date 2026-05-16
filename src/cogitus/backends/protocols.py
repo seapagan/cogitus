@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from cogitus.backends.types import RemoteSyncResult
     from cogitus.models.group import Group
     from cogitus.models.idea import Idea
     from cogitus.models.tag import Tag
@@ -95,5 +96,5 @@ class IdeaBackend(Protocol):
 class SyncingIdeaBackend(IdeaBackend, Protocol):
     """Optional extension for backends that can pull remote state."""
 
-    def sync_from_remote(self) -> None:
+    def sync_from_remote(self) -> RemoteSyncResult:
         """Refresh the local cache from the remote API."""

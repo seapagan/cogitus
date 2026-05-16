@@ -15,6 +15,7 @@ class Idea(BaseDBModel):
 
     title: str
     body: str = ""
+    detail_hash: str = ""
     group: ForeignKey[Group] = ForeignKey(
         Group,
         related_name="ideas",
