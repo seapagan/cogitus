@@ -117,9 +117,12 @@ def _migrate_idea_detail_hash(db: SqliterDB) -> None:
                 "UPDATE ideas SET detail_hash = ? WHERE pk = ?;",
                 (
                     idea_detail_hash(
-                        title=str(title),
-                        body=str(body),
-                        tag_names=[str(row[0]) for row in tag_rows],
+                        title="" if title is None else str(title),
+                        body="" if body is None else str(body),
+                        tag_names=[
+                            "" if row[0] is None else str(row[0])
+                            for row in tag_rows
+                        ],
                         created_at=int(created_at),
                         updated_at=int(updated_at),
                     ),
