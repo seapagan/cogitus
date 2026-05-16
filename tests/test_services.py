@@ -281,6 +281,13 @@ class TestIdeaService:
         assert service.get_idea_scroll_position(idea.pk, idea.detail_hash) == 8
         assert service.get_idea_scroll_position(idea.pk, "stale") is None
 
+    def test_get_idea_detail_hash_returns_none_when_missing(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Missing ideas should not return a detail hash."""
+        assert service.get_idea_detail_hash(99999) is None
+
     def test_create_and_list_groups(self, service: IdeaService) -> None:
         """Groups can be created and listed."""
         service.create_group("backend")

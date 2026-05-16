@@ -608,6 +608,13 @@ class TestIdeaRepository:
         assert len(ideas) == 1
         assert ideas[0].title == "Keep"
 
+    def test_refresh_detail_hash_ignores_missing_idea(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Refreshing a missing idea hash should no-op."""
+        idea_repo.refresh_detail_hash(99999)
+
     def test_delete_removes_db_row_before_search_index(
         self,
         idea_repo: IdeaRepository,
@@ -1061,6 +1068,42 @@ class TestIdeaCursorStateRepository:
         idea_cursor_state_repo.delete_for_idea(idea.pk)
         assert idea_cursor_state_repo.list_positions() == {}
 
+    def test_list_positions_raises_for_non_int_idea_id(
+        self,
+        idea_cursor_state_repo: IdeaCursorStateRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Unexpected non-int idea IDs should fail clearly."""
+
+        class _FakeCursorStateQuery:
+            def order(
+                self,
+                field: str,
+            ) -> _FakeCursorStateQuery:
+                assert field == "updated_at"
+                return self
+
+            @staticmethod
+            def fetch_all() -> list[SimpleNamespace]:
+                return [
+                    SimpleNamespace(
+                        idea_id="oops",
+                        body_cursor_position=1,
+                    )
+                ]
+
+        mocker.patch.object(
+            idea_cursor_state_repo._db,
+            "select",
+            return_value=_FakeCursorStateQuery(),
+        )
+
+        with pytest.raises(
+            TypeError,
+            match=r"Expected IdeaCursorState\.idea_id",
+        ):
+            idea_cursor_state_repo.list_positions()
+
 
 class TestIdeaScrollStateRepository:
     """Tests for IdeaScrollStateRepository."""
@@ -1120,16 +1163,16 @@ class TestIdeaScrollStateRepository:
 
     def test_list_positions_raises_for_non_int_idea_id(
         self,
-        idea_cursor_state_repo: IdeaCursorStateRepository,
+        idea_scroll_state_repo: IdeaScrollStateRepository,
         mocker: MockerFixture,
     ) -> None:
         """Unexpected non-int idea IDs should fail clearly."""
 
-        class _FakeCursorStateQuery:
+        class _FakeScrollStateQuery:
             def order(
                 self,
                 field: str,
-            ) -> _FakeCursorStateQuery:
+            ) -> _FakeScrollStateQuery:
                 assert field == "updated_at"
                 return self
 
@@ -1138,21 +1181,22 @@ class TestIdeaScrollStateRepository:
                 return [
                     SimpleNamespace(
                         idea_id="oops",
-                        body_cursor_position=1,
+                        detail_hash="hash",
+                        scroll_y=1,
                     )
                 ]
 
         mocker.patch.object(
-            idea_cursor_state_repo._db,
+            idea_scroll_state_repo._db,
             "select",
-            return_value=_FakeCursorStateQuery(),
+            return_value=_FakeScrollStateQuery(),
         )
 
         with pytest.raises(
             TypeError,
-            match=r"Expected IdeaCursorState\.idea_id",
+            match=r"Expected IdeaScrollState\.idea_id",
         ):
-            idea_cursor_state_repo.list_positions()
+            idea_scroll_state_repo.list_positions()
 
 
 class TestGroupRepository:

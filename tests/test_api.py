@@ -125,6 +125,14 @@ def test_hash_endpoints_return_lightweight_state(
     }
 
 
+def test_idea_hash_endpoint_returns_not_found(api_client: TestClient) -> None:
+    """Missing idea hash endpoint should return 404."""
+    response = api_client.get("/api/v1/ideas/99999/hash")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Idea 99999 not found"
+
+
 def test_protected_routes_reject_invalid_tokens(
     unauthenticated_api_client: TestClient,
 ) -> None:

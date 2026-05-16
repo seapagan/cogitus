@@ -118,6 +118,16 @@ def test_remote_api_client_fetches_lightweight_hashes() -> None:
     assert api.snapshot_requests == 0
 
 
+def test_remote_api_client_gets_single_idea() -> None:
+    """The remote client should fetch and validate one idea response."""
+    _, client = _build_seeded_remote_client()
+
+    idea = client.get_idea(1)
+
+    assert idea.pk == 1
+    assert idea.title == "Seed idea"
+
+
 def test_remote_api_client_requires_complete_config() -> None:
     """The remote client should reject incomplete remote configuration."""
     client = RemoteAPIClient(

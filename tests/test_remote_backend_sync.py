@@ -197,6 +197,39 @@ def test_remote_backend_sync_from_worker_thread_uses_fresh_db_connection(
         cache_db.close()
 
 
+def test_remote_backend_worker_thread_skips_unchanged_cache(
+    tmp_path: Path,
+) -> None:
+    """Worker-thread sync should skip snapshots when the cache hash matches."""
+    backend = _build_remote_backend_for_file_cache(tmp_path)
+    try:
+        assert backend.sync_from_remote().changed is True
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            result = executor.submit(backend.sync_from_remote).result()
+
+        assert result.changed is False
+    finally:
+        backend._cache_db.close()
+
+
+def test_remote_backend_delegates_scroll_position_to_cache(
+    tmp_path: Path,
+) -> None:
+    """Remote backend should keep rendered scroll state in the local cache."""
+    backend = _build_remote_backend_for_file_cache(tmp_path)
+    try:
+        backend.sync_from_remote()
+        idea = backend.get_idea(1)
+        assert idea is not None
+
+        backend.set_idea_scroll_position(idea.pk, idea.detail_hash, 12)
+
+        assert backend.get_idea_scroll_position(idea.pk, idea.detail_hash) == 12
+    finally:
+        backend._cache_db.close()
+
+
 def test_remote_backend_sync_from_worker_thread_rejects_memory_cache() -> None:
     """Worker-thread sync should fail fast for in-memory caches."""
     cache_db = get_db(memory=True)

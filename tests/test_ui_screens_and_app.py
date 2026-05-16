@@ -3996,6 +3996,13 @@ async def test_cogitus_app_exit_flushes_current_idea_scroll(
     )
 
 
+def test_main_screen_flush_idea_scroll_position_ignores_unmounted(
+    service: IdeaService,
+) -> None:
+    """Unmounted screens should ignore explicit scroll flush requests."""
+    MainScreen(service).flush_idea_scroll_position()
+
+
 @pytest.mark.asyncio
 async def test_cogitus_app_backend_settings_palette_and_shortcut(
     db: SqliterDB,
