@@ -60,6 +60,21 @@ class IdeaBackend(Protocol):
     def set_idea_cursor_position(self, idea_pk: int, position: int) -> None:
         """Persist the remembered cursor position for an idea."""
 
+    def get_idea_scroll_position(
+        self,
+        idea_pk: int,
+        detail_hash: str,
+    ) -> int | None:
+        """Return the remembered rendered-pane scroll position."""
+
+    def set_idea_scroll_position(
+        self,
+        idea_pk: int,
+        detail_hash: str,
+        scroll_y: int,
+    ) -> None:
+        """Persist the remembered rendered-pane scroll position."""
+
     def list_groups(self) -> list[Group]:
         """List all groups."""
 

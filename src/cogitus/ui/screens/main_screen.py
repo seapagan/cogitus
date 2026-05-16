@@ -199,6 +199,7 @@ class MainScreen(Screen[None]):
         self._on_selected_idea_changed = on_selected_idea_changed
         self._edit_body_cursor_mode = edit_body_cursor_mode
         self._new_idea_group_mode = new_idea_group_mode
+        self._preserve_idea_scroll_position = True
         self._app_title = resolved_app_metadata.title
         self._app_version = resolved_app_metadata.version
         self.title = self._app_title
@@ -228,6 +229,9 @@ class MainScreen(Screen[None]):
 
     def on_mount(self) -> None:
         """Load ideas when screen mounts."""
+        self._preserve_idea_scroll_position = bool(
+            getattr(self.app, "_preserve_idea_scroll_position", True)
+        )
         self._base_sub_title = self.app.sub_title
         self.refresh_ideas(select_pk=self._initial_select_pk)
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
@@ -241,6 +245,14 @@ class MainScreen(Screen[None]):
     def on_screen_resume(self, _event: ScreenResume) -> None:
         """Refresh visible relative timestamps when this screen resumes."""
         self._refresh_relative_timestamps()
+
+    def flush_idea_scroll_position(self) -> None:
+        """Persist the currently displayed idea scroll position."""
+        if not self.is_mounted:
+            return
+        self._save_current_idea_scroll(
+            self.query_one("#content-panel", IdeaView)
+        )
 
     def replace_service(self, service: IdeaBackend) -> None:
         """Swap in a new backend and refresh the visible state."""
@@ -752,12 +764,40 @@ class MainScreen(Screen[None]):
         commit_selection: bool,
     ) -> None:
         """Show one idea in the preview pane, or the empty state."""
+        self._save_current_idea_scroll(view)
         if commit_selection:
             self._set_selected_idea(None if idea is None else idea.pk)
         if idea is None:
             view.show_empty()
             return
-        view.show_idea(idea)
+        scroll_y = self._saved_scroll_y_for_idea(idea)
+        if scroll_y is None:
+            view.show_idea(idea)
+            return
+        view.show_idea(idea, scroll_y=scroll_y)
+
+    def _save_current_idea_scroll(self, view: IdeaView) -> None:
+        """Persist current rendered-pane scroll position when enabled."""
+        if not self._preserve_idea_scroll_position:
+            return
+        state = view.current_scroll_state()
+        if state is None:
+            return
+        idea_pk, detail_hash, scroll_y = state
+        self._service.set_idea_scroll_position(
+            idea_pk,
+            detail_hash,
+            scroll_y,
+        )
+
+    def _saved_scroll_y_for_idea(self, idea: Idea) -> int | None:
+        """Return saved rendered-pane scroll position when enabled."""
+        if not self._preserve_idea_scroll_position:
+            return None
+        return self._service.get_idea_scroll_position(
+            idea.pk,
+            idea.detail_hash,
+        )
 
     def _ensure_mutation_allowed(self) -> bool:
         """Return whether mutating actions are allowed right now."""

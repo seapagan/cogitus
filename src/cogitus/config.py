@@ -77,6 +77,7 @@ class AppSettings(TOMLSettings):
     api_auth_token_expire_minutes: int = DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES
     timezone: str = DEFAULT_TIMEZONE
     date_format: str = DEFAULT_DATE_FORMAT
+    preserve_idea_scroll_position: bool = True
 
 
 def normalize_edit_body_cursor_mode(mode: str) -> EditBodyCursorMode:

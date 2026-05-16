@@ -13,6 +13,9 @@ from cogitus.repositories.idea_cursor_state_repo import (
     IdeaCursorStateRepository,
 )
 from cogitus.repositories.idea_repo import IdeaRepository
+from cogitus.repositories.idea_scroll_state_repo import (
+    IdeaScrollStateRepository,
+)
 from cogitus.repositories.tag_repo import TagRepository
 from cogitus.search import parse_search_query
 
@@ -55,6 +58,7 @@ class IdeaService:
         self._tag_repo = TagRepository(db)
         self._dataset_state_repo = DatasetStateRepository(db)
         self._cursor_state_repo = IdeaCursorStateRepository(db)
+        self._scroll_state_repo = IdeaScrollStateRepository(db)
         self._idea_repo = IdeaRepository(
             db,
             self._tag_repo,
@@ -167,6 +171,7 @@ class IdeaService:
             last_known_updated_at: Optional optimistic-lock timestamp.
         """
         self._cursor_state_repo.delete_for_idea(pk)
+        self._scroll_state_repo.delete_for_idea(pk)
         self._idea_repo.delete(
             pk,
             last_known_updated_at=last_known_updated_at,
@@ -285,6 +290,23 @@ class IdeaService:
     def set_idea_cursor_position(self, idea_pk: int, position: int) -> None:
         """Persist body cursor position for an idea."""
         self._cursor_state_repo.set_position(idea_pk, position)
+
+    def get_idea_scroll_position(
+        self,
+        idea_pk: int,
+        detail_hash: str,
+    ) -> int | None:
+        """Return persisted rendered-pane scroll position, if current."""
+        return self._scroll_state_repo.get_position(idea_pk, detail_hash)
+
+    def set_idea_scroll_position(
+        self,
+        idea_pk: int,
+        detail_hash: str,
+        scroll_y: int,
+    ) -> None:
+        """Persist rendered-pane scroll position for an idea."""
+        self._scroll_state_repo.set_position(idea_pk, detail_hash, scroll_y)
 
     def list_groups(self) -> list[Group]:
         """List all groups alphabetically."""

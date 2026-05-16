@@ -14,9 +14,13 @@ from cogitus.api.mappers import (
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.idea_cursor_state import IdeaCursorState
+from cogitus.models.idea_scroll_state import IdeaScrollState
 from cogitus.models.tag import Tag
 from cogitus.repositories.idea_cursor_state_repo import (
     IdeaCursorStateRepository,
+)
+from cogitus.repositories.idea_scroll_state_repo import (
+    IdeaScrollStateRepository,
 )
 from cogitus.search.backend import FtsSearchBackend
 
@@ -57,6 +61,7 @@ class SnapshotImportRepository:
         """Initialize the importer with the target database."""
         self._db = db
         self._cursor_repo = IdeaCursorStateRepository(db)
+        self._scroll_repo = IdeaScrollStateRepository(db)
         self._search_backend = FtsSearchBackend(db)
 
     def replace_snapshot(
@@ -68,6 +73,7 @@ class SnapshotImportRepository:
         """Replace the target database with one full remote snapshot."""
         previous_snapshot = self._current_snapshot()
         cursor_positions = self._cursor_repo.list_positions()
+        scroll_positions = self._scroll_repo.list_positions()
         swap_completed = False
 
         try:
@@ -81,6 +87,12 @@ class SnapshotImportRepository:
                 cursor_positions,
                 valid_idea_pks={idea.pk for idea in snapshot.ideas},
             )
+            self._restore_scroll_positions(
+                scroll_positions,
+                valid_idea_hashes={
+                    idea.pk: idea.detail_hash for idea in snapshot.ideas
+                },
+            )
         # Intentionally catch broad Exception here so any ordinary post-swap
         # failure triggers rollback instead of leaving committed data with a
         # stale or empty search index.
@@ -90,6 +102,7 @@ class SnapshotImportRepository:
             self._restore_previous_snapshot(
                 previous_snapshot,
                 cursor_positions=cursor_positions,
+                scroll_positions=scroll_positions,
             )
             raise
 
@@ -101,6 +114,7 @@ class SnapshotImportRepository:
     ) -> None:
         """Replace only the relational tables for one snapshot."""
         with self._db.connect():
+            self._db.select(IdeaScrollState).delete()
             self._db.select(IdeaCursorState).delete()
             self._db.select(Idea).delete()
             self._db.select(Tag).delete()
@@ -126,6 +140,7 @@ class SnapshotImportRepository:
         snapshot: _StoredSnapshot,
         *,
         cursor_positions: dict[int, int],
+        scroll_positions: dict[int, tuple[str, int]],
     ) -> None:
         """Restore the previous snapshot after a post-swap failure."""
         self._replace_relational_snapshot(snapshot, progress_callback=None)
@@ -133,6 +148,12 @@ class SnapshotImportRepository:
         self._restore_cursor_positions(
             cursor_positions,
             valid_idea_pks={idea.pk for idea in snapshot.ideas},
+        )
+        self._restore_scroll_positions(
+            scroll_positions,
+            valid_idea_hashes={
+                idea.pk: idea.detail_hash for idea in snapshot.ideas
+            },
         )
 
     def _current_snapshot(self) -> _StoredSnapshot:
@@ -367,6 +388,21 @@ class SnapshotImportRepository:
         for idea_pk, position in cursor_positions.items():
             if idea_pk in valid_idea_pks:
                 self._cursor_repo.set_position(idea_pk, position)
+
+    def _restore_scroll_positions(
+        self,
+        scroll_positions: dict[int, tuple[str, int]],
+        *,
+        valid_idea_hashes: dict[int, str],
+    ) -> None:
+        """Restore scroll positions for unchanged ideas that still exist."""
+        for idea_pk, (detail_hash, scroll_y) in scroll_positions.items():
+            if valid_idea_hashes.get(idea_pk) == detail_hash:
+                self._scroll_repo.set_position(
+                    idea_pk,
+                    detail_hash,
+                    scroll_y,
+                )
 
     @staticmethod
     def _report_progress(

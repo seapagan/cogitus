@@ -116,6 +116,11 @@ def test_snapshot_import_replaces_db_and_preserves_cursor_state(
             )
         ],
     )
+    service.set_idea_scroll_position(
+        placeholder.pk,
+        snapshot.ideas[0].detail_hash,
+        13,
+    )
 
     importer.replace_snapshot(snapshot)
 
@@ -127,6 +132,7 @@ def test_snapshot_import_replaces_db_and_preserves_cursor_state(
         "python",
     ]
     assert service.get_idea_cursor_position(1) == 9
+    assert service.get_idea_scroll_position(1, imported.detail_hash) == 13
     assert _assert_first_search_hit_pk(service, "tag:cli") == 1
     assert service.get_idea_with_relations(extra_local.pk) is None
 

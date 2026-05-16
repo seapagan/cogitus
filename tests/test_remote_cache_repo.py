@@ -151,10 +151,10 @@ def _upsert_updated_idea(
     )
 
 
-def test_replace_snapshot_preserves_cursor_and_tags(
+def test_replace_snapshot_preserves_local_state_and_tags(
     db: SqliterDB,
 ) -> None:
-    """Snapshot replacement should preserve cursor state for surviving ideas."""
+    """Snapshot replacement should preserve local state for surviving ideas."""
     service = IdeaService(db)
     repo = RemoteCacheRepository(db, default_group_name="default")
     local = service.create_idea("Local placeholder")
@@ -177,6 +177,11 @@ def test_replace_snapshot_preserves_cursor_and_tags(
             )
         ],
     )
+    service.set_idea_scroll_position(
+        local.pk,
+        snapshot.ideas[0].detail_hash,
+        18,
+    )
 
     repo.replace_snapshot(snapshot, dataset_hash="hash-one")
 
@@ -190,6 +195,7 @@ def test_replace_snapshot_preserves_cursor_and_tags(
         "python",
     ]
     assert service.get_idea_cursor_position(1) == 12
+    assert service.get_idea_scroll_position(1, synced.detail_hash) == 18
     assert service.search_results("tag:api")[0].idea.pk == 1
 
 

@@ -41,6 +41,7 @@ from cogitus.config import (
 from cogitus.db import get_db
 from cogitus.metadata import AppMetadata
 from cogitus.search import SearchResult
+from cogitus.services.idea_service import IdeaService
 from cogitus.ui.screens.idea_form_screen import (
     AboutScreen,
     BackendConfigScreen,
@@ -74,7 +75,6 @@ if TYPE_CHECKING:
     from textual.screen import Screen
 
     from cogitus.repositories.snapshot_import_repo import SnapshotImportProgress
-    from cogitus.services.idea_service import IdeaService
 
 
 class _SingleScreenApp(App[None]):
@@ -102,6 +102,19 @@ class _StyledSingleScreenApp(_SingleScreenApp):
         self._screen = screen
 
 
+class _ScrollConfigSingleScreenApp(_SingleScreenApp):
+    """Host app with rendered idea scroll preservation config."""
+
+    def __init__(
+        self,
+        screen: Screen[Any],
+        *,
+        preserve_idea_scroll_position: bool,
+    ) -> None:
+        super().__init__(screen)
+        self._preserve_idea_scroll_position = preserve_idea_scroll_position
+
+
 class _FakeSettings:
     """Minimal settings double for CogitusApp tests."""
 
@@ -116,6 +129,7 @@ class _FakeSettings:
         prompt_after_clone: bool = True,
         timezone: str = "",
         date_format: str = "",
+        preserve_idea_scroll_position: bool = True,
     ) -> None:
         resolved_backend = backend_config or BackendConfig(
             mode=DataBackendMode.LOCAL,
@@ -135,6 +149,7 @@ class _FakeSettings:
         self.prompt_after_clone = prompt_after_clone
         self.timezone = timezone
         self.date_format = date_format
+        self.preserve_idea_scroll_position = preserve_idea_scroll_position
         self.saved = False
 
     def save(self) -> None:
@@ -219,6 +234,19 @@ async def _wait_for_search_cleared(
             return
         await pilot.pause()
     pytest.fail("Timed out waiting for search to clear")
+
+
+async def _wait_for_scroll_y(
+    pilot: Pilot[Any],
+    container: VerticalScroll,
+    expected: int,
+) -> None:
+    """Wait until a scroll container reaches a vertical offset."""
+    for _ in range(_MAX_WAIT_TICKS):
+        if round(container.scroll_y) == expected:
+            return
+        await pilot.pause()
+    pytest.fail(f"Timed out waiting for scroll_y={expected}")
 
 
 @pytest.mark.asyncio
@@ -3797,6 +3825,96 @@ async def test_main_screen_content_focus_scrolls_markdown(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_restores_saved_idea_scroll_position(
+    service: IdeaService,
+) -> None:
+    """Returning to an idea should restore its rendered-pane scroll."""
+    first = service.create_idea(
+        "First",
+        body="\n".join(f"Line {i}" for i in range(100)),
+    )
+    second = service.create_idea("Second", body="Short body")
+    screen = MainScreen(service, initial_select_pk=first.pk)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        view = screen.query_one("#content-panel", IdeaView)
+        view_container = view.query_one("#idea-view-container", VerticalScroll)
+        await pilot.pause()
+
+        view_container.scroll_to(y=12, animate=False, immediate=True)
+        await pilot.pause()
+        saved_scroll_y = round(view_container.scroll_y)
+        assert saved_scroll_y > 0
+
+        screen.on_idea_list_panel_idea_selected(
+            IdeaListPanel.IdeaSelected(second)
+        )
+        await _wait_for_scroll_y(pilot, view_container, 0)
+        first_hash = service.get_idea(first.pk)
+        assert first_hash is not None
+        assert (
+            service.get_idea_scroll_position(
+                first.pk,
+                first_hash.detail_hash,
+            )
+            == saved_scroll_y
+        )
+
+        screen.on_idea_list_panel_idea_selected(
+            IdeaListPanel.IdeaSelected(first)
+        )
+        await _wait_for_scroll_y(pilot, view_container, saved_scroll_y)
+
+
+@pytest.mark.asyncio
+async def test_main_screen_scroll_restore_can_be_disabled(
+    service: IdeaService,
+) -> None:
+    """Disabled scroll preservation should leave ideas starting at top."""
+    first = service.create_idea(
+        "First",
+        body="\n".join(f"Line {i}" for i in range(100)),
+    )
+    second = service.create_idea("Second", body="Short body")
+    screen = MainScreen(
+        service,
+        initial_select_pk=first.pk,
+    )
+    app = _ScrollConfigSingleScreenApp(
+        screen,
+        preserve_idea_scroll_position=False,
+    )
+
+    async with app.run_test() as pilot:
+        view = screen.query_one("#content-panel", IdeaView)
+        view_container = view.query_one("#idea-view-container", VerticalScroll)
+        await pilot.pause()
+
+        view_container.scroll_to(y=12, animate=False, immediate=True)
+        await pilot.pause()
+
+        screen.on_idea_list_panel_idea_selected(
+            IdeaListPanel.IdeaSelected(second)
+        )
+        await _wait_for_scroll_y(pilot, view_container, 0)
+        first_hash = service.get_idea(first.pk)
+        assert first_hash is not None
+        assert (
+            service.get_idea_scroll_position(
+                first.pk,
+                first_hash.detail_hash,
+            )
+            is None
+        )
+
+        screen.on_idea_list_panel_idea_selected(
+            IdeaListPanel.IdeaSelected(first)
+        )
+        await _wait_for_scroll_y(pilot, view_container, 0)
+
+
+@pytest.mark.asyncio
 async def test_cogitus_app_mount_and_exit(db: SqliterDB) -> None:
     """Cogitus app should restore and persist last viewed idea."""
     settings = _FakeSettings(last_viewed_idea_pk=0)
@@ -3811,6 +3929,40 @@ async def test_cogitus_app_mount_and_exit(db: SqliterDB) -> None:
 
     assert settings.last_viewed_idea_pk == 7
     assert settings.saved is True
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_exit_flushes_current_idea_scroll(
+    db: SqliterDB,
+) -> None:
+    """App exit should persist scroll for the currently displayed idea."""
+    service = IdeaService(db)
+    idea = service.create_idea(
+        "Scrollable",
+        body="\n".join(f"Line {i}" for i in range(100)),
+    )
+    app = CogitusApp(
+        db=db,
+        settings=_FakeSettings(last_viewed_idea_pk=idea.pk),
+    )
+
+    async with app.run_test() as pilot:
+        view = app.screen.query_one("#content-panel", IdeaView)
+        view_container = view.query_one("#idea-view-container", VerticalScroll)
+        await pilot.pause()
+
+        view_container.scroll_to(y=10, animate=False, immediate=True)
+        await pilot.pause()
+        saved_scroll_y = round(view_container.scroll_y)
+        app.exit()
+        await pilot.pause()
+
+    saved_idea = service.get_idea(idea.pk)
+    assert saved_idea is not None
+    assert (
+        service.get_idea_scroll_position(idea.pk, saved_idea.detail_hash)
+        == saved_scroll_y
+    )
 
 
 @pytest.mark.asyncio

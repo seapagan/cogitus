@@ -267,6 +267,20 @@ class TestIdeaService:
         service.set_idea_cursor_position(idea.pk, 8)
         assert service.get_idea_cursor_position(idea.pk) == 8
 
+    def test_idea_scroll_position_roundtrip(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Scroll position should be persisted for unchanged idea details."""
+        idea = service.create_idea("Scroll")
+        assert (
+            service.get_idea_scroll_position(idea.pk, idea.detail_hash) is None
+        )
+
+        service.set_idea_scroll_position(idea.pk, idea.detail_hash, 8)
+        assert service.get_idea_scroll_position(idea.pk, idea.detail_hash) == 8
+        assert service.get_idea_scroll_position(idea.pk, "stale") is None
+
     def test_create_and_list_groups(self, service: IdeaService) -> None:
         """Groups can be created and listed."""
         service.create_group("backend")

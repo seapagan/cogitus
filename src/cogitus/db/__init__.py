@@ -20,6 +20,7 @@ from cogitus.models.dataset_state import DatasetState
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.idea_cursor_state import IdeaCursorState
+from cogitus.models.idea_scroll_state import IdeaScrollState
 from cogitus.models.tag import Tag
 from cogitus.repositories.dataset_state_repo import DatasetStateRepository
 from cogitus.search.backend import FtsSearchBackend, ensure_search_tables
@@ -173,6 +174,7 @@ def get_db(
         _migrate_ideas_group_fk(db, default_group_pk)
     db.create_table(Idea)
     db.create_table(IdeaCursorState)
+    db.create_table(IdeaScrollState)
     if not ideas_existed:
         _migrate_ideas_group_fk(db, default_group_pk)
     _migrate_idea_detail_hash(db)

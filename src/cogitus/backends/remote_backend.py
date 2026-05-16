@@ -153,6 +153,30 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         """Persist the client-local cursor position for an idea."""
         self._cache_service.set_idea_cursor_position(idea_pk, position)
 
+    def get_idea_scroll_position(
+        self,
+        idea_pk: int,
+        detail_hash: str,
+    ) -> int | None:
+        """Return the client-local rendered-pane scroll position."""
+        return self._cache_service.get_idea_scroll_position(
+            idea_pk,
+            detail_hash,
+        )
+
+    def set_idea_scroll_position(
+        self,
+        idea_pk: int,
+        detail_hash: str,
+        scroll_y: int,
+    ) -> None:
+        """Persist the client-local rendered-pane scroll position."""
+        self._cache_service.set_idea_scroll_position(
+            idea_pk,
+            detail_hash,
+            scroll_y,
+        )
+
     def list_groups(self) -> list[Group]:
         """List cached groups."""
         return self._cache_service.list_groups()

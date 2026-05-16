@@ -22,6 +22,9 @@ if TYPE_CHECKING:
     from cogitus.repositories.idea_cursor_state_repo import (
         IdeaCursorStateRepository,
     )
+    from cogitus.repositories.idea_scroll_state_repo import (
+        IdeaScrollStateRepository,
+    )
     from cogitus.repositories.tag_repo import TagRepository
 
 
@@ -1057,6 +1060,63 @@ class TestIdeaCursorStateRepository:
 
         idea_cursor_state_repo.delete_for_idea(idea.pk)
         assert idea_cursor_state_repo.list_positions() == {}
+
+
+class TestIdeaScrollStateRepository:
+    """Tests for IdeaScrollStateRepository."""
+
+    def test_get_position_returns_none_when_missing(
+        self,
+        idea_scroll_state_repo: IdeaScrollStateRepository,
+    ) -> None:
+        """Missing scroll state should return None."""
+        assert idea_scroll_state_repo.get_position(12345, "hash") is None
+
+    def test_set_position_creates_and_updates(
+        self,
+        idea_scroll_state_repo: IdeaScrollStateRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """set_position should create and then update existing state."""
+        idea = idea_repo.create("Scroll")
+        idea_scroll_state_repo.set_position(idea.pk, "hash-a", 3)
+        assert idea_scroll_state_repo.get_position(idea.pk, "hash-a") == 3
+
+        idea_scroll_state_repo.set_position(idea.pk, "hash-b", 7)
+        assert idea_scroll_state_repo.get_position(idea.pk, "hash-a") is None
+        assert idea_scroll_state_repo.get_position(idea.pk, "hash-b") == 7
+
+    def test_set_position_clamps_negative_values(
+        self,
+        idea_scroll_state_repo: IdeaScrollStateRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Negative scroll positions should be clamped to zero."""
+        idea = idea_repo.create("Scroll")
+        idea_scroll_state_repo.set_position(idea.pk, "hash", -10)
+        assert idea_scroll_state_repo.get_position(idea.pk, "hash") == 0
+
+    def test_set_position_missing_idea_noop(
+        self,
+        idea_scroll_state_repo: IdeaScrollStateRepository,
+    ) -> None:
+        """Missing idea should no-op when setting scroll position."""
+        idea_scroll_state_repo.set_position(99999, "hash", 4)
+        assert idea_scroll_state_repo.get_position(99999, "hash") is None
+
+    def test_list_positions_and_delete_for_idea(
+        self,
+        idea_scroll_state_repo: IdeaScrollStateRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Scroll positions should list and delete persisted state."""
+        idea = idea_repo.create("Scroll")
+        idea_scroll_state_repo.set_position(idea.pk, "hash", 9)
+
+        assert idea_scroll_state_repo.list_positions() == {idea.pk: ("hash", 9)}
+
+        idea_scroll_state_repo.delete_for_idea(idea.pk)
+        assert idea_scroll_state_repo.list_positions() == {}
 
     def test_list_positions_raises_for_non_int_idea_id(
         self,
