@@ -1699,7 +1699,11 @@ async def test_idea_view_skips_same_hash_markdown_update(
         body = view.query_one("#idea-view-body", Markdown)
         update = mocker.patch.object(body, "update")
 
-        view.show_idea(idea)
+        same_hash_idea = service.get_idea(idea.pk)
+        assert same_hash_idea is not None
+        assert same_hash_idea is not idea
+
+        view.show_idea(same_hash_idea)
         await pilot.pause()
 
         update.assert_not_called()
