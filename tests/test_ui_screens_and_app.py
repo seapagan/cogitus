@@ -1991,7 +1991,7 @@ async def test_main_screen_selection_and_search(
             IdeaListPanel.SearchChanged("fir")
         )
         search.assert_called_once_with("fir")
-        selected_view.assert_called_once_with(first)
+        selected_view.assert_called_once_with(first, scroll_y=0)
 
         search.reset_mock()
         screen.on_idea_list_panel_search_changed(
@@ -3380,7 +3380,7 @@ async def test_main_screen_search_refresh_select_pk_commits_selected_hit(
 
         assert selected_pks == [idea.pk]
         set_selected.assert_called_once_with(idea.pk)
-        show_idea.assert_called_once_with(idea)
+        show_idea.assert_called_once_with(idea, scroll_y=0)
 
 
 @pytest.mark.asyncio

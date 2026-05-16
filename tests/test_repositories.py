@@ -574,6 +574,33 @@ class TestIdeaRepository:
         assert len(tags) == 1
         assert tags[0].name == "new"
 
+    def test_returned_ideas_have_persisted_detail_hash(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Mutating methods should return ideas with current detail hashes."""
+        created = idea_repo.create("Created", tag_names=["old"])
+        persisted_created = idea_repo.get(created.pk)
+        assert persisted_created is not None
+        assert created.detail_hash == persisted_created.detail_hash
+
+        updated = idea_repo.update(
+            created.pk,
+            "Updated",
+            "Body",
+            tag_names=["new"],
+        )
+        persisted_updated = idea_repo.get(created.pk)
+        assert updated is not None
+        assert persisted_updated is not None
+        assert updated.detail_hash == persisted_updated.detail_hash
+
+        renamed = idea_repo.rename(created.pk, "Renamed")
+        persisted_renamed = idea_repo.get(created.pk)
+        assert renamed is not None
+        assert persisted_renamed is not None
+        assert renamed.detail_hash == persisted_renamed.detail_hash
+
     def test_update_with_missing_group_raises(
         self,
         idea_repo: IdeaRepository,
