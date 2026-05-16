@@ -50,7 +50,7 @@ Ideas to add to Cogitus
 
 ## Documentation
 
-- None
+- Improve example responses in the swagger docs
 
 ## Export, Import, and Backup
 
