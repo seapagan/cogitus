@@ -214,6 +214,31 @@ Example:
 prompt_after_clone=false
 ```
 
+### `save_idea_scroll_pos`
+
+Controls whether Cogitus saves and restores the rendered idea pane scroll
+position when switching between ideas.
+
+- Type: boolean
+- Default: `true`
+
+Behavior:
+
+- `true`
+  - Saves each idea's rendered-pane scroll position locally.
+  - Restores the position only while the rendered idea content is unchanged.
+- `false`
+  - Starts each idea at the top of the rendered pane.
+
+This is local UI state. In remote mode it is stored only in the local cache and
+is not sent to the API or shared with other users.
+
+Example:
+
+```toml
+save_idea_scroll_pos=false
+```
+
 ### `timezone`
 
 Overrides the display timezone for timestamps shown in the TUI.

@@ -64,7 +64,7 @@ if TYPE_CHECKING:
         prompt_after_clone: bool
         timezone: str
         date_format: str
-        preserve_idea_scroll_position: bool
+        save_idea_scroll_pos: bool
 
         def set(
             self,
@@ -186,7 +186,7 @@ class CogitusApp(App[None]):
         self._configured_date_format = self._settings.date_format
         self._date_format = normalize_date_format(self._settings.date_format)
         self._preserve_idea_scroll_position = bool(
-            self._settings.preserve_idea_scroll_position
+            self._settings.save_idea_scroll_pos
         )
         self._invalid_timezone = not is_valid_timezone(
             self._configured_timezone

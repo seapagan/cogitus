@@ -109,10 +109,10 @@ class _ScrollConfigSingleScreenApp(_SingleScreenApp):
         self,
         screen: Screen[Any],
         *,
-        preserve_idea_scroll_position: bool,
+        save_idea_scroll_pos: bool,
     ) -> None:
         super().__init__(screen)
-        self._preserve_idea_scroll_position = preserve_idea_scroll_position
+        self._preserve_idea_scroll_position = save_idea_scroll_pos
 
 
 class _FakeSettings:
@@ -129,7 +129,7 @@ class _FakeSettings:
         prompt_after_clone: bool = True,
         timezone: str = "",
         date_format: str = "",
-        preserve_idea_scroll_position: bool = True,
+        save_idea_scroll_pos: bool = True,
     ) -> None:
         resolved_backend = backend_config or BackendConfig(
             mode=DataBackendMode.LOCAL,
@@ -149,7 +149,7 @@ class _FakeSettings:
         self.prompt_after_clone = prompt_after_clone
         self.timezone = timezone
         self.date_format = date_format
-        self.preserve_idea_scroll_position = preserve_idea_scroll_position
+        self.save_idea_scroll_pos = save_idea_scroll_pos
         self.saved = False
 
     def save(self) -> None:
@@ -247,6 +247,35 @@ async def _wait_for_scroll_y(
             return
         await pilot.pause()
     pytest.fail(f"Timed out waiting for scroll_y={expected}")
+
+
+async def _wait_for_scrollable(
+    pilot: Pilot[Any],
+    container: VerticalScroll,
+) -> None:
+    """Wait until a scroll container has vertical overflow."""
+    for _ in range(_MAX_WAIT_TICKS):
+        if container.max_scroll_y > 0:
+            return
+        await pilot.pause()
+    pytest.fail("Timed out waiting for scrollable content")
+
+
+async def _scroll_content_down(
+    pilot: Pilot[Any],
+    view: IdeaView,
+    container: VerticalScroll,
+) -> int:
+    """Scroll the idea content pane using normal keyboard input."""
+    view.focus_content()
+    await pilot.pause()
+    for _ in range(_MAX_WAIT_TICKS):
+        await pilot.press("down")
+        await pilot.pause()
+        scroll_y = round(container.scroll_y)
+        if scroll_y > 0:
+            return scroll_y
+    pytest.fail("Timed out waiting for keyboard scroll")
 
 
 @pytest.mark.asyncio
@@ -3840,12 +3869,13 @@ async def test_main_screen_restores_saved_idea_scroll_position(
     async with app.run_test() as pilot:
         view = screen.query_one("#content-panel", IdeaView)
         view_container = view.query_one("#idea-view-container", VerticalScroll)
-        await pilot.pause()
+        await _wait_for_scrollable(pilot, view_container)
 
-        view_container.scroll_to(y=12, animate=False, immediate=True)
-        await pilot.pause()
-        saved_scroll_y = round(view_container.scroll_y)
-        assert saved_scroll_y > 0
+        saved_scroll_y = await _scroll_content_down(
+            pilot,
+            view,
+            view_container,
+        )
 
         screen.on_idea_list_panel_idea_selected(
             IdeaListPanel.IdeaSelected(second)
@@ -3883,16 +3913,15 @@ async def test_main_screen_scroll_restore_can_be_disabled(
     )
     app = _ScrollConfigSingleScreenApp(
         screen,
-        preserve_idea_scroll_position=False,
+        save_idea_scroll_pos=False,
     )
 
     async with app.run_test() as pilot:
         view = screen.query_one("#content-panel", IdeaView)
         view_container = view.query_one("#idea-view-container", VerticalScroll)
-        await pilot.pause()
+        await _wait_for_scrollable(pilot, view_container)
 
-        view_container.scroll_to(y=12, animate=False, immediate=True)
-        await pilot.pause()
+        await _scroll_content_down(pilot, view, view_container)
 
         screen.on_idea_list_panel_idea_selected(
             IdeaListPanel.IdeaSelected(second)
@@ -3949,11 +3978,13 @@ async def test_cogitus_app_exit_flushes_current_idea_scroll(
     async with app.run_test() as pilot:
         view = app.screen.query_one("#content-panel", IdeaView)
         view_container = view.query_one("#idea-view-container", VerticalScroll)
-        await pilot.pause()
+        await _wait_for_scrollable(pilot, view_container)
 
-        view_container.scroll_to(y=10, animate=False, immediate=True)
-        await pilot.pause()
-        saved_scroll_y = round(view_container.scroll_y)
+        saved_scroll_y = await _scroll_content_down(
+            pilot,
+            view,
+            view_container,
+        )
         app.exit()
         await pilot.pause()
 
