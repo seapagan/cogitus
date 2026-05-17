@@ -39,7 +39,9 @@ hooks = [
     "typer",
     "types-pyperclip",
     "uvicorn",
-  ], args = ["--strict"] },
+  ], args = [
+    "--strict",
+  ] },
 ]
 
 
@@ -47,14 +49,14 @@ hooks = [
 repo = "https://github.com/astral-sh/uv-pre-commit"
 rev = "0.10.0"
 hooks = [
-  { id = "uv-lock" },
-  { id = "uv-export", name = "Export dependencies to 'requirements.txt'", args = [
+  { id = "uv-lock", env = { UV_FROZEN = "1" } },
+  { id = "uv-export", name = "Export dependencies to 'requirements.txt'", env = { UV_FROZEN = "1" }, args = [
     "--no-hashes",
     "--no-dev",
     "--no-emit-project",
     "--output-file=requirements.txt",
   ] },
-  { id = "uv-export", name = "Export dev dependencies to 'requirements-dev.txt'", args = [
+  { id = "uv-export", name = "Export dev dependencies to 'requirements-dev.txt'", env = { UV_FROZEN = "1" }, args = [
     "--no-hashes",
     "--no-emit-project",
     "--output-file=requirements-dev.txt",
