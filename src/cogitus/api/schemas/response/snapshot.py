@@ -19,6 +19,12 @@ class SnapshotResponse(BaseModel):
     ideas: list[IdeaResponse]
 
 
+class SnapshotStateResponse(BaseModel):
+    """Lightweight API response for remote cache state checks."""
+
+    dataset_hash: str
+
+
 SnapshotResponse.model_rebuild(
     _types_namespace={
         "GroupResponse": GroupResponse,

@@ -16,5 +16,15 @@ class IdeaResponse(BaseModel):
     updated_at: int
     title: str
     body: str
+    detail_hash: str
     group: GroupResponse
     tags: list[TagResponse]
+
+
+class IdeaHashResponse(BaseModel):
+    """API response for one idea rendered-detail hash."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pk: int
+    detail_hash: str

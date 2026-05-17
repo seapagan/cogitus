@@ -104,6 +104,30 @@ def test_remote_api_client_fetch_snapshot_uses_snapshot_route() -> None:
     assert api.list_idea_requests == 0
 
 
+def test_remote_api_client_fetches_lightweight_hashes() -> None:
+    """The remote client should fetch dataset and idea hashes directly."""
+    api, client = _build_seeded_remote_client()
+
+    snapshot_state = client.fetch_snapshot_state()
+    idea_hash = client.get_idea_hash(1)
+
+    assert snapshot_state.dataset_hash == api.dataset_hash()
+    assert idea_hash.pk == 1
+    assert len(idea_hash.detail_hash) == 64
+    assert api.snapshot_state_requests == 1
+    assert api.snapshot_requests == 0
+
+
+def test_remote_api_client_gets_single_idea() -> None:
+    """The remote client should fetch and validate one idea response."""
+    _, client = _build_seeded_remote_client()
+
+    idea = client.get_idea(1)
+
+    assert idea.pk == 1
+    assert idea.title == "Seed idea"
+
+
 def test_remote_api_client_requires_complete_config() -> None:
     """The remote client should reject incomplete remote configuration."""
     client = RemoteAPIClient(

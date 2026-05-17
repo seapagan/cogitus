@@ -22,6 +22,9 @@ if TYPE_CHECKING:
     from cogitus.repositories.idea_cursor_state_repo import (
         IdeaCursorStateRepository,
     )
+    from cogitus.repositories.idea_scroll_state_repo import (
+        IdeaScrollStateRepository,
+    )
     from cogitus.repositories.tag_repo import TagRepository
 
 
@@ -571,6 +574,33 @@ class TestIdeaRepository:
         assert len(tags) == 1
         assert tags[0].name == "new"
 
+    def test_returned_ideas_have_persisted_detail_hash(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Mutating methods should return ideas with current detail hashes."""
+        created = idea_repo.create("Created", tag_names=["old"])
+        persisted_created = idea_repo.get(created.pk)
+        assert persisted_created is not None
+        assert created.detail_hash == persisted_created.detail_hash
+
+        updated = idea_repo.update(
+            created.pk,
+            "Updated",
+            "Body",
+            tag_names=["new"],
+        )
+        persisted_updated = idea_repo.get(created.pk)
+        assert updated is not None
+        assert persisted_updated is not None
+        assert updated.detail_hash == persisted_updated.detail_hash
+
+        renamed = idea_repo.rename(created.pk, "Renamed")
+        persisted_renamed = idea_repo.get(created.pk)
+        assert renamed is not None
+        assert persisted_renamed is not None
+        assert renamed.detail_hash == persisted_renamed.detail_hash
+
     def test_update_with_missing_group_raises(
         self,
         idea_repo: IdeaRepository,
@@ -604,6 +634,13 @@ class TestIdeaRepository:
         ideas = idea_repo.list_all()
         assert len(ideas) == 1
         assert ideas[0].title == "Keep"
+
+    def test_refresh_detail_hash_ignores_missing_idea(
+        self,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Refreshing a missing idea hash should no-op."""
+        idea_repo.refresh_detail_hash(99999)
 
     def test_delete_removes_db_row_before_search_index(
         self,
@@ -1093,6 +1130,100 @@ class TestIdeaCursorStateRepository:
             match=r"Expected IdeaCursorState\.idea_id",
         ):
             idea_cursor_state_repo.list_positions()
+
+
+class TestIdeaScrollStateRepository:
+    """Tests for IdeaScrollStateRepository."""
+
+    def test_get_position_returns_none_when_missing(
+        self,
+        idea_scroll_state_repo: IdeaScrollStateRepository,
+    ) -> None:
+        """Missing scroll state should return None."""
+        assert idea_scroll_state_repo.get_position(12345, "hash") is None
+
+    def test_set_position_creates_and_updates(
+        self,
+        idea_scroll_state_repo: IdeaScrollStateRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """set_position should create and then update existing state."""
+        idea = idea_repo.create("Scroll")
+        idea_scroll_state_repo.set_position(idea.pk, "hash-a", 3)
+        assert idea_scroll_state_repo.get_position(idea.pk, "hash-a") == 3
+
+        idea_scroll_state_repo.set_position(idea.pk, "hash-b", 7)
+        assert idea_scroll_state_repo.get_position(idea.pk, "hash-a") is None
+        assert idea_scroll_state_repo.get_position(idea.pk, "hash-b") == 7
+
+    def test_set_position_clamps_negative_values(
+        self,
+        idea_scroll_state_repo: IdeaScrollStateRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Negative scroll positions should be clamped to zero."""
+        idea = idea_repo.create("Scroll")
+        idea_scroll_state_repo.set_position(idea.pk, "hash", -10)
+        assert idea_scroll_state_repo.get_position(idea.pk, "hash") == 0
+
+    def test_set_position_missing_idea_noop(
+        self,
+        idea_scroll_state_repo: IdeaScrollStateRepository,
+    ) -> None:
+        """Missing idea should no-op when setting scroll position."""
+        idea_scroll_state_repo.set_position(99999, "hash", 4)
+        assert idea_scroll_state_repo.get_position(99999, "hash") is None
+
+    def test_list_positions_and_delete_for_idea(
+        self,
+        idea_scroll_state_repo: IdeaScrollStateRepository,
+        idea_repo: IdeaRepository,
+    ) -> None:
+        """Scroll positions should list and delete persisted state."""
+        idea = idea_repo.create("Scroll")
+        idea_scroll_state_repo.set_position(idea.pk, "hash", 9)
+
+        assert idea_scroll_state_repo.list_positions() == {idea.pk: ("hash", 9)}
+
+        idea_scroll_state_repo.delete_for_idea(idea.pk)
+        assert idea_scroll_state_repo.list_positions() == {}
+
+    def test_list_positions_raises_for_non_int_idea_id(
+        self,
+        idea_scroll_state_repo: IdeaScrollStateRepository,
+        mocker: MockerFixture,
+    ) -> None:
+        """Unexpected non-int idea IDs should fail clearly."""
+
+        class _FakeScrollStateQuery:
+            def order(
+                self,
+                field: str,
+            ) -> _FakeScrollStateQuery:
+                assert field == "updated_at"
+                return self
+
+            @staticmethod
+            def fetch_all() -> list[SimpleNamespace]:
+                return [
+                    SimpleNamespace(
+                        idea_id="oops",
+                        detail_hash="hash",
+                        scroll_y=1,
+                    )
+                ]
+
+        mocker.patch.object(
+            idea_scroll_state_repo._db,
+            "select",
+            return_value=_FakeScrollStateQuery(),
+        )
+
+        with pytest.raises(
+            TypeError,
+            match=r"Expected IdeaScrollState\.idea_id",
+        ):
+            idea_scroll_state_repo.list_positions()
 
 
 class TestGroupRepository:

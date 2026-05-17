@@ -30,7 +30,7 @@ from textual.worker import WorkerState
 
 from cogitus import datefmt as datefmt_module
 from cogitus.app import CSS_PATH, CogitusApp
-from cogitus.backends import BackendConfig, RemoteIdeaBackend
+from cogitus.backends import BackendConfig, RemoteIdeaBackend, RemoteSyncResult
 from cogitus.config import (
     DEFAULT_THEME,
     VALID_DATE_FORMATS,
@@ -41,6 +41,7 @@ from cogitus.config import (
 from cogitus.db import get_db
 from cogitus.metadata import AppMetadata
 from cogitus.search import SearchResult
+from cogitus.services.idea_service import IdeaService
 from cogitus.ui.screens.idea_form_screen import (
     AboutScreen,
     BackendConfigScreen,
@@ -74,7 +75,6 @@ if TYPE_CHECKING:
     from textual.screen import Screen
 
     from cogitus.repositories.snapshot_import_repo import SnapshotImportProgress
-    from cogitus.services.idea_service import IdeaService
 
 
 class _SingleScreenApp(App[None]):
@@ -102,6 +102,19 @@ class _StyledSingleScreenApp(_SingleScreenApp):
         self._screen = screen
 
 
+class _ScrollConfigSingleScreenApp(_SingleScreenApp):
+    """Host app with rendered idea scroll preservation config."""
+
+    def __init__(
+        self,
+        screen: Screen[Any],
+        *,
+        save_idea_scroll_pos: bool,
+    ) -> None:
+        super().__init__(screen)
+        self._preserve_idea_scroll_position = save_idea_scroll_pos
+
+
 class _FakeSettings:
     """Minimal settings double for CogitusApp tests."""
 
@@ -116,6 +129,7 @@ class _FakeSettings:
         prompt_after_clone: bool = True,
         timezone: str = "",
         date_format: str = "",
+        save_idea_scroll_pos: bool = True,
     ) -> None:
         resolved_backend = backend_config or BackendConfig(
             mode=DataBackendMode.LOCAL,
@@ -135,6 +149,7 @@ class _FakeSettings:
         self.prompt_after_clone = prompt_after_clone
         self.timezone = timezone
         self.date_format = date_format
+        self.save_idea_scroll_pos = save_idea_scroll_pos
         self.saved = False
 
     def save(self) -> None:
@@ -219,6 +234,48 @@ async def _wait_for_search_cleared(
             return
         await pilot.pause()
     pytest.fail("Timed out waiting for search to clear")
+
+
+async def _wait_for_scroll_y(
+    pilot: Pilot[Any],
+    container: VerticalScroll,
+    expected: int,
+) -> None:
+    """Wait until a scroll container reaches a vertical offset."""
+    for _ in range(_MAX_WAIT_TICKS):
+        if round(container.scroll_y) == expected:
+            return
+        await pilot.pause()
+    pytest.fail(f"Timed out waiting for scroll_y={expected}")
+
+
+async def _wait_for_scrollable(
+    pilot: Pilot[Any],
+    container: VerticalScroll,
+) -> None:
+    """Wait until a scroll container has vertical overflow."""
+    for _ in range(_MAX_WAIT_TICKS):
+        if container.max_scroll_y > 0:
+            return
+        await pilot.pause()
+    pytest.fail("Timed out waiting for scrollable content")
+
+
+async def _scroll_content_down(
+    pilot: Pilot[Any],
+    view: IdeaView,
+    container: VerticalScroll,
+) -> int:
+    """Scroll the idea content pane using normal keyboard input."""
+    view.focus_content()
+    await pilot.pause()
+    for _ in range(_MAX_WAIT_TICKS):
+        await pilot.press("down")
+        await pilot.pause()
+        scroll_y = round(container.scroll_y)
+        if scroll_y > 0:
+            return scroll_y
+    pytest.fail("Timed out waiting for keyboard scroll")
 
 
 @pytest.mark.asyncio
@@ -1934,7 +1991,7 @@ async def test_main_screen_selection_and_search(
             IdeaListPanel.SearchChanged("fir")
         )
         search.assert_called_once_with("fir")
-        selected_view.assert_called_once_with(first)
+        selected_view.assert_called_once_with(first, scroll_y=0)
 
         search.reset_mock()
         screen.on_idea_list_panel_search_changed(
@@ -2237,6 +2294,10 @@ async def test_main_screen_focus_and_resume_refresh_relative_timestamps(
         assert node.label.plain == f"{idea.title} [just now]"
 
         refresh_ideas = mocker.patch.object(screen, "refresh_ideas")
+        request_remote_sync = mocker.patch.object(
+            screen,
+            "_request_remote_sync",
+        )
 
         _FrozenDateTime.current = base_time + timedelta(hours=2)
         screen.on_app_focus(events.AppFocus())
@@ -2249,6 +2310,7 @@ async def test_main_screen_focus_and_resume_refresh_relative_timestamps(
         assert node.label.plain == f"{idea.title} [3h ago]"
 
         refresh_ideas.assert_not_called()
+        request_remote_sync.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -3318,7 +3380,7 @@ async def test_main_screen_search_refresh_select_pk_commits_selected_hit(
 
         assert selected_pks == [idea.pk]
         set_selected.assert_called_once_with(idea.pk)
-        show_idea.assert_called_once_with(idea)
+        show_idea.assert_called_once_with(idea, scroll_y=0)
 
 
 @pytest.mark.asyncio
@@ -3792,6 +3854,96 @@ async def test_main_screen_content_focus_scrolls_markdown(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_restores_saved_idea_scroll_position(
+    service: IdeaService,
+) -> None:
+    """Returning to an idea should restore its rendered-pane scroll."""
+    first = service.create_idea(
+        "First",
+        body="\n".join(f"Line {i}" for i in range(100)),
+    )
+    second = service.create_idea("Second", body="Short body")
+    screen = MainScreen(service, initial_select_pk=first.pk)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        view = screen.query_one("#content-panel", IdeaView)
+        view_container = view.query_one("#idea-view-container", VerticalScroll)
+        await _wait_for_scrollable(pilot, view_container)
+
+        saved_scroll_y = await _scroll_content_down(
+            pilot,
+            view,
+            view_container,
+        )
+
+        screen.on_idea_list_panel_idea_selected(
+            IdeaListPanel.IdeaSelected(second)
+        )
+        await _wait_for_scroll_y(pilot, view_container, 0)
+        first_hash = service.get_idea(first.pk)
+        assert first_hash is not None
+        assert (
+            service.get_idea_scroll_position(
+                first.pk,
+                first_hash.detail_hash,
+            )
+            == saved_scroll_y
+        )
+
+        screen.on_idea_list_panel_idea_selected(
+            IdeaListPanel.IdeaSelected(first)
+        )
+        await _wait_for_scroll_y(pilot, view_container, saved_scroll_y)
+
+
+@pytest.mark.asyncio
+async def test_main_screen_scroll_restore_can_be_disabled(
+    service: IdeaService,
+) -> None:
+    """Disabled scroll preservation should leave ideas starting at top."""
+    first = service.create_idea(
+        "First",
+        body="\n".join(f"Line {i}" for i in range(100)),
+    )
+    second = service.create_idea("Second", body="Short body")
+    screen = MainScreen(
+        service,
+        initial_select_pk=first.pk,
+    )
+    app = _ScrollConfigSingleScreenApp(
+        screen,
+        save_idea_scroll_pos=False,
+    )
+
+    async with app.run_test() as pilot:
+        view = screen.query_one("#content-panel", IdeaView)
+        view_container = view.query_one("#idea-view-container", VerticalScroll)
+        await _wait_for_scrollable(pilot, view_container)
+
+        await _scroll_content_down(pilot, view, view_container)
+
+        screen.on_idea_list_panel_idea_selected(
+            IdeaListPanel.IdeaSelected(second)
+        )
+        await _wait_for_scroll_y(pilot, view_container, 0)
+        first_hash = service.get_idea(first.pk)
+        assert first_hash is not None
+        assert (
+            service.get_idea_scroll_position(
+                first.pk,
+                first_hash.detail_hash,
+            )
+            is None
+        )
+
+        screen.on_idea_list_panel_idea_selected(
+            IdeaListPanel.IdeaSelected(first)
+        )
+        await _wait_for_scroll_y(pilot, view_container, 0)
+
+
+@pytest.mark.asyncio
 async def test_cogitus_app_mount_and_exit(db: SqliterDB) -> None:
     """Cogitus app should restore and persist last viewed idea."""
     settings = _FakeSettings(last_viewed_idea_pk=0)
@@ -3806,6 +3958,49 @@ async def test_cogitus_app_mount_and_exit(db: SqliterDB) -> None:
 
     assert settings.last_viewed_idea_pk == 7
     assert settings.saved is True
+
+
+@pytest.mark.asyncio
+async def test_cogitus_app_exit_flushes_current_idea_scroll(
+    db: SqliterDB,
+) -> None:
+    """App exit should persist scroll for the currently displayed idea."""
+    service = IdeaService(db)
+    idea = service.create_idea(
+        "Scrollable",
+        body="\n".join(f"Line {i}" for i in range(100)),
+    )
+    app = CogitusApp(
+        db=db,
+        settings=_FakeSettings(last_viewed_idea_pk=idea.pk),
+    )
+
+    async with app.run_test() as pilot:
+        view = app.screen.query_one("#content-panel", IdeaView)
+        view_container = view.query_one("#idea-view-container", VerticalScroll)
+        await _wait_for_scrollable(pilot, view_container)
+
+        saved_scroll_y = await _scroll_content_down(
+            pilot,
+            view,
+            view_container,
+        )
+        app.exit()
+        await pilot.pause()
+
+    saved_idea = service.get_idea(idea.pk)
+    assert saved_idea is not None
+    assert (
+        service.get_idea_scroll_position(idea.pk, saved_idea.detail_hash)
+        == saved_scroll_y
+    )
+
+
+def test_main_screen_flush_idea_scroll_position_ignores_unmounted(
+    service: IdeaService,
+) -> None:
+    """Unmounted screens should ignore explicit scroll flush requests."""
+    MainScreen(service).flush_idea_scroll_position()
 
 
 @pytest.mark.asyncio
@@ -5379,14 +5574,14 @@ async def test_main_screen_request_remote_sync_schedules_when_idle_and_visible(
             return_value=remote_backend,
         )
         screen._request_remote_sync()
-        set_indicator.assert_called_once_with()
+        set_indicator.assert_not_called()
         run_remote_sync.assert_called_once_with()
 
         set_indicator.reset_mock()
         run_remote_sync.reset_mock()
         screen._remote_sync_worker = mocker.Mock(is_finished=True)
         screen._request_remote_sync()
-        set_indicator.assert_called_once_with()
+        set_indicator.assert_not_called()
         run_remote_sync.assert_called_once_with()
 
         set_indicator.reset_mock()
@@ -5459,7 +5654,7 @@ async def test_main_screen_remote_sync_helper_branches(
 
         worker_runner = inspect.unwrap(MainScreen._run_remote_sync)
         mocker.patch.object(screen, "_syncing_backend", return_value=None)
-        assert worker_runner(screen) is None
+        assert worker_runner(screen) == RemoteSyncResult(changed=False)
         await pilot.pause()
 
 
@@ -5526,6 +5721,60 @@ async def test_main_screen_worker_success_refreshes_after_remote_sync(
 
         refresh_after_sync.assert_called_once_with()
         assert app.sub_title == ""
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_worker_unchanged_sync_skips_refresh(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Unchanged remote sync should clear indicators without reloading UI."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        refresh_after_sync = mocker.patch.object(
+            screen,
+            "_refresh_after_remote_sync",
+        )
+        worker = mocker.Mock(result=RemoteSyncResult(changed=False))
+        screen._remote_sync_worker = worker
+        screen._set_sync_indicator()
+
+        screen.on_worker_state_changed(
+            mocker.Mock(worker=worker, state=WorkerState.SUCCESS)
+        )
+
+        refresh_after_sync.assert_not_called()
+        assert app.sub_title == ""
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_tree_selection_does_not_request_remote_sync(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Tree navigation should read local cache without remote refresh calls."""
+    first = service.create_idea("First")
+    second = service.create_idea("Second")
+    screen = MainScreen(service, initial_select_pk=first.pk)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        request_remote_sync = mocker.patch.object(
+            screen,
+            "_request_remote_sync",
+        )
+        run_remote_sync = mocker.patch.object(screen, "_run_remote_sync")
+
+        screen.on_idea_list_panel_idea_selected(
+            IdeaListPanel.IdeaSelected(second)
+        )
+
+        request_remote_sync.assert_not_called()
+        run_remote_sync.assert_not_called()
         await pilot.pause()
 
 

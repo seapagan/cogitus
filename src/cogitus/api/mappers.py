@@ -42,6 +42,7 @@ def to_idea_response(idea: Idea) -> IdeaResponse:
         updated_at=idea.updated_at,
         title=idea.title,
         body=idea.body,
+        detail_hash=idea.detail_hash,
         group=to_group_response(idea.group),
         tags=[to_tag_response(tag) for tag in idea.tags.fetch_all()],
     )

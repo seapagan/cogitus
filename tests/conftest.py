@@ -16,6 +16,9 @@ from cogitus.repositories.idea_cursor_state_repo import (
     IdeaCursorStateRepository,
 )
 from cogitus.repositories.idea_repo import IdeaRepository
+from cogitus.repositories.idea_scroll_state_repo import (
+    IdeaScrollStateRepository,
+)
 from cogitus.repositories.tag_repo import TagRepository
 from cogitus.services.idea_service import IdeaService
 
@@ -62,6 +65,12 @@ def idea_repo(
 def idea_cursor_state_repo(db: SqliterDB) -> IdeaCursorStateRepository:
     """Provide IdeaCursorStateRepository backed by in-memory db."""
     return IdeaCursorStateRepository(db)
+
+
+@pytest.fixture
+def idea_scroll_state_repo(db: SqliterDB) -> IdeaScrollStateRepository:
+    """Provide IdeaScrollStateRepository backed by in-memory db."""
+    return IdeaScrollStateRepository(db)
 
 
 @pytest.fixture

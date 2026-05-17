@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from datetime import tzinfo
 
     from textual.app import ComposeResult
+    from textual.await_complete import AwaitComplete
 
     from cogitus.models.idea import Idea
 
@@ -44,6 +45,9 @@ class IdeaView(Vertical):
     can_focus = False
     _display_tz: tzinfo = timezone.utc
     _display_order: DateOrder = DateOrder.ISO
+    _displayed_idea_pk: int | None = None
+    _displayed_detail_hash = ""
+    _scroll_restore_token = 0
 
     def on_mount(self) -> None:
         """Resolve date formatting config from app settings."""
@@ -94,8 +98,24 @@ class IdeaView(Vertical):
         """Focus the scrollable content container for keyboard navigation."""
         self._content_container.focus()
 
-    def show_idea(self, idea: Idea) -> None:
+    def current_scroll_state(self) -> tuple[int, str, int] | None:
+        """Return current displayed idea scroll state, if one is shown."""
+        if self._displayed_idea_pk is None:
+            return None
+        return (
+            self._displayed_idea_pk,
+            self._displayed_detail_hash,
+            max(0, round(self._content_container.scroll_y)),
+        )
+
+    def show_idea(self, idea: Idea, *, scroll_y: int | None = None) -> None:
         """Display the given idea in the view."""
+        same_idea = self._displayed_idea_pk == idea.pk
+        if same_idea and self._displayed_detail_hash == idea.detail_hash:
+            if scroll_y is not None:
+                self._restore_scroll(scroll_y)
+            return
+
         self._title_widget.update(idea.title)
 
         tags = idea.tags.fetch_all()
@@ -118,16 +138,63 @@ class IdeaView(Vertical):
             f"Created: {created}  |  Updated: {updated}"
         )
 
-        self._body_widget.update(idea.body or "*No content*")
+        update_complete = self._body_widget.update(idea.body or "*No content*")
+        self._displayed_idea_pk = idea.pk
+        self._displayed_detail_hash = idea.detail_hash
+        self._scroll_restore_token += 1
+        restore_token = self._scroll_restore_token
+        self.run_worker(
+            self._restore_scroll_after_update(
+                update_complete,
+                0 if scroll_y is None else scroll_y,
+                restore_token,
+            ),
+            name="idea-view-scroll-restore",
+            group="idea-view",
+            exit_on_error=False,
+        )
+
+    async def _restore_scroll_after_update(
+        self,
+        update_complete: AwaitComplete,
+        scroll_y: int,
+        restore_token: int,
+    ) -> None:
+        """Restore scroll after Markdown has mounted its updated blocks."""
+        await update_complete
+        if restore_token == self._scroll_restore_token:
+            self.call_after_refresh(self._restore_scroll, scroll_y)
+
+    def _restore_scroll(self, scroll_y: int) -> None:
+        """Restore the rendered idea pane to a vertical offset."""
+        self._content_container.scroll_to(
+            y=max(0, scroll_y),
+            animate=False,
+            immediate=True,
+        )
+
+    def _reset_display_scroll(self) -> None:
+        """Reset the rendered idea pane to the top."""
+        self.call_after_refresh(
+            lambda: self._content_container.scroll_to(
+                y=0,
+                animate=False,
+                immediate=True,
+            )
+        )
 
     def show_empty(self) -> None:
         """Show the empty state."""
+        self._scroll_restore_token += 1
+        self._displayed_idea_pk = None
+        self._displayed_detail_hash = ""
         self._title_widget.update("")
         self._tags_widget.update("")
         self._timestamps_widget.update("")
         self._body_widget.update(
             "*Select an idea from the list, or press* `n` *to create one.*"
         )
+        self._reset_display_scroll()
 
     def selected_body_text(self) -> str | None:
         """Return the currently selected rendered body text, if any."""

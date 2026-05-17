@@ -1683,6 +1683,33 @@ async def test_idea_view_show_and_empty(service: IdeaService) -> None:
 
 
 @pytest.mark.asyncio
+async def test_idea_view_skips_same_hash_markdown_update(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Showing the same idea hash should not re-render Markdown."""
+    idea = service.create_idea("Stable", body="Body text")
+    view = IdeaView(id="content-panel")
+    app = _WidgetApp(view)
+
+    async with app.run_test() as pilot:
+        view.show_idea(idea)
+        await pilot.pause()
+
+        body = view.query_one("#idea-view-body", Markdown)
+        update = mocker.patch.object(body, "update")
+
+        same_hash_idea = service.get_idea(idea.pk)
+        assert same_hash_idea is not None
+        assert same_hash_idea is not idea
+
+        view.show_idea(same_hash_idea)
+        await pilot.pause()
+
+        update.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_idea_view_tags_have_click_markup(
     service: IdeaService,
 ) -> None:

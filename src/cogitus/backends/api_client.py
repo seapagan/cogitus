@@ -12,8 +12,11 @@ from cogitus.api.schemas.request.group import (
 )
 from cogitus.api.schemas.response.auth import TokenResponse
 from cogitus.api.schemas.response.group import GroupResponse
-from cogitus.api.schemas.response.idea import IdeaResponse
-from cogitus.api.schemas.response.snapshot import SnapshotResponse
+from cogitus.api.schemas.response.idea import IdeaHashResponse, IdeaResponse
+from cogitus.api.schemas.response.snapshot import (
+    SnapshotResponse,
+    SnapshotStateResponse,
+)
 from cogitus.api.schemas.response.tag import TagResponse
 from cogitus.backends.types import RemoteSnapshot
 from cogitus.config import (
@@ -74,6 +77,12 @@ class RemoteAPIClient:
             ideas=snapshot.ideas,
         )
 
+    def fetch_snapshot_state(self) -> SnapshotStateResponse:
+        """Fetch the lightweight server-side dataset hash."""
+        return SnapshotStateResponse.model_validate(
+            self._request("GET", "/api/v1/snapshot/state").json()
+        )
+
     def list_groups(self) -> list[GroupResponse]:
         """Return all remote groups."""
         return self._parse_model_list(
@@ -106,6 +115,18 @@ class RemoteAPIClient:
             if len(page) < _IDEA_PAGE_SIZE:
                 return ideas
             offset += _IDEA_PAGE_SIZE
+
+    def get_idea(self, idea_pk: int) -> IdeaResponse:
+        """Return one remote idea."""
+        return IdeaResponse.model_validate(
+            self._request("GET", f"/api/v1/ideas/{idea_pk}").json()
+        )
+
+    def get_idea_hash(self, idea_pk: int) -> IdeaHashResponse:
+        """Return one remote idea rendered-detail hash."""
+        return IdeaHashResponse.model_validate(
+            self._request("GET", f"/api/v1/ideas/{idea_pk}/hash").json()
+        )
 
     def create_idea(self, payload: IdeaCreateRequest) -> IdeaResponse:
         """Create an idea remotely."""

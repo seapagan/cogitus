@@ -14,6 +14,7 @@ from textual.worker import Worker, WorkerState
 
 from cogitus.backends import BackendConfig
 from cogitus.backends.protocols import SyncingIdeaBackend
+from cogitus.backends.types import RemoteSyncResult
 from cogitus.config import (
     DEFAULT_EDIT_BODY_CURSOR_MODE,
     DEFAULT_NEW_IDEA_GROUP_MODE,
@@ -198,6 +199,7 @@ class MainScreen(Screen[None]):
         self._on_selected_idea_changed = on_selected_idea_changed
         self._edit_body_cursor_mode = edit_body_cursor_mode
         self._new_idea_group_mode = new_idea_group_mode
+        self._preserve_idea_scroll_position = True
         self._app_title = resolved_app_metadata.title
         self._app_version = resolved_app_metadata.version
         self.title = self._app_title
@@ -205,7 +207,7 @@ class MainScreen(Screen[None]):
         self._active_pane: str = "list"
         self._focus_before_search: str = "list"
         self._remote_sync_timer: Timer | None = None
-        self._remote_sync_worker: Worker[None] | None = None
+        self._remote_sync_worker: Worker[RemoteSyncResult] | None = None
         self._remote_clone_worker: Worker[None] | None = None
         self._remote_sync_error: str | None = None
         self._initial_remote_sync_pending = False
@@ -227,6 +229,9 @@ class MainScreen(Screen[None]):
 
     def on_mount(self) -> None:
         """Load ideas when screen mounts."""
+        self._preserve_idea_scroll_position = bool(
+            getattr(self.app, "_preserve_idea_scroll_position", True)
+        )
         self._base_sub_title = self.app.sub_title
         self.refresh_ideas(select_pk=self._initial_select_pk)
         panel = self.query_one("#idea-list-panel", IdeaListPanel)
@@ -236,12 +241,18 @@ class MainScreen(Screen[None]):
     def on_app_focus(self, _event: AppFocus) -> None:
         """Refresh visible relative timestamps when the app regains focus."""
         self._refresh_relative_timestamps()
-        self._request_remote_sync()
 
     def on_screen_resume(self, _event: ScreenResume) -> None:
         """Refresh visible relative timestamps when this screen resumes."""
         self._refresh_relative_timestamps()
-        self._request_remote_sync()
+
+    def flush_idea_scroll_position(self) -> None:
+        """Persist the currently displayed idea scroll position."""
+        if not self.is_mounted:
+            return
+        self._save_current_idea_scroll(
+            self.query_one("#content-panel", IdeaView)
+        )
 
     def replace_service(self, service: IdeaBackend) -> None:
         """Swap in a new backend and refresh the visible state."""
@@ -296,7 +307,6 @@ class MainScreen(Screen[None]):
             return
         if self._remote_sync_in_progress():
             return
-        self._set_sync_indicator()
         self._remote_sync_worker = self._run_remote_sync()
 
     def _remote_sync_in_progress(self) -> bool:
@@ -305,12 +315,12 @@ class MainScreen(Screen[None]):
         return worker is not None and not worker.is_finished
 
     @work(thread=True, exclusive=True, exit_on_error=False)
-    def _run_remote_sync(self) -> None:
+    def _run_remote_sync(self) -> RemoteSyncResult:
         """Refresh the remote cache without blocking the UI."""
         backend = self._syncing_backend()
         if backend is None:
-            return
-        backend.sync_from_remote()
+            return RemoteSyncResult(changed=False)
+        return backend.sync_from_remote()
 
     def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
         """Refresh the UI when a background remote sync completes."""
@@ -325,7 +335,9 @@ class MainScreen(Screen[None]):
             return
         if event.state == WorkerState.SUCCESS:
             self._handle_remote_sync_success()
-            self._refresh_after_remote_sync()
+            result = event.worker.result
+            if not isinstance(result, RemoteSyncResult) or result.changed:
+                self._refresh_after_remote_sync()
             self._run_pending_pre_edit_action()
             return
         if event.state == WorkerState.ERROR:
@@ -350,7 +362,10 @@ class MainScreen(Screen[None]):
             restore_remote_mode()
         self.notify("Remote API reconnected")
 
-    def _handle_remote_sync_error(self, worker: Worker[None]) -> None:
+    def _handle_remote_sync_error(
+        self,
+        worker: Worker[RemoteSyncResult],
+    ) -> None:
         """Apply UI state updates after a failed remote sync."""
         self._clear_sync_indicator()
         message = (
@@ -749,12 +764,40 @@ class MainScreen(Screen[None]):
         commit_selection: bool,
     ) -> None:
         """Show one idea in the preview pane, or the empty state."""
+        self._save_current_idea_scroll(view)
         if commit_selection:
             self._set_selected_idea(None if idea is None else idea.pk)
         if idea is None:
             view.show_empty()
             return
-        view.show_idea(idea)
+        scroll_y = self._saved_scroll_y_for_idea(idea)
+        if scroll_y is None:
+            view.show_idea(idea)
+            return
+        view.show_idea(idea, scroll_y=scroll_y)
+
+    def _save_current_idea_scroll(self, view: IdeaView) -> None:
+        """Persist current rendered-pane scroll position when enabled."""
+        if not self._preserve_idea_scroll_position:
+            return
+        state = view.current_scroll_state()
+        if state is None:
+            return
+        idea_pk, detail_hash, scroll_y = state
+        self._service.set_idea_scroll_position(
+            idea_pk,
+            detail_hash,
+            scroll_y,
+        )
+
+    def _saved_scroll_y_for_idea(self, idea: Idea) -> int | None:
+        """Return saved rendered-pane scroll position when enabled."""
+        if not self._preserve_idea_scroll_position:
+            return None
+        return self._service.get_idea_scroll_position(
+            idea.pk,
+            idea.detail_hash,
+        )
 
     def _ensure_mutation_allowed(self) -> bool:
         """Return whether mutating actions are allowed right now."""

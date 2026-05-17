@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Protocol
 import pytest
 from typing_extensions import Self
 
+from cogitus.api.schemas.response.snapshot import SnapshotStateResponse
 from cogitus.backends.api_client import RemoteAPIClient
 from cogitus.backends.remote_backend import RemoteIdeaBackend
 from cogitus.db import get_db
@@ -89,7 +90,10 @@ def _patch_tracked_snapshot_replacement(
     def tracked_replace_snapshot(
         _repo: RemoteCacheRepository,
         _snapshot: object,
+        *,
+        dataset_hash: str,
     ) -> None:
+        del dataset_hash
         with active_lock:
             active_state["current"] += 1
             active_state["max"] = max(
@@ -135,6 +139,11 @@ def _patch_tracked_remote_create(
     write_started = threading.Event()
     created_response = mocker.Mock(pk=123)
     created_idea = mocker.Mock(name="created_idea")
+    mocker.patch.object(
+        backend._api_client,
+        "fetch_snapshot_state",
+        return_value=SnapshotStateResponse(dataset_hash="remote-hash"),
+    )
     mocker.patch.object(
         backend._api_client,
         "fetch_snapshot",
@@ -186,6 +195,39 @@ def test_remote_backend_sync_from_worker_thread_uses_fresh_db_connection(
         assert synced.title == "Seed idea"
     finally:
         cache_db.close()
+
+
+def test_remote_backend_worker_thread_skips_unchanged_cache(
+    tmp_path: Path,
+) -> None:
+    """Worker-thread sync should skip snapshots when the cache hash matches."""
+    backend = _build_remote_backend_for_file_cache(tmp_path)
+    try:
+        assert backend.sync_from_remote().changed is True
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            result = executor.submit(backend.sync_from_remote).result()
+
+        assert result.changed is False
+    finally:
+        backend._cache_db.close()
+
+
+def test_remote_backend_delegates_scroll_position_to_cache(
+    tmp_path: Path,
+) -> None:
+    """Remote backend should keep rendered scroll state in the local cache."""
+    backend = _build_remote_backend_for_file_cache(tmp_path)
+    try:
+        backend.sync_from_remote()
+        idea = backend.get_idea(1)
+        assert idea is not None
+
+        backend.set_idea_scroll_position(idea.pk, idea.detail_hash, 12)
+
+        assert backend.get_idea_scroll_position(idea.pk, idea.detail_hash) == 12
+    finally:
+        backend._cache_db.close()
 
 
 def test_remote_backend_sync_from_worker_thread_rejects_memory_cache() -> None:
@@ -270,6 +312,70 @@ def test_remote_backend_allows_follow_up_sync_after_serialized_run(
         cache_db.close()
 
     assert replace_snapshot.call_count == 2
+
+
+def test_remote_backend_skips_snapshot_when_state_is_unchanged(
+    tmp_path: Path,
+) -> None:
+    """Unchanged remote state should avoid full snapshot replacement."""
+    cache_db = get_db(str(tmp_path / "remote-cache.db"))
+    api = MockRemoteAPI()
+    backend = RemoteIdeaBackend(
+        cache_db,
+        default_group_name="default",
+        api_client=RemoteAPIClient(
+            base_url="http://remote.test",
+            username=REMOTE_USERNAME,
+            password=remote_secret(),
+            transport=api.transport(),
+        ),
+    )
+
+    try:
+        first = backend.sync_from_remote()
+        second = backend.sync_from_remote()
+    finally:
+        cache_db.close()
+
+    assert first.changed is True
+    assert second.changed is False
+    assert api.snapshot_state_requests == 2
+    assert api.snapshot_requests == 1
+
+
+def test_remote_backend_skips_startup_snapshot_when_cache_matches_remote(
+    tmp_path: Path,
+) -> None:
+    """Matching cached data should not be reimported on startup."""
+    cache_db = get_db(str(tmp_path / "remote-cache.db"))
+    api = MockRemoteAPI()
+    client = RemoteAPIClient(
+        base_url="http://remote.test",
+        username=REMOTE_USERNAME,
+        password=remote_secret(),
+        transport=api.transport(),
+    )
+    snapshot = client.fetch_snapshot()
+    RemoteCacheRepository(
+        cache_db,
+        default_group_name="default",
+    ).replace_snapshot(snapshot, dataset_hash="stale-token")
+    api.snapshot_requests = 0
+
+    backend = RemoteIdeaBackend(
+        cache_db,
+        default_group_name="default",
+        api_client=client,
+    )
+
+    try:
+        result = backend.sync_from_remote()
+    finally:
+        cache_db.close()
+
+    assert result.changed is False
+    assert api.snapshot_state_requests == 1
+    assert api.snapshot_requests == 0
 
 
 def test_remote_backend_serializes_writes_with_snapshot_replacement(

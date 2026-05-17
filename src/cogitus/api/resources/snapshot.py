@@ -9,7 +9,10 @@ from cogitus.api.dependencies import (
     get_snapshot_manager,
 )
 from cogitus.api.managers.snapshot_manager import SnapshotManager
-from cogitus.api.schemas.response.snapshot import SnapshotResponse
+from cogitus.api.schemas.response.snapshot import (
+    SnapshotResponse,
+    SnapshotStateResponse,
+)
 
 router = APIRouter(
     prefix="/api/v1/snapshot",
@@ -24,3 +27,11 @@ async def get_snapshot(
 ) -> SnapshotResponse:
     """Return one consistent full snapshot for remote cache refresh."""
     return manager.get_snapshot()
+
+
+@router.get("/state")
+async def get_snapshot_state(
+    manager: Annotated[SnapshotManager, Depends(get_snapshot_manager)],
+) -> SnapshotStateResponse:
+    """Return the current remote dataset hash."""
+    return manager.get_state()

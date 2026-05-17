@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from cogitus.constants import DEFAULT_GROUP_NAME
+from cogitus.hashing import idea_detail_hash
 from cogitus.models.idea import Idea
 from cogitus.search import (
     SearchFilter,
@@ -85,6 +86,8 @@ class IdeaRepository:
         if tag_names:
             tags = [self._tag_repo.get_or_create(n) for n in tag_names]
             idea.tags.add(*tags)
+        if (detail_hash := self._update_detail_hash(idea.pk)) is not None:
+            idea.detail_hash = detail_hash
         self._search_backend.upsert_idea(idea.pk)
         return idea
 
@@ -187,6 +190,8 @@ class IdeaRepository:
             tags = [self._tag_repo.get_or_create(n) for n in tag_names]
             idea.tags.set(*tags)
 
+        if (detail_hash := self._update_detail_hash(idea.pk)) is not None:
+            idea.detail_hash = detail_hash
         self._search_backend.upsert_idea(idea.pk)
         return idea
 
@@ -206,6 +211,8 @@ class IdeaRepository:
 
         idea.title = title
         self._db.update(idea)
+        if (detail_hash := self._update_detail_hash(idea.pk)) is not None:
+            idea.detail_hash = detail_hash
         self._search_backend.upsert_idea(idea.pk)
         return idea
 
@@ -604,6 +611,37 @@ class IdeaRepository:
     def rebuild_search_index(self) -> None:
         """Rebuild the search index from persisted relational data."""
         self._search_backend.rebuild()
+
+    def refresh_detail_hash(self, idea_pk: int) -> None:
+        """Recompute the stored rendered-detail hash for one idea."""
+        self._update_detail_hash(idea_pk)
+
+    def refresh_all_detail_hashes(self) -> None:
+        """Recompute stored rendered-detail hashes for all ideas."""
+        for idea in self._db.select(Idea).fetch_all():
+            self._update_detail_hash(idea.pk)
+
+    def _update_detail_hash(self, idea_pk: int) -> str | None:
+        """Persist the rendered-detail hash for one idea."""
+        idea = self.get_with_relations(idea_pk)
+        if idea is None:
+            return None
+        tag_names = [tag.name for tag in idea.tags.fetch_all()]
+        detail_hash = idea_detail_hash(
+            title=idea.title,
+            body=idea.body,
+            tag_names=tag_names,
+            created_at=idea.created_at,
+            updated_at=idea.updated_at,
+        )
+        self._db.update_where(
+            Idea,
+            where={"pk": idea.pk},
+            values={
+                "detail_hash": detail_hash,
+            },
+        )
+        return detail_hash
 
     def _resolve_group(self, group_pk: int | None) -> Group:
         """Resolve a group by primary key, falling back to default."""

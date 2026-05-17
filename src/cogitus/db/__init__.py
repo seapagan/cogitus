@@ -15,10 +15,14 @@ from sqliter.exceptions import SqliterError
 
 from cogitus.config import normalize_default_group_name
 from cogitus.constants import DEFAULT_GROUP_NAME
+from cogitus.hashing import idea_detail_hash
+from cogitus.models.dataset_state import DatasetState
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.idea_cursor_state import IdeaCursorState
+from cogitus.models.idea_scroll_state import IdeaScrollState
 from cogitus.models.tag import Tag
+from cogitus.repositories.dataset_state_repo import DatasetStateRepository
 from cogitus.search.backend import FtsSearchBackend, ensure_search_tables
 
 DEFAULT_DB_PATH = "~/.config/cogitus/cogitus.db"
@@ -76,6 +80,58 @@ def _migrate_ideas_group_fk(db: SqliterDB, default_group_pk: int) -> None:
         conn.commit()
 
 
+def _migrate_idea_detail_hash(db: SqliterDB) -> None:
+    """Add and backfill ideas.detail_hash when missing or empty."""
+    with db.connect() as conn:
+        if not _column_exists(db, "ideas", "detail_hash"):
+            conn.execute(
+                "ALTER TABLE ideas "
+                "ADD COLUMN detail_hash TEXT NOT NULL DEFAULT '';"
+            )
+        conn.execute(
+            "UPDATE ideas SET detail_hash = '' WHERE detail_hash IS NULL;"
+        )
+        tag_table_exists = "ideas_tags" in db.table_names
+        idea_rows = conn.execute(
+            """
+            SELECT pk, title, body, created_at, updated_at
+            FROM ideas
+            WHERE detail_hash = '';
+            """
+        ).fetchall()
+        for idea_pk, title, body, created_at, updated_at in idea_rows:
+            if tag_table_exists:
+                tag_rows = conn.execute(
+                    """
+                    SELECT tags.name
+                    FROM tags
+                    INNER JOIN ideas_tags
+                        ON ideas_tags.tags_pk = tags.pk
+                    WHERE ideas_tags.ideas_pk = ?;
+                    """,
+                    (idea_pk,),
+                ).fetchall()
+            else:
+                tag_rows = []
+            conn.execute(
+                "UPDATE ideas SET detail_hash = ? WHERE pk = ?;",
+                (
+                    idea_detail_hash(
+                        title="" if title is None else str(title),
+                        body="" if body is None else str(body),
+                        tag_names=[
+                            "" if row[0] is None else str(row[0])
+                            for row in tag_rows
+                        ],
+                        created_at=int(created_at),
+                        updated_at=int(updated_at),
+                    ),
+                    idea_pk,
+                ),
+            )
+        conn.commit()
+
+
 def get_db(
     db_path: str = DEFAULT_DB_PATH,
     *,
@@ -121,8 +177,12 @@ def get_db(
         _migrate_ideas_group_fk(db, default_group_pk)
     db.create_table(Idea)
     db.create_table(IdeaCursorState)
+    db.create_table(IdeaScrollState)
     if not ideas_existed:
         _migrate_ideas_group_fk(db, default_group_pk)
+    _migrate_idea_detail_hash(db)
+    db.create_table(DatasetState)
+    DatasetStateRepository(db).get_hash()
     ensure_search_tables(db)
     FtsSearchBackend(db).rebuild()
     return db

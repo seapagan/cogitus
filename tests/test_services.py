@@ -197,9 +197,10 @@ class TestIdeaService:
         self,
         service: IdeaService,
     ) -> None:
-        """Tag mutations should refresh search visibility."""
+        """Tag mutations should refresh search and rendered detail hashes."""
         idea = service.create_idea("API", tags=["python"])
         tag = service.list_tags()[0]
+        original_hash = service.get_idea_detail_hash(idea.pk)
 
         renamed = service.rename_tag(tag.pk, "fastapi")
 
@@ -208,9 +209,15 @@ class TestIdeaService:
             result.pk for result in service.search_ideas("tag:fastapi")
         ] == [idea.pk]
         assert service.search_ideas("tag:python") == []
+        renamed_hash = service.get_idea_detail_hash(idea.pk)
+        assert renamed_hash is not None
+        assert renamed_hash != original_hash
 
         service.delete_tag(tag.pk)
         assert service.search_ideas("tag:fastapi") == []
+        deleted_hash = service.get_idea_detail_hash(idea.pk)
+        assert deleted_hash is not None
+        assert deleted_hash != renamed_hash
 
     def test_list_tags_in_use_excludes_orphans(
         self,
@@ -259,6 +266,27 @@ class TestIdeaService:
 
         service.set_idea_cursor_position(idea.pk, 8)
         assert service.get_idea_cursor_position(idea.pk) == 8
+
+    def test_idea_scroll_position_roundtrip(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Scroll position should be persisted for unchanged idea details."""
+        idea = service.create_idea("Scroll")
+        assert (
+            service.get_idea_scroll_position(idea.pk, idea.detail_hash) is None
+        )
+
+        service.set_idea_scroll_position(idea.pk, idea.detail_hash, 8)
+        assert service.get_idea_scroll_position(idea.pk, idea.detail_hash) == 8
+        assert service.get_idea_scroll_position(idea.pk, "stale") is None
+
+    def test_get_idea_detail_hash_returns_none_when_missing(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Missing ideas should not return a detail hash."""
+        assert service.get_idea_detail_hash(99999) is None
 
     def test_create_and_list_groups(self, service: IdeaService) -> None:
         """Groups can be created and listed."""

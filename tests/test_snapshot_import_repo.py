@@ -10,6 +10,7 @@ from cogitus.api.schemas.response.group import GroupResponse
 from cogitus.api.schemas.response.idea import IdeaResponse
 from cogitus.api.schemas.response.tag import TagResponse
 from cogitus.backends.types import RemoteSnapshot
+from cogitus.hashing import idea_detail_hash
 from cogitus.repositories.snapshot_import_repo import SnapshotImportRepository
 from cogitus.services.idea_service import IdeaService
 
@@ -66,6 +67,13 @@ def _idea(
         updated_at=timestamps[1],
         title=title,
         body=body,
+        detail_hash=idea_detail_hash(
+            title=title,
+            body=body,
+            tag_names=[tag.name for tag in tags],
+            created_at=timestamps[0],
+            updated_at=timestamps[1],
+        ),
         group=group,
         tags=tags,
     )
@@ -108,6 +116,11 @@ def test_snapshot_import_replaces_db_and_preserves_cursor_state(
             )
         ],
     )
+    service.set_idea_scroll_position(
+        placeholder.pk,
+        snapshot.ideas[0].detail_hash,
+        13,
+    )
 
     importer.replace_snapshot(snapshot)
 
@@ -119,6 +132,7 @@ def test_snapshot_import_replaces_db_and_preserves_cursor_state(
         "python",
     ]
     assert service.get_idea_cursor_position(1) == 9
+    assert service.get_idea_scroll_position(1, imported.detail_hash) == 13
     assert _assert_first_search_hit_pk(service, "tag:cli") == 1
     assert service.get_idea_with_relations(extra_local.pk) is None
 

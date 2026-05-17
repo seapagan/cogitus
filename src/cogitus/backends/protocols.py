@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from cogitus.backends.types import RemoteSyncResult
     from cogitus.models.group import Group
     from cogitus.models.idea import Idea
     from cogitus.models.tag import Tag
@@ -59,6 +60,21 @@ class IdeaBackend(Protocol):
     def set_idea_cursor_position(self, idea_pk: int, position: int) -> None:
         """Persist the remembered cursor position for an idea."""
 
+    def get_idea_scroll_position(
+        self,
+        idea_pk: int,
+        detail_hash: str,
+    ) -> int | None:
+        """Return the remembered rendered-pane scroll position."""
+
+    def set_idea_scroll_position(
+        self,
+        idea_pk: int,
+        detail_hash: str,
+        scroll_y: int,
+    ) -> None:
+        """Persist the remembered rendered-pane scroll position."""
+
     def list_groups(self) -> list[Group]:
         """List all groups."""
 
@@ -95,5 +111,5 @@ class IdeaBackend(Protocol):
 class SyncingIdeaBackend(IdeaBackend, Protocol):
     """Optional extension for backends that can pull remote state."""
 
-    def sync_from_remote(self) -> None:
+    def sync_from_remote(self) -> RemoteSyncResult:
         """Refresh the local cache from the remote API."""

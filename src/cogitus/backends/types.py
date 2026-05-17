@@ -34,3 +34,10 @@ class RemoteSnapshot:
     groups: list[GroupResponse]
     tags: list[TagResponse]
     ideas: list[IdeaResponse]
+
+
+@dataclass(frozen=True)
+class RemoteSyncResult:
+    """Result of one remote cache sync attempt."""
+
+    changed: bool

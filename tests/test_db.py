@@ -6,8 +6,15 @@ import sqlite3
 from typing import TYPE_CHECKING
 
 import pytest
+from sqliter import SqliterDB
 
-from cogitus.db import _column_exists, enable_wal_mode, get_db
+from cogitus.db import (
+    _column_exists,
+    _migrate_idea_detail_hash,
+    enable_wal_mode,
+    get_db,
+)
+from cogitus.hashing import idea_detail_hash
 from cogitus.models.group import Group
 from cogitus.models.idea import Idea
 from cogitus.models.idea_cursor_state import IdeaCursorState
@@ -196,6 +203,98 @@ def test_get_db_backfills_group_id_for_existing_ideas(tmp_path: Path) -> None:
         assert "idx_ideas_group_id" in _index_names(db_file, "ideas")
     finally:
         migrated.close()
+
+
+def test_get_db_backfills_detail_hash_without_legacy_tag_table(
+    tmp_path: Path,
+) -> None:
+    """Legacy databases without tag links should still get detail hashes."""
+    db_file = tmp_path / "legacy-no-tags.db"
+    conn = sqlite3.connect(str(db_file))
+    try:
+        conn.execute(
+            """
+            CREATE TABLE ideas (
+                pk INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                title TEXT NOT NULL,
+                body TEXT NOT NULL DEFAULT ''
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO ideas (title, body) VALUES (?, ?)",
+            ("Legacy idea", "Body"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    legacy_db = SqliterDB(str(db_file))
+    try:
+        _migrate_idea_detail_hash(legacy_db)
+        row = (
+            legacy_db.connect()
+            .execute("SELECT detail_hash FROM ideas")
+            .fetchone()
+        )
+
+        assert row is not None
+        assert len(str(row[0])) == 64
+    finally:
+        legacy_db.close()
+
+
+def test_get_db_backfills_detail_hash_with_null_legacy_values(
+    tmp_path: Path,
+) -> None:
+    """Legacy NULL title and body values should hash as empty strings."""
+    db_file = tmp_path / "legacy-null-values.db"
+    conn = sqlite3.connect(str(db_file))
+    try:
+        conn.execute(
+            """
+            CREATE TABLE ideas (
+                pk INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                title TEXT,
+                body TEXT,
+                detail_hash TEXT NOT NULL DEFAULT ''
+            );
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO ideas (created_at, updated_at, title, body)
+            VALUES (?, ?, ?, ?)
+            """,
+            (10, 20, None, None),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    legacy_db = SqliterDB(str(db_file))
+    try:
+        _migrate_idea_detail_hash(legacy_db)
+        row = (
+            legacy_db.connect()
+            .execute("SELECT detail_hash FROM ideas")
+            .fetchone()
+        )
+
+        assert row is not None
+        assert row[0] == idea_detail_hash(
+            title="",
+            body="",
+            tag_names=[],
+            created_at=10,
+            updated_at=20,
+        )
+    finally:
+        legacy_db.close()
 
 
 def test_get_db_backfills_null_group_id_for_existing_column(
