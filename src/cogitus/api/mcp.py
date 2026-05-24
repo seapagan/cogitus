@@ -34,6 +34,29 @@ def ensure_mcp_auth_configured() -> None:
     MCPAuthManager(get_settings()).ensure_configured()
 
 
+def _mount_read_only_mcp_tools(
+    *,
+    internal_app: FastAPI,
+    mcp_app: FastAPI,
+    api_client: httpx.AsyncClient,
+) -> None:
+    """Mount the read-only MCP tools on the public MCP app."""
+    mcp = FastApiMCP(
+        internal_app,
+        http_client=api_client,
+        include_operations=list(MCP_TOOL_OPERATION_IDS),
+    )
+
+    for tool in mcp.tools:
+        tool.annotations = ToolAnnotations(
+            readOnlyHint=True,
+            destructiveHint=False,
+            idempotentHint=True,
+            openWorldHint=False,
+        )
+    mcp.mount_http(mcp_app)
+
+
 def create_mcp_app(
     *,
     db_path: str | None = None,
@@ -80,18 +103,9 @@ def create_mcp_app(
         openapi_url=None,
         lifespan=lifespan,
     )
-    mcp = FastApiMCP(
-        internal_app,
-        http_client=api_client,
-        include_operations=list(MCP_TOOL_OPERATION_IDS),
+    _mount_read_only_mcp_tools(
+        internal_app=internal_app,
+        mcp_app=mcp_app,
+        api_client=api_client,
     )
-
-    for tool in mcp.tools:
-        tool.annotations = ToolAnnotations(
-            readOnlyHint=True,
-            destructiveHint=False,
-            idempotentHint=True,
-            openWorldHint=False,
-        )
-    mcp.mount_http(mcp_app)
     return mcp_app
