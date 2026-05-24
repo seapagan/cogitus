@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 
 from cogitus.api.dependencies import get_current_api_user, get_idea_manager
 from cogitus.api.managers.idea_manager import IdeaManager
@@ -20,14 +20,42 @@ router = APIRouter(
 )
 
 
-@router.get("", operation_id="get_ideas_list")
+@router.get(
+    "",
+    operation_id="get_ideas_list",
+    response_description="Ideas matching the list or search request.",
+    summary="Search or list Cogitus ideas",
+)
 async def list_ideas(
     manager: Annotated[IdeaManager, Depends(get_idea_manager)],
-    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
-    offset: Annotated[int, Query(ge=0)] = 0,
-    query: str | None = None,
+    limit: Annotated[
+        int,
+        Query(
+            description="Maximum number of ideas to return.",
+            ge=1,
+            le=1000,
+        ),
+    ] = 100,
+    offset: Annotated[
+        int,
+        Query(description="Number of matching ideas to skip.", ge=0),
+    ] = 0,
+    query: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Optional free-text search. Supports tag:<name> and "
+                "group:<name> filters, with and/or between filters."
+            ),
+        ),
+    ] = None,
 ) -> list[IdeaResponse]:
-    """Return ideas with optional search filtering."""
+    """Return ideas, most recently updated first.
+
+    When `query` is provided, search visible idea text and optional structured
+    filters. Use `tag:<name>` or `group:<name>` to filter by tag or group, and
+    combine filters with `and` or `or`.
+    """
     return manager.list_ideas(limit=limit, offset=offset, query=query)
 
 
@@ -52,12 +80,28 @@ async def get_idea_hash(
     return manager.get_idea_hash(idea_pk)
 
 
-@router.get("/{idea_pk}", operation_id="get_single_idea")
+@router.get(
+    "/{idea_pk}",
+    operation_id="get_single_idea",
+    response_description="The requested idea with its group and tags.",
+    summary="Get a Cogitus idea by primary key",
+)
 async def get_idea(
-    idea_pk: int,
+    idea_pk: Annotated[
+        int,
+        Path(
+            description=(
+                "Cogitus idea primary key, usually from get_ideas_list results."
+            ),
+        ),
+    ],
     manager: Annotated[IdeaManager, Depends(get_idea_manager)],
 ) -> IdeaResponse:
-    """Return a single idea."""
+    """Return one idea by primary key.
+
+    Use this after list or search results when the full idea body, group, and
+    tags are needed for a specific idea.
+    """
     return manager.get_idea(idea_pk)
 
 
