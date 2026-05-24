@@ -9,13 +9,22 @@ from typing import TYPE_CHECKING, cast
 import jwt
 import pytest
 from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
 from pwdlib.exceptions import UnknownHashError
+from starlette.routing import Mount, Route, WebSocketRoute
 
 import cogitus.api as api_package
-from cogitus.api.dependencies import get_service
+from cogitus.api.dependencies import get_current_mcp_user, get_service
 from cogitus.api.main import COGITUS_API_DB_PATH_ENV, create_api_app
-from cogitus.api.managers.auth_manager import AuthManager
+from cogitus.api.managers.auth_manager import AuthManager, MCPAuthManager
+from cogitus.api.mcp import create_mcp_app
+from cogitus.api.resources.groups import GROUP_NAMES_RESPONSE_EXAMPLE
+from cogitus.api.resources.ideas import (
+    IDEA_REFS_RESPONSE_EXAMPLE,
+    IDEA_RESPONSE_EXAMPLE,
+)
+from cogitus.api.resources.tags import TAG_NAMES_RESPONSE_EXAMPLE
 from cogitus.config import (
     DEFAULT_API_AUTH_JWT_ALGORITHM,
     AppSettings,
@@ -109,6 +118,86 @@ def test_create_api_app_uses_env_db_path(
         default_group_name="default",
     )
     fake_db.close.assert_called_once_with()
+
+
+def test_create_api_app_does_not_mount_mcp(
+    configured_api_settings: AppSettings,
+) -> None:
+    """Normal API app should not expose the MCP endpoint."""
+    with TestClient(
+        create_api_app(memory=True, default_group_name="default")
+    ) as client:
+        response = client.get("/mcp")
+
+    assert response.status_code == 404
+
+
+def test_create_mcp_app_exposes_only_mcp_routes(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP app should mount MCP without exposing REST routes."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    app = create_mcp_app(memory=True, default_group_name="default")
+
+    paths = {
+        route.path
+        for route in app.routes
+        if isinstance(route, Route | Mount | WebSocketRoute)
+    }
+
+    assert paths == {"/mcp"}
+    assert "/api/v1/ideas" not in paths
+    assert "/api/v1/auth/token" not in paths
+
+    with TestClient(app) as client:
+        assert client.get("/api").status_code == 404
+        assert client.get("/api/v1").status_code == 404
+        assert client.get("/api/v1/ideas").status_code == 404
+        assert client.post("/api/v1/auth/token").status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_mcp_app_lifespan_starts_internal_api(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP app lifespan should initialize internal API state for tools."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+    token = manager.create_access_token()
+    app = create_mcp_app(memory=True, default_group_name="default")
+
+    async with app.router.lifespan_context(app):
+        response = await app.state.mcp_api_client.get(
+            "/api/v1/ideas/refs",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_mcp_tool_routes_include_openapi_examples() -> None:
+    """MCP-exposed routes should publish realistic OpenAPI examples."""
+    openapi = create_api_app(
+        memory=True,
+        default_group_name="default",
+    ).openapi()
+
+    expected_examples = {
+        "/api/v1/ideas/refs": IDEA_REFS_RESPONSE_EXAMPLE,
+        "/api/v1/ideas/{idea_pk}": IDEA_RESPONSE_EXAMPLE,
+        "/api/v1/groups/names": GROUP_NAMES_RESPONSE_EXAMPLE,
+        "/api/v1/tags/names": TAG_NAMES_RESPONSE_EXAMPLE,
+    }
+
+    for path, expected_example in expected_examples.items():
+        response_content = openapi["paths"][path]["get"]["responses"]["200"][
+            "content"
+        ]
+
+        assert response_content["application/json"]["example"] == (
+            expected_example
+        )
 
 
 def test_token_endpoint_returns_service_unavailable_when_auth_unconfigured(
@@ -234,6 +323,124 @@ def test_auth_manager_rejects_token_for_different_subject(
         HTTPException,
         match="Could not validate credentials",
     ) as exc:
+        manager.decode_access_token(token)
+
+    assert exc.value.status_code == 401
+
+
+def test_mcp_auth_manager_accepts_valid_token(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP auth manager should accept its own signed tokens."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+
+    token = manager.create_access_token()
+    decoded = manager.decode_access_token(token)
+
+    assert decoded.username == "mcp"
+
+
+def test_mcp_auth_manager_requires_configured_secret(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP auth manager should fail clearly without a signing secret."""
+    configured_api_settings.mcp_auth_jwt_secret = ""
+    manager = MCPAuthManager(configured_api_settings)
+
+    with pytest.raises(HTTPException) as exc:
+        manager.ensure_configured()
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "MCP authentication is not configured"
+
+
+def test_mcp_auth_manager_rejects_malformed_token(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP auth manager should reject malformed bearer tokens."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+
+    with pytest.raises(HTTPException) as exc:
+        manager.decode_access_token("not-a-jwt")
+
+    assert exc.value.status_code == 401
+
+
+def test_mcp_auth_manager_rejects_wrong_subject_token(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP auth manager should reject tokens for non-MCP subjects."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+    token = jwt.encode(
+        {
+            "sub": "api-user",
+            "exp": datetime.now(tz=timezone.utc) + timedelta(days=1),
+        },
+        manager.jwt_secret,
+        algorithm=DEFAULT_API_AUTH_JWT_ALGORITHM,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        manager.decode_access_token(token)
+
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.parametrize("credentials", [None, "   "])
+def test_get_current_mcp_user_rejects_missing_bearer_credentials(
+    configured_api_settings: AppSettings,
+    credentials: str | None,
+) -> None:
+    """MCP auth dependency should reject missing or blank bearer tokens."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+    bearer = None
+    if credentials is not None:
+        bearer = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials=credentials,
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        get_current_mcp_user(bearer, manager)
+
+    assert exc.value.status_code == 401
+    assert exc.value.headers == {"WWW-Authenticate": "Bearer"}
+
+
+def test_mcp_auth_manager_rejects_expired_token(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP auth manager should reject expired bearer tokens."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+    token = manager.create_access_token(expires_delta=timedelta(seconds=-1))
+
+    with pytest.raises(HTTPException) as exc:
+        manager.decode_access_token(token)
+
+    assert exc.value.status_code == 401
+
+
+def test_mcp_auth_manager_rejects_wrong_secret_token(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP auth manager should reject tokens signed by another secret."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+    token = jwt.encode(
+        {
+            "sub": "mcp",
+            "exp": datetime.now(tz=timezone.utc) + timedelta(days=1),
+        },
+        "o" * 32,
+        algorithm=DEFAULT_API_AUTH_JWT_ALGORITHM,
+    )
+
+    with pytest.raises(HTTPException) as exc:
         manager.decode_access_token(token)
 
     assert exc.value.status_code == 401

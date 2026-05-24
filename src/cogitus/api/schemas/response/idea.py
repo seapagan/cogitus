@@ -28,3 +28,15 @@ class IdeaHashResponse(BaseModel):
 
     pk: int
     detail_hash: str
+
+
+class IdeaRefResponse(BaseModel):
+    """Lightweight API response for choosing an idea to inspect."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pk: int
+    title: str
+    group: str
+    tags: list[str]
+    updated_at: int

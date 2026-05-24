@@ -60,6 +60,8 @@ cogitus api serve --host 127.0.0.1 --port 8000
 cogitus api serve --db-path /path/to/cogitus.db
 ```
 
+This serves the normal REST API only. It does not expose the MCP endpoint.
+
 ## Configure API Auth
 
 ```bash
@@ -74,6 +76,25 @@ omit `--username` and be prompted for it.
 See the [API guide](api.md) for routes, example output, remote-mode setup from
 the TUI, and current warnings.
 
+## Serve MCP
+
+```bash
+cogitus mcp token
+cogitus mcp token --rotate-secret
+cogitus mcp serve
+cogitus mcp serve --host 127.0.0.1 --port 9000
+cogitus mcp serve --db-path /path/to/cogitus.db
+```
+
+`cogitus mcp token` prints a `Bearer ...` token for MCP clients and creates
+the MCP signing secret if it does not already exist. `--rotate-secret`
+replaces that secret before printing a new token, which invalidates older MCP
+tokens. MCP tokens are valid for 90 days by default; set
+`mcp_auth_token_expire_days` to explicitly choose a different lifetime.
+
+`cogitus mcp serve` exposes the MCP endpoint at `/mcp` only. It uses separate
+MCP auth and does not expose the normal REST API routes.
+
 ## Help
 
 ```bash
@@ -83,4 +104,6 @@ cogitus export --help
 cogitus delete --help
 cogitus api serve --help
 cogitus api set-auth --help
+cogitus mcp token --help
+cogitus mcp serve --help
 ```

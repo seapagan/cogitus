@@ -188,6 +188,32 @@ Example:
 remote_api_password="your-password"
 ```
 
+### `mcp_auth_jwt_secret`
+
+The signing secret used for MCP bearer tokens.
+
+- Type: string
+- Default: `""`
+
+You normally do not edit this by hand. Run `cogitus mcp token` to create the
+secret if needed, or `cogitus mcp token --rotate-secret` to replace it and
+invalidate previously issued MCP tokens.
+
+### `mcp_auth_token_expire_days`
+
+Controls how long newly generated MCP tokens are valid.
+
+- Type: integer
+- Default: `90`
+
+Non-positive values fall back to the default.
+
+Example:
+
+```toml
+mcp_auth_token_expire_days=365
+```
+
 ### `prompt_after_clone`
 
 Controls whether Cogitus asks to switch the current session to local mode after

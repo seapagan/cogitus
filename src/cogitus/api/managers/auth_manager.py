@@ -23,6 +23,7 @@ from cogitus.config import (
     normalize_api_auth_jwt_algorithm,
     normalize_api_auth_token_expire_minutes,
     normalize_api_auth_username,
+    normalize_mcp_auth_token_expire_days,
 )
 
 PASSWORD_HASHER: Final = PasswordHash.recommended()
@@ -31,6 +32,7 @@ DUMMY_VERIFY_VALUE: Final = (
     "CYaIb8sB+wtD+Vu/P4uod1+Qof8h+1g7bbDlBID48Rc"
 )
 BEARER_SCHEME: Final = "bearer"
+MCP_AUTH_SUBJECT: Final = "mcp"
 WWW_AUTHENTICATE_HEADER: Final = {"WWW-Authenticate": "Bearer"}
 SHARED_SECRET_JWT_ALGORITHMS: Final = frozenset({"HS256", "HS384", "HS512"})
 logger = logging.getLogger(__name__)
@@ -230,3 +232,90 @@ class AuthManager:
             access_token=self.create_access_token(),
             token_type=BEARER_SCHEME,
         )
+
+
+class MCPAuthManager:
+    """MCP bearer auth manager backed by persisted settings."""
+
+    def __init__(self, settings: AppSettings) -> None:
+        """Store the config-backed MCP auth settings."""
+        self._settings = settings
+
+    @property
+    def jwt_secret(self) -> str:
+        """Return the configured MCP JWT secret."""
+        return self._settings.mcp_auth_jwt_secret.strip()
+
+    @property
+    def token_expire_days(self) -> int:
+        """Return the normalized MCP token expiry in days."""
+        return normalize_mcp_auth_token_expire_days(
+            self._settings.mcp_auth_token_expire_days
+        )
+
+    def is_configured(self) -> bool:
+        """Return whether MCP auth has been configured."""
+        return bool(self.jwt_secret)
+
+    def ensure_configured(self) -> None:
+        """Raise a clear error when MCP auth has not been bootstrapped."""
+        if not self.is_configured():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="MCP authentication is not configured",
+            )
+
+    def create_access_token(
+        self,
+        *,
+        expires_delta: timedelta | None = None,
+    ) -> str:
+        """Create a signed MCP JWT access token."""
+        self.ensure_configured()
+
+        token_lifetime = (
+            timedelta(days=self.token_expire_days)
+            if expires_delta is None
+            else expires_delta
+        )
+        payload = {
+            "sub": MCP_AUTH_SUBJECT,
+            "exp": datetime.now(tz=timezone.utc) + token_lifetime,
+        }
+        return jwt.encode(
+            payload,
+            self.jwt_secret,
+            algorithm=DEFAULT_API_AUTH_JWT_ALGORITHM,
+        )
+
+    def decode_access_token(self, token: str) -> APIUser:
+        """Decode and validate an MCP bearer token."""
+        self.ensure_configured()
+
+        credentials_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers=_invalid_token_header(),
+        )
+
+        try:
+            payload = TokenPayload.model_validate(
+                jwt.decode(
+                    token,
+                    self.jwt_secret,
+                    algorithms=[DEFAULT_API_AUTH_JWT_ALGORITHM],
+                )
+            )
+        except ExpiredSignatureError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers=_invalid_token_header(expired=True),
+            ) from exc
+        except (InvalidTokenError, ValueError) as exc:
+            raise credentials_exception from exc
+
+        if not secrets.compare_digest(payload.sub, MCP_AUTH_SUBJECT):
+            raise credentials_exception
+
+        return APIUser(username=payload.sub)

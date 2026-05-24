@@ -1,6 +1,6 @@
 """FastAPI routes for groups."""
 
-from typing import Annotated
+from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, Query, status
 
@@ -17,6 +17,7 @@ router = APIRouter(
     tags=["groups"],
     dependencies=[Depends(get_current_api_user)],
 )
+GROUP_NAMES_RESPONSE_EXAMPLE: Final = ["backend", "docs", "ideas"]
 
 
 @router.get("")
@@ -25,6 +26,28 @@ async def list_groups(
 ) -> list[GroupResponse]:
     """Return all groups."""
     return manager.list_groups()
+
+
+@router.get(
+    "/names",
+    operation_id="get_group_names",
+    response_description="Group names available for group:<name> filters.",
+    summary="List Cogitus group names",
+    responses={
+        status.HTTP_200_OK: {
+            "content": {
+                "application/json": {
+                    "example": GROUP_NAMES_RESPONSE_EXAMPLE,
+                },
+            },
+        },
+    },
+)
+async def list_group_names(
+    manager: Annotated[GroupManager, Depends(get_group_manager)],
+) -> list[str]:
+    """Return a list of all group names."""
+    return manager.list_group_names()
 
 
 @router.post(

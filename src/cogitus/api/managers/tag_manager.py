@@ -21,6 +21,10 @@ class TagManager:
         """Return all tags."""
         return [to_tag_response(tag) for tag in self._service.list_tags()]
 
+    def list_tag_names(self) -> list[str]:
+        """Return all tag names."""
+        return [tag.name for tag in self.list_tags()]
+
     def get_tag(self, tag_pk: int) -> TagResponse:
         """Return a single tag response."""
         tag = self._service.get_tag(tag_pk)

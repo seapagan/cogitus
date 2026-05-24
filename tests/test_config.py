@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from cogitus.config import (
     DEFAULT_API_AUTH_JWT_ALGORITHM,
     DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES,
+    DEFAULT_MCP_AUTH_TOKEN_EXPIRE_DAYS,
     AppSettings,
     DataBackendMode,
     EditBodyCursorMode,
@@ -18,6 +19,7 @@ from cogitus.config import (
     normalize_data_backend_mode,
     normalize_default_group_name,
     normalize_edit_body_cursor_mode,
+    normalize_mcp_auth_token_expire_days,
     normalize_new_idea_group_mode,
     normalize_remote_api_base_url,
 )
@@ -160,6 +162,29 @@ def test_settings_persist_api_auth_fields(
     assert loaded.api_auth_token_expire_minutes == 45
 
 
+def test_settings_persist_mcp_auth_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Settings should persist and reload MCP auth fields."""
+    monkeypatch.setattr(
+        "simple_toml_settings.settings.xdg_config_home",
+        lambda: tmp_path,
+    )
+    AppSettings._instances.clear()
+
+    settings = get_settings()
+    settings.mcp_auth_jwt_secret = "m" * 32
+    settings.mcp_auth_token_expire_days = 90
+    settings.save()
+
+    AppSettings._instances.clear()
+    loaded = get_settings()
+
+    assert loaded.mcp_auth_jwt_secret == "m" * 32
+    assert loaded.mcp_auth_token_expire_days == 90
+
+
 def test_settings_persist_remote_backend_fields(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -253,6 +278,13 @@ def test_normalize_api_auth_token_expire_minutes_invalid_defaults() -> None:
     """Non-positive token lifetimes should fallback safely."""
     assert normalize_api_auth_token_expire_minutes(0) == (
         DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES
+    )
+
+
+def test_normalize_mcp_auth_token_expire_days_invalid_defaults() -> None:
+    """Non-positive MCP token lifetimes should fallback safely."""
+    assert normalize_mcp_auth_token_expire_days(0) == (
+        DEFAULT_MCP_AUTH_TOKEN_EXPIRE_DAYS
     )
 
 

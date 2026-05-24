@@ -9,7 +9,11 @@ from cogitus.api.schemas.request.idea import (
     IdeaCreateRequest,
     IdeaUpdateRequest,
 )
-from cogitus.api.schemas.response.idea import IdeaHashResponse, IdeaResponse
+from cogitus.api.schemas.response.idea import (
+    IdeaHashResponse,
+    IdeaRefResponse,
+    IdeaResponse,
+)
 from cogitus.services.idea_service import IdeaService
 
 
@@ -34,6 +38,26 @@ class IdeaManager:
         else:
             ideas = self._service.list_ideas(limit=limit, offset=offset)
         return [to_idea_response(idea) for idea in ideas]
+
+    def list_idea_refs(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        query: str | None = None,
+    ) -> list[IdeaRefResponse]:
+        """Return lightweight idea references for browsing/search."""
+        ideas = self.list_ideas(limit=limit, offset=offset, query=query)
+        return [
+            IdeaRefResponse(
+                pk=idea.pk,
+                title=idea.title,
+                group=idea.group.name,
+                tags=[tag.name for tag in idea.tags],
+                updated_at=idea.updated_at,
+            )
+            for idea in ideas
+        ]
 
     def get_idea(self, idea_pk: int) -> IdeaResponse:
         """Return a single idea response."""
