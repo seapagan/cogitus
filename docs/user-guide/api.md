@@ -166,6 +166,24 @@ The MCP server currently exposes these read-only tools:
 - `get_group_names`
 - `get_tag_names`
 
+### Agent Guidance
+
+If you use Cogitus MCP with coding agents, consider adding a short note to the
+project's local agent guidance file, such as `AGENTS.md`, `CODEX.md`, or the
+equivalent file for your agent tool.
+
+Useful guidance is:
+
+- Cogitus MCP is read-only for now.
+- Use it for existing project context, TODO/idea lookup, and notes already
+  stored in Cogitus.
+- Use `get_idea_refs` first, then `get_single_idea` only for ideas that need
+  full body text.
+- Use query filters such as `group:cogitus`, `tag:bugs`, or
+  `group:cogitus and tag:search`.
+- Do not use it instead of reading current repo files when the question is
+  about the live codebase.
+
 The MCP app does not expose the normal REST API routes, `/docs`, or
 `/openapi.json`.
 
