@@ -644,6 +644,42 @@ class TestMCPCommands:
             factory=True,
         )
 
+    def test_mcp_serve_requires_api_extra(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Serve command should fail cleanly without MCP server deps."""
+        monkeypatch.setattr(
+            "simple_toml_settings.settings.xdg_config_home",
+            lambda: tmp_path,
+        )
+        AppSettings._instances.clear()
+        settings = get_settings()
+        settings.mcp_auth_jwt_secret = "m" * 32
+        settings.save()
+
+        def fake_import_module(name: str) -> object:
+            if name == "uvicorn":
+                return SimpleNamespace(
+                    run=lambda *_args, **_kwargs: pytest.fail(
+                        "uvicorn.run should not be called"
+                    )
+                )
+            if name == "cogitus.api.mcp":
+                raise ModuleNotFoundError
+            return __import__(name)
+
+        monkeypatch.setattr(
+            "cogitus.cli.commands.importlib.import_module",
+            fake_import_module,
+        )
+
+        result = runner.invoke(app, ["mcp", "serve"])
+
+        assert result.exit_code == 1
+        assert "pip install cogitus[api]" in result.output
+
     def test_mcp_serve_requires_configured_secret(
         self,
         tmp_path: Path,

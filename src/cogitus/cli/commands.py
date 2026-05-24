@@ -341,6 +341,8 @@ def serve_mcp(
         )
         raise typer.Exit(1)
 
+    _import_optional_module("cogitus.api.mcp")
+
     if db_path is None:
         os.environ.pop(COGITUS_MCP_DB_PATH_ENV, None)
     else:
