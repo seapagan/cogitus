@@ -120,6 +120,11 @@ idea database. This is separate from the REST API server:
 - `cogitus mcp serve` exposes only `/mcp` on port `9000` by default.
 - MCP tokens are separate from normal API login tokens.
 
+!!! warning
+    The MCP server is intended for trusted local use only at this stage. It is
+    not yet designed as a hardened internet-facing service. A stronger security
+    model for both the REST API and MCP server is planned for future work.
+
 Create a token for your MCP client:
 
 ```bash
