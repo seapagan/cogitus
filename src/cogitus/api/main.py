@@ -79,7 +79,7 @@ def create_api_app(
 
     # add the mcp server
     mcp = FastApiMCP(
-        app, include_operations=["get_ideas_list", "get_single_idea"]
+        app, include_operations=["get_idea_refs", "get_single_idea"]
     )
     mcp.mount_http()
 

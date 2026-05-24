@@ -11,7 +11,11 @@ from cogitus.api.schemas.request.idea import (
     IdeaDeleteRequest,
     IdeaUpdateRequest,
 )
-from cogitus.api.schemas.response.idea import IdeaHashResponse, IdeaResponse
+from cogitus.api.schemas.response.idea import (
+    IdeaHashResponse,
+    IdeaRefResponse,
+    IdeaResponse,
+)
 
 router = APIRouter(
     prefix="/api/v1/ideas",
@@ -57,6 +61,44 @@ async def list_ideas(
     combine filters with `and` or `or`.
     """
     return manager.list_ideas(limit=limit, offset=offset, query=query)
+
+
+@router.get(
+    "/refs",
+    operation_id="get_idea_refs",
+    response_description="Lightweight idea references matching the request.",
+    summary="Search or list Cogitus idea references",
+)
+async def list_idea_refs(
+    manager: Annotated[IdeaManager, Depends(get_idea_manager)],
+    limit: Annotated[
+        int,
+        Query(
+            description="Maximum number of idea references to return.",
+            ge=1,
+            le=1000,
+        ),
+    ] = 100,
+    offset: Annotated[
+        int,
+        Query(description="Number of matching idea references to skip.", ge=0),
+    ] = 0,
+    query: Annotated[
+        str | None,
+        Query(
+            description=(
+                "Optional free-text search. Supports tag:<name> and "
+                "group:<name> filters, with and/or between filters."
+            ),
+        ),
+    ] = None,
+) -> list[IdeaRefResponse]:
+    """Return lightweight idea references, most recently updated first.
+
+    Use this to find candidate ideas by `pk` and `title`, then call
+    `get_single_idea` with the selected `pk` to inspect the full idea.
+    """
+    return manager.list_idea_refs(limit=limit, offset=offset, query=query)
 
 
 @router.post(
