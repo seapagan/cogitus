@@ -117,10 +117,18 @@ Ideas to add to Cogitus
 
 ## AI Assistance / MCP
 
-- include an MCP server (using `FastAPI` and `tadata-org/fastapi_mcp`, though
-  also look at `FastMCP`) so coding agents can read and write to the database.
 - Write a project info or skills file (check how FastAPI does it using
-  <https://agentskills.io>) so that Agents can understand how to use the server
-  and even the CLI export (JSON prob best?) to store memory.
+  <https://agentskills.io>) so agents can understand how to use the read-only
+  MCP server, when to fall back to CLI JSON export, and what future write
+  support should look like.
+- Consider a read-only MCP helper that returns full idea details or compact
+  summaries for a query/group in one call, so agents do not need one
+  `get_single_idea` round trip per result when summarizing many ideas.
+- Plan future MCP write support as a profile-scoped agent scratchpad: keep
+  broad read-only tools, require write tokens scoped to a Cogitus profile, add
+  explicit JWT claims such as `profile` and `scope`, and start with small write
+  tools such as create note, append note, update note, and archive note. Avoid
+  delete/write-anywhere behavior until profile isolation and recovery/history
+  are in place.
 - explore optional AI-assisted idea expansion and prompt-to-structure
   workflows.
