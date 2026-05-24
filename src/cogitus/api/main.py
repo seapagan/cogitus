@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
+from fastapi_mcp import FastApiMCP
 
 from cogitus.api.resources.auth import router as auth_router
 from cogitus.api.resources.groups import router as groups_router
@@ -75,6 +76,12 @@ def create_api_app(
     app.include_router(groups_router)
     app.include_router(tags_router)
     app.include_router(snapshot_router)
+
+    # add the mcp server
+    mcp = FastApiMCP(
+        app, include_operations=["get_ideas_list", "get_single_idea"]
+    )
+    mcp.mount_http()
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:

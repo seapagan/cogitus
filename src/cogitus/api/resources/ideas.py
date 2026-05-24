@@ -20,7 +20,7 @@ router = APIRouter(
 )
 
 
-@router.get("")
+@router.get("", operation_id="get_ideas_list")
 async def list_ideas(
     manager: Annotated[IdeaManager, Depends(get_idea_manager)],
     limit: Annotated[int, Query(ge=1, le=1000)] = 100,
@@ -52,7 +52,7 @@ async def get_idea_hash(
     return manager.get_idea_hash(idea_pk)
 
 
-@router.get("/{idea_pk}")
+@router.get("/{idea_pk}", operation_id="get_single_idea")
 async def get_idea(
     idea_pk: int,
     manager: Annotated[IdeaManager, Depends(get_idea_manager)],
