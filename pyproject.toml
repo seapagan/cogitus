@@ -25,6 +25,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
+    "fastapi-mcp",
     "httpx>=0.28.1",
     "pyperclip>=1.11.0",
     "simple-toml-settings>=0.10.0",

@@ -39,6 +39,7 @@ hooks = [
     "typer",
     "types-pyperclip",
     "uvicorn",
+    "fastapi-mcp",
   ], args = [
     "--strict",
   ] },
