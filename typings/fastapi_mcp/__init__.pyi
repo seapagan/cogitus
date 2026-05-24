@@ -1,9 +1,12 @@
 from fastapi import APIRouter, FastAPI
 from httpx import AsyncClient
+from mcp.types import Tool
 
 class AuthConfig: ...
 
 class FastApiMCP:
+    tools: list[Tool]
+
     def __init__(
         self,
         fastapi: FastAPI,
