@@ -190,7 +190,7 @@ remote_api_password="your-password"
 
 ### `mcp_auth_jwt_secret`
 
-The signing secret used for long-lived MCP bearer tokens.
+The signing secret used for MCP bearer tokens.
 
 - Type: string
 - Default: `""`
@@ -204,7 +204,7 @@ invalidate previously issued MCP tokens.
 Controls how long newly generated MCP tokens are valid.
 
 - Type: integer
-- Default: `3650`
+- Default: `90`
 
 Non-positive values fall back to the default.
 

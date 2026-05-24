@@ -132,7 +132,9 @@ cogitus mcp token
 ```
 
 The command prints the full `Bearer ...` value. It also creates and saves an
-MCP signing secret if one is not already configured.
+MCP signing secret if one is not already configured. MCP tokens are valid for
+90 days by default; set `mcp_auth_token_expire_days` to explicitly choose a
+different lifetime.
 
 To rotate the MCP signing secret and print a new token:
 
@@ -338,5 +340,5 @@ curl http://127.0.0.1:8000/api/v1/ideas \
 - The API uses the same SQLite-backed data model as the local app.
 - Server auth configuration is currently stored in the normal Cogitus config
   file.
-- MCP auth uses a separate long-lived bearer token and signing secret.
+- MCP auth uses a separate bearer token and signing secret.
 - This is still intended for light use today, not heavy multi-user deployment.

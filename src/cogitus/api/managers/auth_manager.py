@@ -235,7 +235,7 @@ class AuthManager:
 
 
 class MCPAuthManager:
-    """Long-lived MCP bearer auth manager backed by persisted settings."""
+    """MCP bearer auth manager backed by persisted settings."""
 
     def __init__(self, settings: AppSettings) -> None:
         """Store the config-backed MCP auth settings."""
@@ -270,7 +270,7 @@ class MCPAuthManager:
         *,
         expires_delta: timedelta | None = None,
     ) -> str:
-        """Create a signed long-lived MCP JWT access token."""
+        """Create a signed MCP JWT access token."""
         self.ensure_configured()
 
         token_lifetime = (

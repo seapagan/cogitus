@@ -307,7 +307,7 @@ def set_api_auth(
 def create_mcp_token(
     rotate_secret: Annotated[bool, typer.Option("--rotate-secret")] = False,
 ) -> None:
-    """Print a long-lived bearer token for MCP clients."""
+    """Print a bearer token for MCP clients."""
     auth_manager_module = cast(
         "_MCPAuthModule",
         _import_optional_module("cogitus.api.managers.auth_manager"),

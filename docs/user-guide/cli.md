@@ -86,10 +86,11 @@ cogitus mcp serve --host 127.0.0.1 --port 9000
 cogitus mcp serve --db-path /path/to/cogitus.db
 ```
 
-`cogitus mcp token` prints a long-lived `Bearer ...` token for MCP clients and
-creates the MCP signing secret if it does not already exist. `--rotate-secret`
+`cogitus mcp token` prints a `Bearer ...` token for MCP clients and creates
+the MCP signing secret if it does not already exist. `--rotate-secret`
 replaces that secret before printing a new token, which invalidates older MCP
-tokens.
+tokens. MCP tokens are valid for 90 days by default; set
+`mcp_auth_token_expire_days` to explicitly choose a different lifetime.
 
 `cogitus mcp serve` exposes the MCP endpoint at `/mcp` only. It uses separate
 MCP auth and does not expose the normal REST API routes.
