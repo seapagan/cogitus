@@ -555,7 +555,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.135.2" },
-    { name = "fastapi-mcp" },
+    { name = "fastapi-mcp", specifier = ">=0.4.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pwdlib", extras = ["argon2"], marker = "extra == 'api'", specifier = ">=0.2.1" },
     { name = "pyjwt", marker = "extra == 'api'", specifier = ">=2.10.1" },
