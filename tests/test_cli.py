@@ -615,6 +615,35 @@ class TestMCPCommands:
         finally:
             monkeypatch.delenv(COGITUS_MCP_DB_PATH_ENV, raising=False)
 
+    def test_mcp_serve_clears_db_path_env_when_not_provided(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Serve command should clear any prior MCP DB path override."""
+        monkeypatch.setattr(
+            "simple_toml_settings.settings.xdg_config_home",
+            lambda: tmp_path,
+        )
+        AppSettings._instances.clear()
+        settings = get_settings()
+        settings.mcp_auth_jwt_secret = "m" * 32
+        settings.save()
+        monkeypatch.setenv(COGITUS_MCP_DB_PATH_ENV, "stale-value")
+
+        with patch("uvicorn.run") as mock_run:
+            result = runner.invoke(app, ["mcp", "serve"])
+
+        assert result.exit_code == 0
+        assert COGITUS_MCP_DB_PATH_ENV not in os.environ
+        mock_run.assert_called_once_with(
+            "cogitus.api.mcp:create_mcp_app",
+            host="127.0.0.1",
+            port=9000,
+            reload=False,
+            factory=True,
+        )
+
     def test_mcp_serve_requires_configured_secret(
         self,
         tmp_path: Path,

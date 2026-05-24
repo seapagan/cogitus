@@ -9,12 +9,13 @@ from typing import TYPE_CHECKING, cast
 import jwt
 import pytest
 from fastapi import HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
 from pwdlib.exceptions import UnknownHashError
 from starlette.routing import Mount, Route, WebSocketRoute
 
 import cogitus.api as api_package
-from cogitus.api.dependencies import get_service
+from cogitus.api.dependencies import get_current_mcp_user, get_service
 from cogitus.api.main import COGITUS_API_DB_PATH_ENV, create_api_app
 from cogitus.api.managers.auth_manager import AuthManager, MCPAuthManager
 from cogitus.api.mcp import create_mcp_app
@@ -334,6 +335,20 @@ def test_mcp_auth_manager_accepts_valid_token(
     assert decoded.username == "mcp"
 
 
+def test_mcp_auth_manager_requires_configured_secret(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP auth manager should fail clearly without a signing secret."""
+    configured_api_settings.mcp_auth_jwt_secret = ""
+    manager = MCPAuthManager(configured_api_settings)
+
+    with pytest.raises(HTTPException) as exc:
+        manager.ensure_configured()
+
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "MCP authentication is not configured"
+
+
 def test_mcp_auth_manager_rejects_malformed_token(
     configured_api_settings: AppSettings,
 ) -> None:
@@ -345,6 +360,49 @@ def test_mcp_auth_manager_rejects_malformed_token(
         manager.decode_access_token("not-a-jwt")
 
     assert exc.value.status_code == 401
+
+
+def test_mcp_auth_manager_rejects_wrong_subject_token(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP auth manager should reject tokens for non-MCP subjects."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+    token = jwt.encode(
+        {
+            "sub": "api-user",
+            "exp": datetime.now(tz=timezone.utc) + timedelta(days=1),
+        },
+        manager.jwt_secret,
+        algorithm=DEFAULT_API_AUTH_JWT_ALGORITHM,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        manager.decode_access_token(token)
+
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.parametrize("credentials", [None, "   "])
+def test_get_current_mcp_user_rejects_missing_bearer_credentials(
+    configured_api_settings: AppSettings,
+    credentials: str | None,
+) -> None:
+    """MCP auth dependency should reject missing or blank bearer tokens."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+    bearer = None
+    if credentials is not None:
+        bearer = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials=credentials,
+        )
+
+    with pytest.raises(HTTPException) as exc:
+        get_current_mcp_user(bearer, manager)
+
+    assert exc.value.status_code == 401
+    assert exc.value.headers == {"WWW-Authenticate": "Bearer"}
 
 
 def test_mcp_auth_manager_rejects_expired_token(

@@ -102,6 +102,32 @@ def test_snapshot_returns_full_remote_dataset(api_client: TestClient) -> None:
     assert len(body["ideas"][0]["detail_hash"]) == 64
 
 
+def test_name_endpoints_return_group_and_tag_names(
+    api_client: TestClient,
+) -> None:
+    """Name endpoints should return plain group and tag names."""
+    group = api_client.post("/api/v1/groups", json={"name": "backend"})
+    assert group.status_code == 201
+    created = api_client.post(
+        "/api/v1/ideas",
+        json={
+            "title": "Names idea",
+            "body": "Populate tag names",
+            "tags": ["remote", "snapshot"],
+            "group_pk": group.json()["pk"],
+        },
+    )
+    assert created.status_code == 201
+
+    groups = api_client.get("/api/v1/groups/names")
+    tags = api_client.get("/api/v1/tags/names")
+
+    assert groups.status_code == 200
+    assert groups.json() == ["backend", "default"]
+    assert tags.status_code == 200
+    assert tags.json() == ["remote", "snapshot"]
+
+
 def test_hash_endpoints_return_lightweight_state(
     api_client: TestClient,
 ) -> None:
