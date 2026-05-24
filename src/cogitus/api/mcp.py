@@ -75,6 +75,9 @@ def create_mcp_app(
         title=f"{app_metadata.title} MCP",
         version=app_metadata.version,
         summary="Cogitus MCP server.",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
         lifespan=lifespan,
     )
     mcp = FastApiMCP(
