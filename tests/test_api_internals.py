@@ -145,9 +145,15 @@ def test_create_mcp_app_exposes_only_mcp_routes(
         if isinstance(route, Route | Mount | WebSocketRoute)
     }
 
-    assert "/mcp" in paths
+    assert paths == {"/mcp"}
     assert "/api/v1/ideas" not in paths
     assert "/api/v1/auth/token" not in paths
+
+    with TestClient(app) as client:
+        assert client.get("/api").status_code == 404
+        assert client.get("/api/v1").status_code == 404
+        assert client.get("/api/v1/ideas").status_code == 404
+        assert client.post("/api/v1/auth/token").status_code == 404
 
 
 @pytest.mark.asyncio
