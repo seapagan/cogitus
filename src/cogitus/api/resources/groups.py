@@ -27,6 +27,19 @@ async def list_groups(
     return manager.list_groups()
 
 
+@router.get(
+    "/names",
+    operation_id="get_group_names",
+    response_description="Group names available for group:<name> filters.",
+    summary="List Cogitus group names",
+)
+async def list_group_names(
+    manager: Annotated[GroupManager, Depends(get_group_manager)],
+) -> list[str]:
+    """Return a list of all group names."""
+    return manager.list_group_names()
+
+
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,

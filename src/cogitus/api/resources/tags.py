@@ -24,6 +24,19 @@ async def list_tags(
     return manager.list_tags()
 
 
+@router.get(
+    "/names",
+    operation_id="get_tag_names",
+    response_description="Tag names available for tag:<name> filters.",
+    summary="List Cogitus tag names",
+)
+async def list_tag_names(
+    manager: Annotated[TagManager, Depends(get_tag_manager)],
+) -> list[str]:
+    """Return a list of all tag names."""
+    return manager.list_tag_names()
+
+
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,

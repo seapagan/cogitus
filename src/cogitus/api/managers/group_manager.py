@@ -26,6 +26,10 @@ class GroupManager:
             to_group_response(group) for group in self._service.list_groups()
         ]
 
+    def list_group_names(self) -> list[str]:
+        """Return all group names."""
+        return [group.name for group in self.list_groups()]
+
     def get_group(self, group_pk: int) -> GroupResponse:
         """Return a single group response."""
         group = self._service.get_group(group_pk)
