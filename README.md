@@ -81,6 +81,7 @@ Functionality available in the current release:
 - Copy & Paste support
 - CLI commands for scripting (`list`, `export`, `delete`)
 - Optional FastAPI server for standalone access to ideas, groups, and tags
+- Optional MCP server for read-only tool access from MCP clients
 - Remote mode so a Cogitus TUI can use a Cogitus API server instead of a local
   SQLite database
 

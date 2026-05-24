@@ -1,7 +1,8 @@
 # API
 
 Cogitus includes an optional FastAPI server that exposes ideas, groups, and
-tags over HTTP.
+tags over HTTP. It also includes a separate MCP server for read-only tool
+access from MCP clients.
 
 !!! warning
     This API is still a work in progress. Bearer-token authentication is now
@@ -43,6 +44,9 @@ cogitus api serve --reload
 ```
 
 Use `--db-path` to point the API at a specific Cogitus SQLite database file.
+
+`cogitus api serve` exposes the REST API only. It does not mount the MCP
+endpoint.
 
 ## Configure Authentication
 
@@ -106,6 +110,64 @@ curl http://127.0.0.1:8000/api/v1/ideas \
 When the Cogitus TUI is using remote mode, it handles this token flow for you.
 If the access token expires, the client reauthenticates once and retries the
 request automatically.
+
+## MCP Server
+
+Cogitus can also run a dedicated MCP server for read-only access to the same
+idea database. This is separate from the REST API server:
+
+- `cogitus api serve` exposes REST routes on port `8000` by default.
+- `cogitus mcp serve` exposes only `/mcp` on port `9000` by default.
+- MCP tokens are separate from normal API login tokens.
+
+Create a token for your MCP client:
+
+```bash
+cogitus mcp token
+```
+
+The command prints the full `Bearer ...` value. It also creates and saves an
+MCP signing secret if one is not already configured.
+
+To rotate the MCP signing secret and print a new token:
+
+```bash
+cogitus mcp token --rotate-secret
+```
+
+Rotating the secret invalidates previously issued MCP tokens.
+
+Start the MCP server:
+
+```bash
+cogitus mcp serve
+```
+
+Common options:
+
+```bash
+cogitus mcp serve --host 127.0.0.1 --port 9000
+cogitus mcp serve --db-path /path/to/cogitus.db
+cogitus mcp serve --reload
+```
+
+Configure the MCP client to connect to:
+
+```text
+http://127.0.0.1:9000/mcp
+```
+
+Use the printed `Bearer ...` token as the MCP request authorization value.
+
+The MCP server currently exposes these read-only tools:
+
+- `get_idea_refs`
+- `get_single_idea`
+- `get_group_names`
+- `get_tag_names`
+
+The MCP app does not expose the normal REST API routes, `/docs`, or
+`/openapi.json`.
 
 ## Use Cogitus with a Remote Server
 
@@ -197,6 +259,8 @@ It also exposes:
 - `/docs` for the interactive FastAPI docs
 - `/openapi.json` for the OpenAPI schema
 
+The MCP server is separate and exposes only `/mcp`.
+
 ## Example Output
 
 Health check:
@@ -251,4 +315,5 @@ curl http://127.0.0.1:8000/api/v1/ideas \
 - The API uses the same SQLite-backed data model as the local app.
 - Server auth configuration is currently stored in the normal Cogitus config
   file.
+- MCP auth uses a separate long-lived bearer token and signing secret.
 - This is still intended for light use today, not heavy multi-user deployment.
