@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from types import ModuleType
 
 COGITUS_API_DB_PATH_ENV = "COGITUS_API_DB_PATH"
+COGITUS_MCP_DB_PATH_ENV = "COGITUS_MCP_DB_PATH"
 
 
 class _UvicornModule(Protocol):
@@ -48,6 +49,24 @@ class _AuthModule(Protocol):
     """Protocol for the optional auth helper module."""
 
     def hash_password(self, password: str) -> str: ...
+
+
+class _MCPAuthManagerProtocol(Protocol):
+    """Protocol for the optional MCP auth manager."""
+
+    def create_access_token(self) -> str: ...
+
+
+class _MCPAuthManagerFactory(Protocol):
+    """Protocol for constructing an optional MCP auth manager."""
+
+    def __call__(self, settings: object) -> _MCPAuthManagerProtocol: ...
+
+
+class _MCPAuthModule(Protocol):
+    """Protocol for the optional MCP auth helper module."""
+
+    MCPAuthManager: _MCPAuthManagerFactory
 
 
 class ListFormat(str, Enum):
@@ -82,7 +101,9 @@ app = typer.Typer(
     add_completion=False,
 )
 api_app = typer.Typer(help="Serve and manage the Cogitus API.")
+mcp_app = typer.Typer(help="Serve and manage the Cogitus MCP server.")
 app.add_typer(api_app, name="api")
+app.add_typer(mcp_app, name="mcp")
 
 
 def _version_callback(value: object) -> None:
@@ -280,3 +301,55 @@ def set_api_auth(
     )
     if rotate_secret:
         typer.echo("JWT signing secret rotated.")
+
+
+@mcp_app.command("token")
+def create_mcp_token(
+    rotate_secret: Annotated[bool, typer.Option("--rotate-secret")] = False,
+) -> None:
+    """Print a long-lived bearer token for MCP clients."""
+    auth_manager_module = cast(
+        "_MCPAuthModule",
+        _import_optional_module("cogitus.api.managers.auth_manager"),
+    )
+    manager_factory = auth_manager_module.MCPAuthManager
+
+    settings = get_settings()
+    if rotate_secret or not settings.mcp_auth_jwt_secret.strip():
+        settings.mcp_auth_jwt_secret = token_urlsafe(32)
+        settings.save()
+
+    token = manager_factory(settings).create_access_token()
+    typer.echo(f"Bearer {token}")
+
+
+@mcp_app.command("serve")
+def serve_mcp(
+    host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port")] = 9000,
+    reload: Annotated[bool, typer.Option("--reload/--no-reload")] = False,
+    db_path: Annotated[str | None, typer.Option("--db-path")] = None,
+) -> None:
+    """Serve the MCP-only FastAPI application."""
+    uvicorn = cast("_UvicornModule", _import_optional_module("uvicorn"))
+    settings = get_settings()
+    if not settings.mcp_auth_jwt_secret.strip():
+        typer.secho(
+            "Error: MCP authentication is not configured. "
+            "Run 'cogitus mcp token' first.",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    if db_path is None:
+        os.environ.pop(COGITUS_MCP_DB_PATH_ENV, None)
+    else:
+        os.environ[COGITUS_MCP_DB_PATH_ENV] = db_path
+
+    uvicorn.run(
+        "cogitus.api.mcp:create_mcp_app",
+        host=host,
+        port=port,
+        reload=reload,
+        factory=True,
+    )

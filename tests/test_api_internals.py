@@ -11,11 +11,13 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pwdlib.exceptions import UnknownHashError
+from starlette.routing import Mount, Route, WebSocketRoute
 
 import cogitus.api as api_package
 from cogitus.api.dependencies import get_service
 from cogitus.api.main import COGITUS_API_DB_PATH_ENV, create_api_app
-from cogitus.api.managers.auth_manager import AuthManager
+from cogitus.api.managers.auth_manager import AuthManager, MCPAuthManager
+from cogitus.api.mcp import create_mcp_app
 from cogitus.config import (
     DEFAULT_API_AUTH_JWT_ALGORITHM,
     AppSettings,
@@ -109,6 +111,56 @@ def test_create_api_app_uses_env_db_path(
         default_group_name="default",
     )
     fake_db.close.assert_called_once_with()
+
+
+def test_create_api_app_does_not_mount_mcp(
+    configured_api_settings: AppSettings,
+) -> None:
+    """Normal API app should not expose the MCP endpoint."""
+    with TestClient(
+        create_api_app(memory=True, default_group_name="default")
+    ) as client:
+        response = client.get("/mcp")
+
+    assert response.status_code == 404
+
+
+def test_create_mcp_app_exposes_only_mcp_routes(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP app should mount MCP without exposing REST routes."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    app = create_mcp_app(memory=True, default_group_name="default")
+
+    paths = {
+        route.path
+        for route in app.routes
+        if isinstance(route, Route | Mount | WebSocketRoute)
+    }
+
+    assert "/mcp" in paths
+    assert "/api/v1/ideas" not in paths
+    assert "/api/v1/auth/token" not in paths
+
+
+@pytest.mark.asyncio
+async def test_create_mcp_app_lifespan_starts_internal_api(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP app lifespan should initialize internal API state for tools."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+    token = manager.create_access_token()
+    app = create_mcp_app(memory=True, default_group_name="default")
+
+    async with app.router.lifespan_context(app):
+        response = await app.state.mcp_api_client.get(
+            "/api/v1/ideas/refs",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 def test_token_endpoint_returns_service_unavailable_when_auth_unconfigured(
@@ -234,6 +286,67 @@ def test_auth_manager_rejects_token_for_different_subject(
         HTTPException,
         match="Could not validate credentials",
     ) as exc:
+        manager.decode_access_token(token)
+
+    assert exc.value.status_code == 401
+
+
+def test_mcp_auth_manager_accepts_valid_token(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP auth manager should accept its own signed tokens."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+
+    token = manager.create_access_token()
+    decoded = manager.decode_access_token(token)
+
+    assert decoded.username == "mcp"
+
+
+def test_mcp_auth_manager_rejects_malformed_token(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP auth manager should reject malformed bearer tokens."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+
+    with pytest.raises(HTTPException) as exc:
+        manager.decode_access_token("not-a-jwt")
+
+    assert exc.value.status_code == 401
+
+
+def test_mcp_auth_manager_rejects_expired_token(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP auth manager should reject expired bearer tokens."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+    token = manager.create_access_token(expires_delta=timedelta(seconds=-1))
+
+    with pytest.raises(HTTPException) as exc:
+        manager.decode_access_token(token)
+
+    assert exc.value.status_code == 401
+
+
+def test_mcp_auth_manager_rejects_wrong_secret_token(
+    configured_api_settings: AppSettings,
+) -> None:
+    """MCP auth manager should reject tokens signed by another secret."""
+    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    manager = MCPAuthManager(configured_api_settings)
+    token = jwt.encode(
+        {
+            "sub": "mcp",
+            "exp": datetime.now(tz=timezone.utc) + timedelta(days=1),
+        },
+        "o" * 32,
+        algorithm=DEFAULT_API_AUTH_JWT_ALGORITHM,
+    )
+
+    with pytest.raises(HTTPException) as exc:
         manager.decode_access_token(token)
 
     assert exc.value.status_code == 401

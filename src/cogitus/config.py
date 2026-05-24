@@ -50,6 +50,7 @@ VALID_DATA_BACKEND_MODES: tuple[str, ...] = tuple(
 DEFAULT_DATA_BACKEND_MODE = DataBackendMode.LOCAL
 DEFAULT_API_AUTH_JWT_ALGORITHM = "HS256"
 DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES = 30
+DEFAULT_MCP_AUTH_TOKEN_EXPIRE_DAYS = 3650
 DEFAULT_THEME = "textual-dark"
 DEFAULT_TIMEZONE = ""
 DEFAULT_DATE_FORMAT = ""
@@ -75,6 +76,8 @@ class AppSettings(TOMLSettings):
     api_auth_jwt_secret: str = ""
     api_auth_jwt_algorithm: str = DEFAULT_API_AUTH_JWT_ALGORITHM
     api_auth_token_expire_minutes: int = DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES
+    mcp_auth_jwt_secret: str = ""
+    mcp_auth_token_expire_days: int = DEFAULT_MCP_AUTH_TOKEN_EXPIRE_DAYS
     timezone: str = DEFAULT_TIMEZONE
     date_format: str = DEFAULT_DATE_FORMAT
     save_idea_scroll_pos: bool = True
@@ -134,6 +137,13 @@ def normalize_api_auth_token_expire_minutes(minutes: int) -> int:
     if minutes > 0:
         return minutes
     return DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES
+
+
+def normalize_mcp_auth_token_expire_days(days: int) -> int:
+    """Normalize MCP token lifetime with safe default."""
+    if days > 0:
+        return days
+    return DEFAULT_MCP_AUTH_TOKEN_EXPIRE_DAYS
 
 
 def normalize_timezone(tz_str: str) -> str:

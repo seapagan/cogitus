@@ -11,9 +11,15 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+from fastapi import HTTPException
 from typer.testing import CliRunner
 
-from cogitus.cli.commands import COGITUS_API_DB_PATH_ENV, app
+from cogitus.api.managers.auth_manager import MCPAuthManager
+from cogitus.cli.commands import (
+    COGITUS_API_DB_PATH_ENV,
+    COGITUS_MCP_DB_PATH_ENV,
+    app,
+)
 from cogitus.cli.formatters import (
     format_idea_markdown,
     format_ideas_json,
@@ -500,6 +506,133 @@ class TestApiAuthCommand:
 
         assert result.exit_code == 1
         assert "username cannot be empty" in result.output
+
+
+class TestMCPCommands:
+    """Tests for MCP token and serve commands."""
+
+    def test_mcp_token_creates_secret_and_prints_bearer_token(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Token should create a secret if missing and print a bearer token."""
+        monkeypatch.setattr(
+            "simple_toml_settings.settings.xdg_config_home",
+            lambda: tmp_path,
+        )
+        AppSettings._instances.clear()
+        generated_key = "g" * 32
+        monkeypatch.setattr(
+            "cogitus.cli.commands.token_urlsafe",
+            lambda _: generated_key,
+        )
+
+        result = runner.invoke(app, ["mcp", "token"])
+
+        AppSettings._instances.clear()
+        settings = get_settings()
+
+        assert result.exit_code == 0
+        assert result.output.startswith("Bearer ")
+        assert settings.mcp_auth_jwt_secret == generated_key
+
+    def test_mcp_token_rotates_secret_and_invalidates_old_token(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """--rotate-secret should replace the secret before issuing a token."""
+        monkeypatch.setattr(
+            "simple_toml_settings.settings.xdg_config_home",
+            lambda: tmp_path,
+        )
+        AppSettings._instances.clear()
+        settings = get_settings()
+        settings.mcp_auth_jwt_secret = "o" * 32
+        settings.save()
+        old_token = MCPAuthManager(settings).create_access_token()
+        monkeypatch.setattr(
+            "cogitus.cli.commands.token_urlsafe",
+            lambda _: "n" * 32,
+        )
+
+        result = runner.invoke(app, ["mcp", "token", "--rotate-secret"])
+
+        AppSettings._instances.clear()
+        loaded = get_settings()
+        manager = MCPAuthManager(loaded)
+
+        assert result.exit_code == 0
+        assert loaded.mcp_auth_jwt_secret == "n" * 32
+        assert result.output.startswith("Bearer ")
+        with pytest.raises(HTTPException):
+            manager.decode_access_token(old_token)
+
+    def test_mcp_serve_uses_uvicorn_factory(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        """Serve should invoke uvicorn with the MCP app factory."""
+        monkeypatch.setattr(
+            "simple_toml_settings.settings.xdg_config_home",
+            lambda: tmp_path,
+        )
+        AppSettings._instances.clear()
+        settings = get_settings()
+        settings.mcp_auth_jwt_secret = "m" * 32
+        settings.save()
+        monkeypatch.delenv(COGITUS_MCP_DB_PATH_ENV, raising=False)
+        db_path = tmp_path / "cogitus-mcp.db"
+
+        try:
+            with patch("uvicorn.run") as mock_run:
+                result = runner.invoke(
+                    app,
+                    [
+                        "mcp",
+                        "serve",
+                        "--host",
+                        "127.0.0.1",
+                        "--port",
+                        "9002",
+                        "--reload",
+                        "--db-path",
+                        str(db_path),
+                    ],
+                )
+
+            assert result.exit_code == 0
+            assert os.environ[COGITUS_MCP_DB_PATH_ENV] == str(db_path)
+            mock_run.assert_called_once_with(
+                "cogitus.api.mcp:create_mcp_app",
+                host="127.0.0.1",
+                port=9002,
+                reload=True,
+                factory=True,
+            )
+        finally:
+            monkeypatch.delenv(COGITUS_MCP_DB_PATH_ENV, raising=False)
+
+    def test_mcp_serve_requires_configured_secret(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Serve should fail clearly before uvicorn if no MCP secret exists."""
+        monkeypatch.setattr(
+            "simple_toml_settings.settings.xdg_config_home",
+            lambda: tmp_path,
+        )
+        AppSettings._instances.clear()
+
+        with patch("uvicorn.run") as mock_run:
+            result = runner.invoke(app, ["mcp", "serve"])
+
+        assert result.exit_code == 1
+        assert "MCP authentication is not configured" in result.output
+        mock_run.assert_not_called()
 
 
 class TestVersionOption:

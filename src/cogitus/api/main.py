@@ -7,8 +7,6 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
-from fastapi_mcp import FastApiMCP
-from mcp.types import ToolAnnotations
 
 from cogitus.api.resources.auth import router as auth_router
 from cogitus.api.resources.groups import router as groups_router
@@ -77,27 +75,6 @@ def create_api_app(
     app.include_router(groups_router)
     app.include_router(tags_router)
     app.include_router(snapshot_router)
-
-    # add the mcp server
-    mcp = FastApiMCP(
-        app,
-        include_operations=[
-            "get_idea_refs",
-            "get_single_idea",
-            "get_group_names",
-            "get_tag_names",
-        ],
-    )
-
-    # set the correct annotations for each mcp tool.
-    for tool in mcp.tools:
-        tool.annotations = ToolAnnotations(
-            readOnlyHint=True,
-            destructiveHint=False,
-            idempotentHint=True,
-            openWorldHint=False,
-        )
-    mcp.mount_http()
 
     @app.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
