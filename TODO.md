@@ -50,7 +50,8 @@ Ideas to add to Cogitus
 
 ## Documentation
 
-- Improve example responses in the swagger docs
+- Add realistic OpenAPI/Swagger response examples to all API endpoints, not
+  just the MCP-exposed read-only routes.
 
 ## Export, Import, and Backup
 

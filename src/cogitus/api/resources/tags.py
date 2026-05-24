@@ -1,6 +1,6 @@
 """FastAPI routes for tags."""
 
-from typing import Annotated
+from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, status
 
@@ -14,6 +14,7 @@ router = APIRouter(
     tags=["tags"],
     dependencies=[Depends(get_current_api_user)],
 )
+TAG_NAMES_RESPONSE_EXAMPLE: Final = ["sqlite", "search", "mcp"]
 
 
 @router.get("")
@@ -29,6 +30,15 @@ async def list_tags(
     operation_id="get_tag_names",
     response_description="Tag names available for tag:<name> filters.",
     summary="List Cogitus tag names",
+    responses={
+        status.HTTP_200_OK: {
+            "content": {
+                "application/json": {
+                    "example": TAG_NAMES_RESPONSE_EXAMPLE,
+                },
+            },
+        },
+    },
 )
 async def list_tag_names(
     manager: Annotated[TagManager, Depends(get_tag_manager)],

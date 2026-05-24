@@ -1,6 +1,6 @@
 """FastAPI routes for ideas."""
 
-from typing import Annotated
+from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, Path, Query, status
 
@@ -22,6 +22,61 @@ router = APIRouter(
     tags=["ideas"],
     dependencies=[Depends(get_current_api_user)],
 )
+IDEA_REFS_RESPONSE_EXAMPLE: Final = [
+    {
+        "pk": 42,
+        "title": "Compare SQLite FTS query strategies",
+        "group": "backend",
+        "tags": ["sqlite", "search", "performance"],
+        "updated_at": 1763904000,
+    },
+    {
+        "pk": 43,
+        "title": "Draft MCP integration notes",
+        "group": "docs",
+        "tags": ["mcp", "api"],
+        "updated_at": 1763907600,
+    },
+]
+IDEA_RESPONSE_EXAMPLE: Final = {
+    "pk": 42,
+    "created_at": 1763817600,
+    "updated_at": 1763904000,
+    "title": "Compare SQLite FTS query strategies",
+    "body": (
+        "Review prefix matching, tag filters, and ranking behavior before "
+        "settling on the next search implementation."
+    ),
+    "detail_hash": (
+        "7f83b1657ff1fc53b92dc18148a1d65dfa1359588e3e3b9543b34cba9f6d4c2f"
+    ),
+    "group": {
+        "pk": 3,
+        "created_at": 1763814000,
+        "updated_at": 1763814000,
+        "name": "backend",
+    },
+    "tags": [
+        {
+            "pk": 8,
+            "created_at": 1763814100,
+            "updated_at": 1763814100,
+            "name": "sqlite",
+        },
+        {
+            "pk": 9,
+            "created_at": 1763814200,
+            "updated_at": 1763814200,
+            "name": "search",
+        },
+        {
+            "pk": 10,
+            "created_at": 1763814300,
+            "updated_at": 1763814300,
+            "name": "performance",
+        },
+    ],
+}
 
 
 @router.get(
@@ -68,6 +123,15 @@ async def list_ideas(
     operation_id="get_idea_refs",
     response_description="Lightweight idea references matching the request.",
     summary="Search or list Cogitus idea references",
+    responses={
+        status.HTTP_200_OK: {
+            "content": {
+                "application/json": {
+                    "example": IDEA_REFS_RESPONSE_EXAMPLE,
+                },
+            },
+        },
+    },
 )
 async def list_idea_refs(
     manager: Annotated[IdeaManager, Depends(get_idea_manager)],
@@ -127,6 +191,15 @@ async def get_idea_hash(
     operation_id="get_single_idea",
     response_description="The requested idea with its group and tags.",
     summary="Get a Cogitus idea by primary key",
+    responses={
+        status.HTTP_200_OK: {
+            "content": {
+                "application/json": {
+                    "example": IDEA_RESPONSE_EXAMPLE,
+                },
+            },
+        },
+    },
 )
 async def get_idea(
     idea_pk: Annotated[
