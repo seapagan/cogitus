@@ -734,15 +734,13 @@ async def test_idea_form_tags_autocomplete_defensive_branches(
 @pytest.mark.asyncio
 async def test_idea_form_escape_closes_tags_autocomplete_before_cancel(
     service: IdeaService,
-    mocker: MockerFixture,
 ) -> None:
-    """Esc should close tags autocomplete before dismissing the form."""
+    """Esc should close tags autocomplete before dirty cancel handling."""
     service.create_idea("A", tags=["alpha"])
     screen = IdeaFormScreen(service)
     app = _SingleScreenApp(screen)
 
     async with app.run_test() as pilot:
-        dismiss = mocker.patch.object(screen, "dismiss")
         tags_input = screen.query_one("#tags-input", Input)
         autocomplete = screen.query_one("#tags-autocomplete", OptionList)
 
@@ -755,11 +753,68 @@ async def test_idea_form_escape_closes_tags_autocomplete_before_cancel(
         await pilot.press("escape")
         await pilot.pause()
         assert autocomplete.has_class("-hidden")
-        dismiss.assert_not_called()
+        assert app.screen is screen
 
         await pilot.press("escape")
         await pilot.pause()
+        assert isinstance(app.screen, ConfirmDialog)
+
+
+@pytest.mark.asyncio
+async def test_idea_form_clean_new_cancel_dismisses_without_confirm(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Clean new idea cancel should close without discard confirmation."""
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+        push_screen = mocker.patch.object(app, "push_screen")
+
+        screen.action_cancel()
+
         dismiss.assert_called_once_with(None)
+        push_screen.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_cancel_confirms_before_discarding_dirty_new(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Dirty new idea cancel should require explicit discard confirmation."""
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+        push_screen = mocker.patch.object(app, "push_screen")
+        title = screen.query_one("#title-input", Input)
+        body = screen.query_one("#body-input", CogitusTextArea)
+
+        title.value = "Draft title"
+        body.text = "Draft body"
+
+        screen.action_cancel()
+
+        dismiss.assert_not_called()
+        push_screen.assert_called_once()
+        confirm = push_screen.call_args.args[0]
+        callback = push_screen.call_args.kwargs["callback"]
+
+        assert isinstance(confirm, ConfirmDialog)
+
+        callback(False)
+        dismiss.assert_not_called()
+        assert title.value == "Draft title"
+        assert body.text == "Draft body"
+
+        callback(True)
+        dismiss.assert_called_once_with(None)
+        await pilot.pause()
 
 
 @pytest.mark.asyncio
@@ -1330,6 +1385,14 @@ def test_idea_form_persist_cursor_noop_for_new_mode(
     set_cursor = mocker.patch.object(service, "set_idea_cursor_position")
     screen._persist_edit_cursor_position()
     set_cursor.assert_not_called()
+
+
+def test_idea_form_new_mode_has_no_unsaved_changes_before_mount(
+    service: IdeaService,
+) -> None:
+    """New mode should treat missing pre-mount baseline as clean."""
+    screen = IdeaFormScreen(service)
+    assert screen._has_unsaved_changes() is False
 
 
 def test_idea_form_cursor_location_from_index_handles_newlines(
