@@ -103,7 +103,7 @@ httpx==0.28.1
     #   mcp
 httpx-sse==0.4.3
     # via mcp
-idna==3.11
+idna==3.15
     # via
     #   anyio
     #   httpx
@@ -229,7 +229,7 @@ pyjwt==2.12.1
     # via
     #   mcp
     #   pygithub
-pymdown-extensions==10.21.2
+pymdown-extensions==10.21.3
     # via mkdocs-material
 pynacl==1.6.2
     # via pygithub
