@@ -189,6 +189,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         self._update_tags_group_row_layout(self.size.width)
         self._load_tag_autocomplete_source()
         if self._idea is None:
+            self._initial_form_state = self._current_form_state()
             title = self.query_one("#title-input", Input)
             title.focus()
             title.cursor_position = 0
@@ -496,7 +497,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         self,
         idea: Idea | None,
     ) -> _IdeaFormState | None:
-        """Build the initial edit snapshot for unsaved-change checks."""
+        """Build the initial existing-idea snapshot for unsaved checks."""
         if idea is None:
             return None
         return _IdeaFormState(
@@ -524,7 +525,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         )
 
     def _has_unsaved_changes(self) -> bool:
-        """Return whether the edit form differs from its initial state."""
+        """Return whether the form differs from its initial state."""
         if self._initial_form_state is None:
             return False
         return self._current_form_state() != self._initial_form_state
@@ -558,7 +559,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         return None
 
     def _confirm_discard_changes(self) -> None:
-        """Prompt before discarding unsaved edit changes."""
+        """Prompt before discarding unsaved form changes."""
         focused = self.app.focused
         if focused is not None and focused.screen is self:
             self._focus_after_cancel_reject = self._editable_focus_target(
