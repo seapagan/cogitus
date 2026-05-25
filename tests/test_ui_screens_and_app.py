@@ -600,6 +600,78 @@ async def test_idea_form_unfocused_tags_value_change_keeps_autocomplete_hidden(
 
 
 @pytest.mark.asyncio
+async def test_idea_form_ctrl_a_selects_focused_editable_text(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Ctrl+a should select all text in the focused form editor."""
+    service.create_idea("A", tags=["alpha"])
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        title = screen.query_one("#title-input", Input)
+        tags_input = screen.query_one("#tags-input", Input)
+        body = screen.query_one("#body-input", CogitusTextArea)
+        autocomplete = screen.query_one("#tags-autocomplete", OptionList)
+
+        title.value = "Draft title"
+        title.focus()
+        await pilot.pause()
+        event = mocker.Mock()
+        event.key = "ctrl+A"
+        screen.on_key(cast("events.Key", event))
+        assert title.selected_text == "Draft title"
+        event.prevent_default.assert_called_once()
+        event.stop.assert_called_once()
+
+        tags_input.value = "python, testing"
+        tags_input.cursor_position = len(tags_input.value)
+        tags_input.focus()
+        await pilot.pause()
+        autocomplete.set_options(["python"])
+        autocomplete.remove_class("-hidden")
+        assert not autocomplete.has_class("-hidden")
+
+        await pilot.press("ctrl+a")
+        await pilot.pause()
+        assert tags_input.selected_text == "python, testing"
+        assert autocomplete.has_class("-hidden")
+
+        body.text = "First line\nSecond line"
+        body.focus()
+        await pilot.pause()
+        await pilot.press("ctrl+a")
+        await pilot.pause()
+        assert body.selected_text == body.text
+
+
+@pytest.mark.asyncio
+async def test_idea_form_select_all_ignores_non_editable_focus(
+    service: IdeaService,
+    mocker: MockerFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Select-all helper should ignore missing or non-editor focus."""
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        monkeypatch.setattr(type(app), "focused", property(lambda _self: None))
+        assert screen._select_all_focused_editable() is False
+
+        monkeypatch.undo()
+        screen.query_one("#cancel-btn", Button).focus()
+        await pilot.pause()
+        assert screen._select_all_focused_editable() is False
+        event = mocker.Mock()
+        event.key = "ctrl+a"
+        assert screen._handle_select_all_key(cast("events.Key", event)) is False
+        event.prevent_default.assert_not_called()
+        event.stop.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_idea_form_tags_autocomplete_keys_and_accept(
     service: IdeaService,
 ) -> None:
@@ -1867,6 +1939,9 @@ async def test_help_screen_close_action(mocker: MockerFixture) -> None:
     """Help modal close action should dismiss correctly."""
     help_screen = HelpScreen()
     assert "a                About" in help_screen.HELP_TEXT
+    assert "Ctrl+a           Select all focused form text" in (
+        help_screen.HELP_TEXT
+    )
     assert "Escape           Cancel (confirm if edit is dirty)" in (
         help_screen.HELP_TEXT
     )

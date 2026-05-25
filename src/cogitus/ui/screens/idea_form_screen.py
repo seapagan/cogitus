@@ -244,47 +244,78 @@ class IdeaFormScreen(ModalScreen[int | None]):
         event.stop()
 
     def on_key(self, event: Key) -> None:
-        """Handle autocomplete navigation keys in tags input."""
+        """Handle form-level keyboard shortcuts."""
+        if self._handle_select_all_key(event):
+            return
+
         tags_input = self.query_one("#tags-input", Input)
-        if self.app.focused is not tags_input:
-            return
+        if (
+            self.app.focused is tags_input
+            and self._tag_autocomplete_is_visible()
+        ):
+            self._handle_tag_autocomplete_key(event)
 
-        visible = self._tag_autocomplete_is_visible()
+    def _handle_select_all_key(self, event: Key) -> bool:
+        """Handle Ctrl+a/Ctrl+A select-all for focused form editors."""
+        if event.key.lower() != "ctrl+a":
+            return False
+        if not self._select_all_focused_editable():
+            return False
+        event.prevent_default()
+        event.stop()
+        return True
 
-        if event.key == "tab" and visible:
+    def _handle_tag_autocomplete_key(self, event: Key) -> None:
+        """Handle tag autocomplete navigation keys."""
+        if event.key == "tab":
             event.prevent_default()
             event.stop()
             self._cycle_tag_autocomplete(1)
             return
 
-        if event.key in {"shift+tab", "backtab"} and visible:
+        if event.key in {"shift+tab", "backtab"}:
             event.prevent_default()
             event.stop()
             self._cycle_tag_autocomplete(-1)
             return
 
-        if event.key == "down" and visible:
+        if event.key == "down":
             event.prevent_default()
             event.stop()
             self._cycle_tag_autocomplete(1)
             return
 
-        if event.key == "up" and visible:
+        if event.key == "up":
             event.prevent_default()
             event.stop()
             self._cycle_tag_autocomplete(-1)
             return
 
-        if event.key == "enter" and visible:
+        if event.key == "enter":
             event.prevent_default()
             event.stop()
             self._apply_highlighted_tag_autocomplete()
             return
 
-        if event.key == "escape" and visible:
+        if event.key == "escape":
             event.prevent_default()
             event.stop()
             self.dismiss_tag_autocomplete()
+
+    def _select_all_focused_editable(self) -> bool:
+        """Select all text in the focused form editor when possible."""
+        focused = self.app.focused
+        if focused is None or focused.screen is not self:
+            return False
+        if isinstance(focused, CogitusTextArea):
+            focused.select_all()
+            return True
+        if not isinstance(focused, Input):
+            return False
+        focused.select_all()
+        if focused.id == "tags-input":
+            self.dismiss_tag_autocomplete()
+        return True
 
     def _accept_tag_suggestion_and_next_from_input(self) -> bool:
         """Accept highlighted suggestion and insert comma+space suffix."""
@@ -1323,6 +1354,7 @@ class HelpScreen(ModalScreen[None]):
         "\n"
         "[bold]Form[/bold]\n"
         "  Ctrl+s           Save\n"
+        "  Ctrl+a           Select all focused form text\n"
         "  Tab/Shift+Tab    Cycle tag suggestions (when open)\n"
         "  Enter            Accept tag suggestion\n"
         "  ,                Accept suggestion and add next tag\n"
