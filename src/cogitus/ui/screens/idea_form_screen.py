@@ -39,6 +39,11 @@ from cogitus.ui.widgets.autocomplete import (
     should_keep_autocomplete_open,
     show_autocomplete,
 )
+from cogitus.ui.widgets.select_all import (
+    SelectAllInput,
+    handle_select_all_key,
+    select_all_focused_text,
+)
 from cogitus.ui.widgets.text_area import CogitusTextArea
 
 if TYPE_CHECKING:
@@ -60,7 +65,7 @@ class _IdeaFormState:
     group_pk: int | None
 
 
-class TagsInput(Input):
+class TagsInput(SelectAllInput):
     """Input that delegates comma-accept behavior to IdeaFormScreen."""
 
     def on_key(self, event: Key) -> None:
@@ -137,7 +142,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
             yield Static(form_title, id="form-title")
             with VerticalScroll(id="idea-form-scroll"):
                 yield Label("Title")
-                yield Input(
+                yield SelectAllInput(
                     value=idea.title if idea else "",
                     placeholder="Idea title...",
                     id="title-input",
@@ -255,14 +260,22 @@ class IdeaFormScreen(ModalScreen[int | None]):
         ):
             self._handle_tag_autocomplete_key(event)
 
+    @on(SelectAllInput.SelectedAll, "#tags-input")
+    def _handle_tags_select_all(
+        self,
+        event: SelectAllInput.SelectedAll,
+    ) -> None:
+        """Dismiss tag suggestions after selecting all tag text."""
+        self.dismiss_tag_autocomplete()
+        event.stop()
+
     def _handle_select_all_key(self, event: Key) -> bool:
         """Handle Ctrl+a/Ctrl+A select-all for focused form editors."""
-        if event.key.lower() != "ctrl+a":
+        focused = self.app.focused
+        if not handle_select_all_key(self, event):
             return False
-        if not self._select_all_focused_editable():
-            return False
-        event.prevent_default()
-        event.stop()
+        if focused is self.query_one("#tags-input", Input):
+            self.dismiss_tag_autocomplete()
         return True
 
     def _handle_tag_autocomplete_key(self, event: Key) -> None:
@@ -304,31 +317,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
 
     def _select_all_focused_editable(self) -> bool:
         """Select all text in the focused form editor when possible."""
-        focused = self.app.focused
-        if focused is None or focused.screen is not self:
-            return False
-        if isinstance(focused, CogitusTextArea):
-            self._select_all_text_area(focused)
-            return True
-        if not isinstance(focused, Input):
-            return False
-        focused.select_all()
-        if focused.id == "tags-input":
-            self.dismiss_tag_autocomplete()
-        return True
-
-    @staticmethod
-    def _select_all_text_area(text_area: CogitusTextArea) -> None:
-        """Select body text without moving the visible viewport."""
-        scroll_offset = text_area.scroll_offset
-        text_area.select_all()
-        text_area.call_after_refresh(
-            text_area.scroll_to,
-            x=scroll_offset.x,
-            y=scroll_offset.y,
-            animate=False,
-            immediate=True,
-        )
+        return select_all_focused_text(self)
 
     def _accept_tag_suggestion_and_next_from_input(self) -> bool:
         """Accept highlighted suggestion and insert comma+space suffix."""
@@ -1029,7 +1018,7 @@ class GroupFormScreen(ModalScreen[int | None]):
         """Compose the group form."""
         with Vertical(id="confirm-container"):
             yield Static("New Group", id="form-title")
-            yield Input(
+            yield SelectAllInput(
                 placeholder="Group name...",
                 id="group-name-input",
             )
@@ -1054,6 +1043,10 @@ class GroupFormScreen(ModalScreen[int | None]):
     def _handle_cancel_button(self) -> None:
         """Cancel the group form when the cancel button is pressed."""
         self.action_cancel()
+
+    def on_key(self, event: Key) -> None:
+        """Handle text-field shortcuts."""
+        handle_select_all_key(self, event)
 
     def action_save(self) -> None:
         """Create the group and close."""
@@ -1106,7 +1099,7 @@ class NameInputScreen(ModalScreen[str | None]):
         """Compose the name input modal."""
         with Vertical(id="name-input-container"):
             yield Static(self._title, id="form-title")
-            yield Input(
+            yield SelectAllInput(
                 value=self._initial_value,
                 placeholder=self._placeholder,
                 id="name-input",
@@ -1143,6 +1136,10 @@ class NameInputScreen(ModalScreen[str | None]):
     def _handle_input_submitted(self) -> None:
         """Submit the modal when Enter is pressed in the name input."""
         self.action_save()
+
+    def on_key(self, event: Key) -> None:
+        """Handle text-field shortcuts."""
+        handle_select_all_key(self, event)
 
     def action_save(self) -> None:
         """Validate and return the entered name."""
@@ -1196,19 +1193,19 @@ class BackendConfigScreen(ModalScreen[BackendConfig | None]):
                 id="backend-mode-select",
             )
             yield Label("Remote API URL")
-            yield Input(
+            yield SelectAllInput(
                 value=self._config.api_base_url,
                 placeholder="http://127.0.0.1:8000",
                 id="backend-api-url",
             )
             yield Label("Remote API Username")
-            yield Input(
+            yield SelectAllInput(
                 value=self._config.api_username,
                 placeholder="api user",
                 id="backend-api-username",
             )
             yield Label("Remote API Password")
-            yield Input(
+            yield SelectAllInput(
                 value=self._config.api_password,
                 placeholder="api password",
                 password=True,
@@ -1235,6 +1232,10 @@ class BackendConfigScreen(ModalScreen[BackendConfig | None]):
     def _handle_cancel_backend_button(self) -> None:
         """Cancel backend configuration changes."""
         self.action_cancel()
+
+    def on_key(self, event: Key) -> None:
+        """Handle text-field shortcuts."""
+        handle_select_all_key(self, event)
 
     def action_save(self) -> None:
         """Validate and return the selected backend configuration."""

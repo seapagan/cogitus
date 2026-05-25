@@ -62,6 +62,7 @@ from cogitus.ui.widgets.footer import CogitusStatusBar, FooterNotice
 from cogitus.ui.widgets.idea_list import IdeaListPanel
 from cogitus.ui.widgets.idea_view import IdeaView
 from cogitus.ui.widgets.search_results import SearchResultsList
+from cogitus.ui.widgets.select_all import select_all_focused_text
 from cogitus.ui.widgets.text_area import CogitusTextArea
 from tests.helpers import _focused_widget
 
@@ -633,6 +634,14 @@ async def test_idea_form_ctrl_a_selects_focused_editable_text(
         autocomplete.remove_class("-hidden")
         assert not autocomplete.has_class("-hidden")
 
+        event = mocker.Mock()
+        event.key = "ctrl+A"
+        assert screen._handle_select_all_key(cast("events.Key", event)) is True
+        assert tags_input.selected_text == "python, testing"
+        assert autocomplete.has_class("-hidden")
+
+        autocomplete.set_options(["python"])
+        autocomplete.remove_class("-hidden")
         await pilot.press("ctrl+a")
         await pilot.pause()
         assert tags_input.selected_text == "python, testing"
@@ -641,6 +650,11 @@ async def test_idea_form_ctrl_a_selects_focused_editable_text(
         body.text = "First line\nSecond line"
         body.focus()
         await pilot.pause()
+        event = mocker.Mock()
+        event.key = "ctrl+shift+a"
+        assert screen._handle_select_all_key(cast("events.Key", event)) is True
+        assert body.selected_text == body.text
+
         await pilot.press("ctrl+a")
         await pilot.pause()
         assert body.selected_text == body.text
@@ -695,6 +709,25 @@ async def test_idea_form_select_all_ignores_non_editable_focus(
         assert screen._handle_select_all_key(cast("events.Key", event)) is False
         event.prevent_default.assert_not_called()
         event.stop.assert_not_called()
+
+        event = mocker.Mock()
+        event.key = "enter"
+        assert screen._handle_select_all_key(cast("events.Key", event)) is False
+        event.prevent_default.assert_not_called()
+        event.stop.assert_not_called()
+
+
+def test_select_all_focused_text_ignores_unrelated_focus(
+    mocker: MockerFixture,
+) -> None:
+    """Select-all helper should ignore focus outside its owner."""
+    owner = mocker.Mock()
+    focused = mocker.Mock()
+    focused.screen = object()
+    focused.ancestors = []
+    owner.app.focused = focused
+
+    assert select_all_focused_text(owner) is False
 
 
 @pytest.mark.asyncio
@@ -1707,6 +1740,46 @@ async def test_name_input_screen_ctrl_s_submits(
 
 
 @pytest.mark.asyncio
+async def test_single_field_modals_ctrl_a_selects_input_text(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Ctrl+a should select text in group and rename modal inputs."""
+    group_form = GroupFormScreen(service=service)
+    group_app = _SingleScreenApp(group_form)
+
+    async with group_app.run_test() as pilot:
+        group_input = group_form.query_one("#group-name-input", Input)
+        group_input.value = "backend"
+        group_input.cursor_position = len(group_input.value)
+        group_input.focus()
+        await pilot.pause()
+
+        event = mocker.Mock()
+        event.key = "enter"
+        group_form.on_key(cast("events.Key", event))
+
+        await pilot.press("ctrl+a")
+        await pilot.pause()
+
+        assert group_input.selected_text == "backend"
+
+    name_form = NameInputScreen(
+        title="Rename Idea",
+        initial_value="Original title",
+        placeholder="Idea title...",
+    )
+    name_app = _SingleScreenApp(name_form)
+
+    async with name_app.run_test() as pilot:
+        name_input = name_form.query_one("#name-input", Input)
+        await pilot.press("ctrl+a")
+        await pilot.pause()
+
+        assert name_input.selected_text == "Original title"
+
+
+@pytest.mark.asyncio
 async def test_backend_config_screen_validates_remote_requirements(
     mocker: MockerFixture,
 ) -> None:
@@ -1784,6 +1857,36 @@ async def test_backend_config_screen_focuses_mode_select_on_mount() -> None:
         mode_select = screen.query_one("#backend-mode-select", Select)
         assert _focused_widget(app) is mode_select
         await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_backend_config_screen_ctrl_a_selects_focused_input(
+    mocker: MockerFixture,
+) -> None:
+    """Ctrl+a should select text in backend config text inputs."""
+    screen = BackendConfigScreen(
+        BackendConfig(
+            mode=DataBackendMode.API,
+            api_base_url="http://127.0.0.1:8000",
+            api_username="api-user",
+            api_password=_remote_secret(),
+        )
+    )
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        api_url = screen.query_one("#backend-api-url", Input)
+        api_url.focus()
+        await pilot.pause()
+
+        event = mocker.Mock()
+        event.key = "enter"
+        screen.on_key(cast("events.Key", event))
+
+        await pilot.press("ctrl+a")
+        await pilot.pause()
+
+        assert api_url.selected_text == "http://127.0.0.1:8000"
 
 
 @pytest.mark.asyncio
@@ -3159,6 +3262,46 @@ async def test_main_screen_search_mode_hides_switch_pane_binding(
         await _wait_for_search_active(pilot, search)
         bindings = screen.active_bindings
         assert "tab" not in bindings
+
+
+@pytest.mark.asyncio
+async def test_main_screen_search_ctrl_a_selects_query_and_closes_autocomplete(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Ctrl+a should select all search text and close suggestions."""
+    service.create_idea("First")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        search = panel.query_one("#search-input", Input)
+        autocomplete = panel.query_one("#search-autocomplete", OptionList)
+
+        screen.action_focus_search()
+        search.focus()
+        await pilot.pause()
+        search.value = "tag:python"
+        search.cursor_position = len(search.value)
+        autocomplete.set_options(["tag:python"])
+        autocomplete.remove_class("-hidden")
+
+        event = mocker.Mock()
+        event.key = "ctrl+a"
+        panel._handle_search_input_key(cast("events.Key", event))
+        assert search.selected_text == "tag:python"
+        assert autocomplete.has_class("-hidden")
+
+        search.cursor_position = len(search.value)
+        autocomplete.set_options(["tag:python"])
+        autocomplete.remove_class("-hidden")
+
+        await pilot.press("ctrl+a")
+        await pilot.pause()
+
+        assert search.selected_text == "tag:python"
+        assert autocomplete.has_class("-hidden")
 
 
 @pytest.mark.asyncio
