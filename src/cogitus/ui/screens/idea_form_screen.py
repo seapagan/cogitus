@@ -308,7 +308,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         if focused is None or focused.screen is not self:
             return False
         if isinstance(focused, CogitusTextArea):
-            focused.select_all()
+            self._select_all_text_area(focused)
             return True
         if not isinstance(focused, Input):
             return False
@@ -316,6 +316,19 @@ class IdeaFormScreen(ModalScreen[int | None]):
         if focused.id == "tags-input":
             self.dismiss_tag_autocomplete()
         return True
+
+    @staticmethod
+    def _select_all_text_area(text_area: CogitusTextArea) -> None:
+        """Select body text without moving the visible viewport."""
+        scroll_offset = text_area.scroll_offset
+        text_area.select_all()
+        text_area.call_after_refresh(
+            text_area.scroll_to,
+            x=scroll_offset.x,
+            y=scroll_offset.y,
+            animate=False,
+            immediate=True,
+        )
 
     def _accept_tag_suggestion_and_next_from_input(self) -> bool:
         """Accept highlighted suggestion and insert comma+space suffix."""

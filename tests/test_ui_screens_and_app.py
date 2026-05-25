@@ -647,6 +647,32 @@ async def test_idea_form_ctrl_a_selects_focused_editable_text(
 
 
 @pytest.mark.asyncio
+async def test_idea_form_ctrl_a_preserves_body_scroll_offset(
+    service: IdeaService,
+) -> None:
+    """Body select-all should not jump the visible editor viewport."""
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        body = screen.query_one("#body-input", CogitusTextArea)
+        body.text = "\n".join(f"Line {index}" for index in range(80))
+        body.focus()
+        await pilot.pause()
+
+        body.scroll_to(y=20, animate=False, immediate=True)
+        await pilot.pause()
+        scroll_y = body.scroll_offset.y
+        assert scroll_y > 0
+
+        await pilot.press("ctrl+a")
+        await pilot.pause()
+
+        assert body.selected_text == body.text
+        assert body.scroll_offset.y == scroll_y
+
+
+@pytest.mark.asyncio
 async def test_idea_form_select_all_ignores_non_editable_focus(
     service: IdeaService,
     mocker: MockerFixture,
