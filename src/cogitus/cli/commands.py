@@ -317,10 +317,12 @@ def create_mcp_token(
     settings = get_settings()
     if rotate_secret or not settings.mcp_auth_jwt_secret.strip():
         settings.mcp_auth_jwt_secret = token_urlsafe(32)
-        settings.save()
+        settings.save_mcp_auth_jwt_secret(settings.mcp_auth_jwt_secret)
 
     token = manager_factory(settings).create_access_token()
     typer.echo(f"Bearer {token}")
+    if rotate_secret:
+        typer.echo("Restart any running MCP servers to use the new secret.")
 
 
 @mcp_app.command("serve")

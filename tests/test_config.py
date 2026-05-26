@@ -68,6 +68,56 @@ def test_settings_persist_last_viewed_pk(
     assert loaded.last_viewed_idea_pk == 42
 
 
+def test_settings_save_preserves_existing_mcp_auth_secret(
+    tmp_path: Path,
+) -> None:
+    """Stale settings saves should not erase a persisted MCP secret."""
+    mcp_secret = "t" * 32
+    stale_settings = AppSettings("cogitus", settings_path=tmp_path)
+    token_settings = AppSettings("cogitus", settings_path=tmp_path)
+    token_settings.save_mcp_auth_jwt_secret(mcp_secret)
+
+    stale_settings.last_viewed_idea_pk = 42
+    stale_settings.save()
+
+    loaded = AppSettings("cogitus", settings_path=tmp_path)
+
+    assert loaded.last_viewed_idea_pk == 42
+    assert loaded.mcp_auth_jwt_secret == mcp_secret
+
+
+def test_settings_save_does_not_rotate_mcp_auth_secret(
+    tmp_path: Path,
+) -> None:
+    """Normal settings saves should not change the persisted MCP secret."""
+    original_secret = "o" * 32
+    settings = AppSettings("cogitus", settings_path=tmp_path)
+    settings.save_mcp_auth_jwt_secret(original_secret)
+
+    settings.mcp_auth_jwt_secret = "n" * 32
+    settings.save()
+
+    loaded = AppSettings("cogitus", settings_path=tmp_path)
+
+    assert loaded.mcp_auth_jwt_secret == original_secret
+
+
+def test_settings_save_does_not_clear_mcp_auth_secret(
+    tmp_path: Path,
+) -> None:
+    """Normal settings saves should not clear the persisted MCP secret."""
+    original_secret = "o" * 32
+    settings = AppSettings("cogitus", settings_path=tmp_path)
+    settings.save_mcp_auth_jwt_secret(original_secret)
+
+    settings.mcp_auth_jwt_secret = ""
+    settings.save()
+
+    loaded = AppSettings("cogitus", settings_path=tmp_path)
+
+    assert loaded.mcp_auth_jwt_secret == original_secret
+
+
 def test_settings_persist_edit_body_cursor_mode(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -174,7 +224,7 @@ def test_settings_persist_mcp_auth_fields(
     AppSettings._instances.clear()
 
     settings = get_settings()
-    settings.mcp_auth_jwt_secret = "m" * 32
+    settings.save_mcp_auth_jwt_secret("m" * 32)
     settings.mcp_auth_token_expire_days = 90
     settings.save()
 

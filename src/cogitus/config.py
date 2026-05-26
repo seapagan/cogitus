@@ -82,6 +82,39 @@ class AppSettings(TOMLSettings):
     date_format: str = DEFAULT_DATE_FORMAT
     save_idea_scroll_pos: bool = True
 
+    def save(self) -> None:
+        """Save settings without changing the persisted MCP auth secret."""
+        self.mcp_auth_jwt_secret = self._saved_mcp_auth_jwt_secret()
+        super().save()
+
+    def save_mcp_auth_jwt_secret(self, secret: str) -> None:
+        """Persist only the MCP auth secret and update this instance."""
+        disk_settings = self._loaded_disk_settings()
+        disk_settings.mcp_auth_jwt_secret = secret
+        TOMLSettings.save(disk_settings)
+        self.mcp_auth_jwt_secret = secret
+
+    def _saved_mcp_auth_jwt_secret(self) -> str:
+        """Return any existing persisted MCP auth secret."""
+        try:
+            saved_settings = self._loaded_disk_settings()
+        except (OSError, ValueError):
+            return ""
+        return saved_settings.mcp_auth_jwt_secret.strip()
+
+    def _loaded_disk_settings(self) -> AppSettings:
+        """Return a settings instance loaded from the current config file."""
+        return type(self)(
+            self.app_name,
+            settings_file_name=self.settings_file_name,
+            settings_path=self.settings_folder,
+            auto_create=False,
+            use_section_header=self.use_section_header,
+            allow_missing_file=True,
+            strict_get=self.strict_get,
+            schema_version=self.schema_version,
+        )
+
 
 def normalize_edit_body_cursor_mode(mode: str) -> EditBodyCursorMode:
     """Normalize persisted cursor mode string to enum with safe default."""

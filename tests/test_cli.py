@@ -549,8 +549,7 @@ class TestMCPCommands:
         )
         AppSettings._instances.clear()
         settings = get_settings()
-        settings.mcp_auth_jwt_secret = "o" * 32
-        settings.save()
+        settings.save_mcp_auth_jwt_secret("o" * 32)
         old_token = MCPAuthManager(settings).create_access_token()
         monkeypatch.setattr(
             "cogitus.cli.commands.token_urlsafe",
@@ -566,6 +565,7 @@ class TestMCPCommands:
         assert result.exit_code == 0
         assert loaded.mcp_auth_jwt_secret == "n" * 32
         assert result.output.startswith("Bearer ")
+        assert "Restart any running MCP servers" in result.output
         with pytest.raises(HTTPException):
             manager.decode_access_token(old_token)
 
@@ -581,8 +581,7 @@ class TestMCPCommands:
         )
         AppSettings._instances.clear()
         settings = get_settings()
-        settings.mcp_auth_jwt_secret = "m" * 32
-        settings.save()
+        settings.save_mcp_auth_jwt_secret("m" * 32)
         monkeypatch.delenv(COGITUS_MCP_DB_PATH_ENV, raising=False)
         db_path = tmp_path / "cogitus-mcp.db"
 
@@ -627,8 +626,7 @@ class TestMCPCommands:
         )
         AppSettings._instances.clear()
         settings = get_settings()
-        settings.mcp_auth_jwt_secret = "m" * 32
-        settings.save()
+        settings.save_mcp_auth_jwt_secret("m" * 32)
         monkeypatch.setenv(COGITUS_MCP_DB_PATH_ENV, "stale-value")
 
         with patch("uvicorn.run") as mock_run:
@@ -656,8 +654,7 @@ class TestMCPCommands:
         )
         AppSettings._instances.clear()
         settings = get_settings()
-        settings.mcp_auth_jwt_secret = "m" * 32
-        settings.save()
+        settings.save_mcp_auth_jwt_secret("m" * 32)
 
         def fake_import_module(name: str) -> object:
             if name == "uvicorn":
