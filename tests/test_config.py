@@ -139,6 +139,39 @@ def test_get_configured_mcp_auth_settings_migrates_legacy_secret(
     assert "mcp_auth_jwt_secret" not in saved_config
 
 
+def test_get_configured_mcp_auth_settings_keeps_existing_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy migration should not overwrite dedicated MCP auth settings."""
+    monkeypatch.setattr(
+        "simple_toml_settings.settings.xdg_config_home",
+        lambda: tmp_path,
+    )
+    AppSettings._instances.clear()
+    legacy_secret = "l" * 32
+    current_secret = "c" * 32
+    config_dir = tmp_path / "cogitus"
+    config_dir.mkdir()
+    config_path = config_dir / "config.toml"
+    config_path.write_text(
+        '[cogitus]\nschema_version = "none"\n'
+        f'mcp_auth_jwt_secret = "{legacy_secret}"\n',
+        encoding="utf-8",
+    )
+    auth_path = config_dir / "mcp-auth.toml"
+    auth_path.write_text(
+        f'[cogitus_mcp_auth]\njwt_secret = "{current_secret}"\n',
+        encoding="utf-8",
+    )
+    app_settings = get_settings()
+
+    auth_settings = get_configured_mcp_auth_settings(app_settings)
+
+    assert auth_settings.jwt_secret == current_secret
+    assert auth_path.read_text(encoding="utf-8").count(current_secret) == 1
+
+
 def test_settings_persist_edit_body_cursor_mode(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -708,6 +708,7 @@ class TestMCPCommands:
 
         assert result.exit_code == 1
         assert "MCP authentication is not configured" in result.output
+        assert not (tmp_path / "cogitus" / "mcp-auth.toml").exists()
         mock_run.assert_not_called()
 
 

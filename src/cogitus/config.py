@@ -212,6 +212,7 @@ def get_mcp_auth_settings() -> MCPAuthSettings:
         "cogitus_mcp_auth",
         settings_file_name="mcp-auth.toml",
         settings_path=get_settings().settings_folder,
+        allow_missing_file=True,
     )
 
 
