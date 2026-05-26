@@ -76,44 +76,32 @@ class AppSettings(TOMLSettings):
     api_auth_jwt_secret: str = ""
     api_auth_jwt_algorithm: str = DEFAULT_API_AUTH_JWT_ALGORITHM
     api_auth_token_expire_minutes: int = DEFAULT_API_AUTH_TOKEN_EXPIRE_MINUTES
-    mcp_auth_jwt_secret: str = ""
     mcp_auth_token_expire_days: int = DEFAULT_MCP_AUTH_TOKEN_EXPIRE_DAYS
     timezone: str = DEFAULT_TIMEZONE
     date_format: str = DEFAULT_DATE_FORMAT
     save_idea_scroll_pos: bool = True
 
-    def save(self) -> None:
-        """Save settings without changing the persisted MCP auth secret."""
-        self.mcp_auth_jwt_secret = self._saved_mcp_auth_jwt_secret()
-        super().save()
+    def get_attrs(self, *, include_none: bool = False) -> dict[str, object]:
+        """Return serializable app settings without legacy MCP secrets."""
+        attrs = super().get_attrs(include_none=include_none)
+        attrs.pop("mcp_auth_jwt_secret", None)
+        return attrs
 
-    def save_mcp_auth_jwt_secret(self, secret: str) -> None:
-        """Persist only the MCP auth secret and update this instance."""
-        disk_settings = self._loaded_disk_settings()
-        disk_settings.mcp_auth_jwt_secret = secret
-        TOMLSettings.save(disk_settings)
-        self.mcp_auth_jwt_secret = secret
 
-    def _saved_mcp_auth_jwt_secret(self) -> str:
-        """Return any existing persisted MCP auth secret."""
-        try:
-            saved_settings = self._loaded_disk_settings()
-        except (OSError, ValueError):
-            return ""
-        return saved_settings.mcp_auth_jwt_secret.strip()
+class MCPAuthSettings(TOMLSettings):
+    """MCP auth settings stored separately from app preferences."""
 
-    def _loaded_disk_settings(self) -> AppSettings:
-        """Return a settings instance loaded from the current config file."""
-        return type(self)(
-            self.app_name,
-            settings_file_name=self.settings_file_name,
-            settings_path=self.settings_folder,
-            auto_create=False,
-            use_section_header=self.use_section_header,
-            allow_missing_file=True,
-            strict_get=self.strict_get,
-            schema_version=self.schema_version,
-        )
+    jwt_secret: str = ""
+
+    def migrate_legacy_secret(self, settings: AppSettings) -> None:
+        """Copy a legacy config-backed MCP secret if this file is empty."""
+        if self.jwt_secret.strip():
+            return
+        legacy_secret = getattr(settings, "mcp_auth_jwt_secret", "").strip()
+        if not legacy_secret:
+            return
+        self.jwt_secret = legacy_secret
+        self.save()
 
 
 def normalize_edit_body_cursor_mode(mode: str) -> EditBodyCursorMode:
@@ -216,3 +204,22 @@ def get_settings() -> AppSettings:
         settings_file_name="config.toml",
         xdg_config=True,
     )
+
+
+def get_mcp_auth_settings() -> MCPAuthSettings:
+    """Return singleton MCP auth settings instance."""
+    return MCPAuthSettings.get_instance(
+        "cogitus_mcp_auth",
+        settings_file_name="mcp-auth.toml",
+        settings_path=get_settings().settings_folder,
+    )
+
+
+def get_configured_mcp_auth_settings(
+    settings: AppSettings | None = None,
+) -> MCPAuthSettings:
+    """Return MCP auth settings after migrating any legacy secret."""
+    app_settings = settings if settings is not None else get_settings()
+    auth_settings = get_mcp_auth_settings()
+    auth_settings.migrate_legacy_secret(app_settings)
+    return auth_settings

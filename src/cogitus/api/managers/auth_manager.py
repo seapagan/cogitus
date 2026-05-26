@@ -20,6 +20,7 @@ from cogitus.api.schemas.response.auth import TokenResponse
 from cogitus.config import (
     DEFAULT_API_AUTH_JWT_ALGORITHM,
     AppSettings,
+    MCPAuthSettings,
     normalize_api_auth_jwt_algorithm,
     normalize_api_auth_token_expire_minutes,
     normalize_api_auth_username,
@@ -237,14 +238,19 @@ class AuthManager:
 class MCPAuthManager:
     """MCP bearer auth manager backed by persisted settings."""
 
-    def __init__(self, settings: AppSettings) -> None:
+    def __init__(
+        self,
+        settings: AppSettings,
+        auth_settings: MCPAuthSettings,
+    ) -> None:
         """Store the config-backed MCP auth settings."""
         self._settings = settings
+        self._auth_settings = auth_settings
 
     @property
     def jwt_secret(self) -> str:
         """Return the configured MCP JWT secret."""
-        return self._settings.mcp_auth_jwt_secret.strip()
+        return self._auth_settings.jwt_secret.strip()
 
     @property
     def token_expire_days(self) -> int:

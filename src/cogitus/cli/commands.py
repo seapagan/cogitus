@@ -18,7 +18,11 @@ from cogitus.cli.formatters import (
     format_ideas_simple,
     format_ideas_table,
 )
-from cogitus.config import get_settings, normalize_api_auth_username
+from cogitus.config import (
+    get_configured_mcp_auth_settings,
+    get_settings,
+    normalize_api_auth_username,
+)
 from cogitus.db import get_db
 from cogitus.metadata import format_version_output, get_app_metadata
 from cogitus.services.idea_service import IdeaService
@@ -60,7 +64,11 @@ class _MCPAuthManagerProtocol(Protocol):
 class _MCPAuthManagerFactory(Protocol):
     """Protocol for constructing an optional MCP auth manager."""
 
-    def __call__(self, settings: object) -> _MCPAuthManagerProtocol: ...
+    def __call__(
+        self,
+        settings: object,
+        auth_settings: object,
+    ) -> _MCPAuthManagerProtocol: ...
 
 
 class _MCPAuthModule(Protocol):
@@ -315,11 +323,12 @@ def create_mcp_token(
     manager_factory = auth_manager_module.MCPAuthManager
 
     settings = get_settings()
-    if rotate_secret or not settings.mcp_auth_jwt_secret.strip():
-        settings.mcp_auth_jwt_secret = token_urlsafe(32)
-        settings.save_mcp_auth_jwt_secret(settings.mcp_auth_jwt_secret)
+    auth_settings = get_configured_mcp_auth_settings(settings)
+    if rotate_secret or not auth_settings.jwt_secret.strip():
+        auth_settings.jwt_secret = token_urlsafe(32)
+        auth_settings.save()
 
-    token = manager_factory(settings).create_access_token()
+    token = manager_factory(settings, auth_settings).create_access_token()
     typer.echo(f"Bearer {token}")
     if rotate_secret:
         typer.echo("Restart any running MCP servers to use the new secret.")
@@ -335,7 +344,8 @@ def serve_mcp(
     """Serve the MCP-only FastAPI application."""
     uvicorn = cast("_UvicornModule", _import_optional_module("uvicorn"))
     settings = get_settings()
-    if not settings.mcp_auth_jwt_secret.strip():
+    auth_settings = get_configured_mcp_auth_settings(settings)
+    if not auth_settings.jwt_secret.strip():
         typer.secho(
             "Error: MCP authentication is not configured. "
             "Run 'cogitus mcp token' first.",

@@ -16,7 +16,7 @@ from cogitus.api.managers.group_manager import GroupManager
 from cogitus.api.managers.idea_manager import IdeaManager
 from cogitus.api.managers.snapshot_manager import SnapshotManager
 from cogitus.api.managers.tag_manager import TagManager
-from cogitus.config import get_settings
+from cogitus.config import get_configured_mcp_auth_settings, get_settings
 from cogitus.services.idea_service import IdeaService
 
 if TYPE_CHECKING:
@@ -70,7 +70,8 @@ def get_auth_manager() -> AuthManager:
 
 def get_mcp_auth_manager() -> MCPAuthManager:
     """Return an MCP auth manager bound to the persisted settings."""
-    return MCPAuthManager(get_settings())
+    settings = get_settings()
+    return MCPAuthManager(settings, get_configured_mcp_auth_settings(settings))
 
 
 def get_current_api_user(
