@@ -28,6 +28,8 @@ from cogitus.api.resources.tags import TAG_NAMES_RESPONSE_EXAMPLE
 from cogitus.config import (
     DEFAULT_API_AUTH_JWT_ALGORITHM,
     AppSettings,
+    MCPAuthSettings,
+    get_mcp_auth_settings,
     get_settings,
 )
 
@@ -71,6 +73,14 @@ def test_api_package_rejects_unknown_attribute() -> None:
 
     with pytest.raises(AttributeError, match=missing_attribute):
         getattr(api_package, missing_attribute)
+
+
+def _configured_mcp_auth_settings(secret: str = "m" * 32) -> MCPAuthSettings:
+    """Persist isolated MCP auth settings for tests."""
+    auth_settings = get_mcp_auth_settings()
+    auth_settings.jwt_secret = secret
+    auth_settings.save()
+    return auth_settings
 
 
 def test_create_api_app_uses_default_settings_group(
@@ -136,7 +146,7 @@ def test_create_mcp_app_exposes_only_mcp_routes(
     configured_api_settings: AppSettings,
 ) -> None:
     """MCP app should mount MCP without exposing REST routes."""
-    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
+    _configured_mcp_auth_settings()
     app = create_mcp_app(memory=True, default_group_name="default")
 
     paths = {
@@ -161,8 +171,8 @@ async def test_create_mcp_app_lifespan_starts_internal_api(
     configured_api_settings: AppSettings,
 ) -> None:
     """MCP app lifespan should initialize internal API state for tools."""
-    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
-    manager = MCPAuthManager(configured_api_settings)
+    auth_settings = _configured_mcp_auth_settings()
+    manager = MCPAuthManager(configured_api_settings, auth_settings)
     token = manager.create_access_token()
     app = create_mcp_app(memory=True, default_group_name="default")
 
@@ -332,8 +342,8 @@ def test_mcp_auth_manager_accepts_valid_token(
     configured_api_settings: AppSettings,
 ) -> None:
     """MCP auth manager should accept its own signed tokens."""
-    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
-    manager = MCPAuthManager(configured_api_settings)
+    auth_settings = _configured_mcp_auth_settings()
+    manager = MCPAuthManager(configured_api_settings, auth_settings)
 
     token = manager.create_access_token()
     decoded = manager.decode_access_token(token)
@@ -345,8 +355,8 @@ def test_mcp_auth_manager_requires_configured_secret(
     configured_api_settings: AppSettings,
 ) -> None:
     """MCP auth manager should fail clearly without a signing secret."""
-    configured_api_settings.mcp_auth_jwt_secret = ""
-    manager = MCPAuthManager(configured_api_settings)
+    auth_settings = _configured_mcp_auth_settings("")
+    manager = MCPAuthManager(configured_api_settings, auth_settings)
 
     with pytest.raises(HTTPException) as exc:
         manager.ensure_configured()
@@ -359,8 +369,8 @@ def test_mcp_auth_manager_rejects_malformed_token(
     configured_api_settings: AppSettings,
 ) -> None:
     """MCP auth manager should reject malformed bearer tokens."""
-    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
-    manager = MCPAuthManager(configured_api_settings)
+    auth_settings = _configured_mcp_auth_settings()
+    manager = MCPAuthManager(configured_api_settings, auth_settings)
 
     with pytest.raises(HTTPException) as exc:
         manager.decode_access_token("not-a-jwt")
@@ -372,8 +382,8 @@ def test_mcp_auth_manager_rejects_wrong_subject_token(
     configured_api_settings: AppSettings,
 ) -> None:
     """MCP auth manager should reject tokens for non-MCP subjects."""
-    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
-    manager = MCPAuthManager(configured_api_settings)
+    auth_settings = _configured_mcp_auth_settings()
+    manager = MCPAuthManager(configured_api_settings, auth_settings)
     token = jwt.encode(
         {
             "sub": "api-user",
@@ -395,8 +405,8 @@ def test_get_current_mcp_user_rejects_missing_bearer_credentials(
     credentials: str | None,
 ) -> None:
     """MCP auth dependency should reject missing or blank bearer tokens."""
-    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
-    manager = MCPAuthManager(configured_api_settings)
+    auth_settings = _configured_mcp_auth_settings()
+    manager = MCPAuthManager(configured_api_settings, auth_settings)
     bearer = None
     if credentials is not None:
         bearer = HTTPAuthorizationCredentials(
@@ -415,8 +425,8 @@ def test_mcp_auth_manager_rejects_expired_token(
     configured_api_settings: AppSettings,
 ) -> None:
     """MCP auth manager should reject expired bearer tokens."""
-    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
-    manager = MCPAuthManager(configured_api_settings)
+    auth_settings = _configured_mcp_auth_settings()
+    manager = MCPAuthManager(configured_api_settings, auth_settings)
     token = manager.create_access_token(expires_delta=timedelta(seconds=-1))
 
     with pytest.raises(HTTPException) as exc:
@@ -429,8 +439,8 @@ def test_mcp_auth_manager_rejects_wrong_secret_token(
     configured_api_settings: AppSettings,
 ) -> None:
     """MCP auth manager should reject tokens signed by another secret."""
-    configured_api_settings.mcp_auth_jwt_secret = "m" * 32
-    manager = MCPAuthManager(configured_api_settings)
+    auth_settings = _configured_mcp_auth_settings()
+    manager = MCPAuthManager(configured_api_settings, auth_settings)
     token = jwt.encode(
         {
             "sub": "mcp",

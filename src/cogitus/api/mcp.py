@@ -14,7 +14,7 @@ from mcp.types import ToolAnnotations
 from cogitus.api.dependencies import get_current_api_user, get_current_mcp_user
 from cogitus.api.main import create_api_app
 from cogitus.api.managers.auth_manager import MCPAuthManager
-from cogitus.config import get_settings
+from cogitus.config import get_configured_mcp_auth_settings, get_settings
 from cogitus.metadata import get_app_metadata
 
 if TYPE_CHECKING:
@@ -31,7 +31,11 @@ MCP_TOOL_OPERATION_IDS = (
 
 def ensure_mcp_auth_configured() -> None:
     """Raise if MCP auth has not been configured."""
-    MCPAuthManager(get_settings()).ensure_configured()
+    settings = get_settings()
+    MCPAuthManager(
+        settings,
+        get_configured_mcp_auth_settings(settings),
+    ).ensure_configured()
 
 
 def _mount_read_only_mcp_tools(

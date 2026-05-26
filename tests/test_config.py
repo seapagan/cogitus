@@ -11,7 +11,10 @@ from cogitus.config import (
     AppSettings,
     DataBackendMode,
     EditBodyCursorMode,
+    MCPAuthSettings,
     NewIdeaGroupMode,
+    get_configured_mcp_auth_settings,
+    get_mcp_auth_settings,
     get_settings,
     normalize_api_auth_jwt_algorithm,
     normalize_api_auth_token_expire_minutes,
@@ -66,6 +69,107 @@ def test_settings_persist_last_viewed_pk(
     loaded = get_settings()
 
     assert loaded.last_viewed_idea_pk == 42
+
+
+def test_app_settings_save_does_not_serialize_mcp_auth_secret(
+    tmp_path: Path,
+) -> None:
+    """Normal settings saves should not write the MCP auth secret."""
+    settings = AppSettings("cogitus", settings_path=tmp_path)
+    settings.set("mcp_auth_jwt_secret", "m" * 32, autosave=False)
+
+    settings.save()
+
+    config_text = (tmp_path / "config.toml").read_text(encoding="utf-8")
+
+    assert "mcp_auth_jwt_secret" not in config_text
+
+
+def test_mcp_auth_settings_persist_jwt_secret(
+    tmp_path: Path,
+) -> None:
+    """MCP auth settings should persist the JWT secret separately."""
+    settings = MCPAuthSettings(
+        "cogitus_mcp_auth",
+        settings_file_name="mcp-auth.toml",
+        settings_path=tmp_path,
+    )
+    settings.jwt_secret = "m" * 32
+    settings.save()
+
+    loaded = MCPAuthSettings(
+        "cogitus_mcp_auth",
+        settings_file_name="mcp-auth.toml",
+        settings_path=tmp_path,
+    )
+
+    assert loaded.jwt_secret == "m" * 32
+
+
+def test_get_configured_mcp_auth_settings_migrates_legacy_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy config secrets should be copied to the MCP auth file."""
+    monkeypatch.setattr(
+        "simple_toml_settings.settings.xdg_config_home",
+        lambda: tmp_path,
+    )
+    AppSettings._instances.clear()
+    legacy_secret = "l" * 32
+    config_dir = tmp_path / "cogitus"
+    config_dir.mkdir()
+    config_path = config_dir / "config.toml"
+    config_path.write_text(
+        '[cogitus]\nschema_version = "none"\n'
+        f'mcp_auth_jwt_secret = "{legacy_secret}"\n',
+        encoding="utf-8",
+    )
+    app_settings = get_settings()
+
+    auth_settings = get_configured_mcp_auth_settings(app_settings)
+    app_settings.save()
+
+    AppSettings._instances.clear()
+    loaded_auth = get_mcp_auth_settings()
+    saved_config = config_path.read_text(encoding="utf-8")
+
+    assert auth_settings.jwt_secret == legacy_secret
+    assert loaded_auth.jwt_secret == legacy_secret
+    assert "mcp_auth_jwt_secret" not in saved_config
+
+
+def test_get_configured_mcp_auth_settings_keeps_existing_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy migration should not overwrite dedicated MCP auth settings."""
+    monkeypatch.setattr(
+        "simple_toml_settings.settings.xdg_config_home",
+        lambda: tmp_path,
+    )
+    AppSettings._instances.clear()
+    legacy_secret = "l" * 32
+    current_secret = "c" * 32
+    config_dir = tmp_path / "cogitus"
+    config_dir.mkdir()
+    config_path = config_dir / "config.toml"
+    config_path.write_text(
+        '[cogitus]\nschema_version = "none"\n'
+        f'mcp_auth_jwt_secret = "{legacy_secret}"\n',
+        encoding="utf-8",
+    )
+    auth_path = config_dir / "mcp-auth.toml"
+    auth_path.write_text(
+        f'[cogitus_mcp_auth]\njwt_secret = "{current_secret}"\n',
+        encoding="utf-8",
+    )
+    app_settings = get_settings()
+
+    auth_settings = get_configured_mcp_auth_settings(app_settings)
+
+    assert auth_settings.jwt_secret == current_secret
+    assert auth_path.read_text(encoding="utf-8").count(current_secret) == 1
 
 
 def test_settings_persist_edit_body_cursor_mode(
@@ -166,7 +270,7 @@ def test_settings_persist_mcp_auth_fields(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Settings should persist and reload MCP auth fields."""
+    """Settings should persist and reload non-secret MCP auth fields."""
     monkeypatch.setattr(
         "simple_toml_settings.settings.xdg_config_home",
         lambda: tmp_path,
@@ -174,14 +278,12 @@ def test_settings_persist_mcp_auth_fields(
     AppSettings._instances.clear()
 
     settings = get_settings()
-    settings.mcp_auth_jwt_secret = "m" * 32
     settings.mcp_auth_token_expire_days = 90
     settings.save()
 
     AppSettings._instances.clear()
     loaded = get_settings()
 
-    assert loaded.mcp_auth_jwt_secret == "m" * 32
     assert loaded.mcp_auth_token_expire_days == 90
 
 
