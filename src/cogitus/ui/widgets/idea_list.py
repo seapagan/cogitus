@@ -7,6 +7,7 @@ from datetime import timezone, tzinfo
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from rich.text import Text
+from textual import on
 from textual.binding import Binding, BindingType
 from textual.containers import Vertical
 from textual.message import Message
@@ -28,6 +29,7 @@ from cogitus.ui.widgets.autocomplete import (
     show_autocomplete,
 )
 from cogitus.ui.widgets.search_results import SearchResultsList
+from cogitus.ui.widgets.select_all import SelectAllInput, handle_select_all_key
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -142,7 +144,7 @@ class IdeaListPanel(Vertical):
 
     def compose(self) -> ComposeResult:
         """Compose the idea list panel."""
-        yield Input(
+        yield SelectAllInput(
             placeholder="Search (text, tag:foo, group:bar)",
             id="search-input",
         )
@@ -599,6 +601,15 @@ class IdeaListPanel(Vertical):
 
         self._handle_search_input_key(event)
 
+    @on(SelectAllInput.SelectedAll, "#search-input")
+    def _handle_search_select_all(
+        self,
+        event: SelectAllInput.SelectedAll,
+    ) -> None:
+        """Dismiss search suggestions after selecting all search text."""
+        self.dismiss_autocomplete()
+        event.stop()
+
     def _handle_result_tree_key(
         self,
         event: Key,
@@ -618,6 +629,10 @@ class IdeaListPanel(Vertical):
 
     def _handle_search_input_key(self, event: Key) -> None:
         """Handle keys while the search input is focused."""
+        if handle_select_all_key(self, event):
+            self.dismiss_autocomplete()
+            return
+
         if event.key == "tab":
             self._handle_autocomplete_cycle(event, 1)
             return
