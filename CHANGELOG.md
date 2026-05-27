@@ -5,21 +5,37 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/seapagan/cogitus/tree/HEAD)
+## [0.10.0](https://github.com/seapagan/cogitus/releases/tag/0.10.0) (May 27, 2026)
 
 **New Features**
 
+- Feat: add Ctrl+A select all support to idea editing ([#73](https://github.com/seapagan/cogitus/pull/73)) by [seapagan](https://github.com/seapagan)
+- Add read-only MCP idea discovery tools ([#71](https://github.com/seapagan/cogitus/pull/71)) by [seapagan](https://github.com/seapagan)
 - Feat: use regional date formats and local timezone for display ([#62](https://github.com/seapagan/cogitus/pull/62)) by [seapagan](https://github.com/seapagan)
 - Feat: make tags clickable to trigger tag search ([#60](https://github.com/seapagan/cogitus/pull/60)) by [seapagan](https://github.com/seapagan)
 - Add theming docs and persist selected theme across restarts ([#59](https://github.com/seapagan/cogitus/pull/59)) by [seapagan](https://github.com/seapagan)
 - Add remote-to-local clone flow ([#57](https://github.com/seapagan/cogitus/pull/57)) by [seapagan](https://github.com/seapagan)
 
+**Security**
+
+- Fix: update vulnerable dependencies ([#69](https://github.com/seapagan/cogitus/pull/69)) by [seapagan](https://github.com/seapagan)
+
 **Bug Fixes**
 
+- Preserve MCP auth secret on settings save ([#74](https://github.com/seapagan/cogitus/pull/74)) by [seapagan](https://github.com/seapagan)
+- Fix: protect unsaved new idea drafts ([#72](https://github.com/seapagan/cogitus/pull/72)) by [seapagan](https://github.com/seapagan)
+- Fix: gate remote refreshes by hashes ([#68](https://github.com/seapagan/cogitus/pull/68)) by [seapagan](https://github.com/seapagan)
 - Fix: auto-focus backend mode select in backend settings modal ([#61](https://github.com/seapagan/cogitus/pull/61)) by [seapagan](https://github.com/seapagan)
 - Fix app-owned database connection lifecycle ([#58](https://github.com/seapagan/cogitus/pull/58)) by [seapagan](https://github.com/seapagan)
 
-[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.9.0...HEAD) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.9.0...HEAD.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.9.0...HEAD.patch)
+**Dependency Updates**
+
+- Chore(deps): update dependency pymdown-extensions to v10.21.3 [security] ([#70](https://github.com/seapagan/cogitus/pull/70)) by [renovate[bot]](https://github.com/apps/renovate)
+- Chore(deps): update astral-sh/setup-uv action to v8 ([#66](https://github.com/seapagan/cogitus/pull/66)) by [renovate[bot]](https://github.com/apps/renovate)
+- Chore(deps): update dependency python-multipart to v0.0.26 [security] ([#64](https://github.com/seapagan/cogitus/pull/64)) by [renovate[bot]](https://github.com/apps/renovate)
+- Chore(deps): update dependency pytest to v9.0.3 [security] ([#63](https://github.com/seapagan/cogitus/pull/63)) by [renovate[bot]](https://github.com/apps/renovate)
+
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.9.0...0.10.0) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.9.0...0.10.0.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.9.0...0.10.0.patch)
 
 ## [0.9.0](https://github.com/seapagan/cogitus/releases/tag/0.9.0) (April 10, 2026)
 

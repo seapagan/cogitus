@@ -51,14 +51,14 @@ Future versions may introduce:
 
 ## Architecture
 
-- UI: Built with Textual
+- UI: Built with `Textual`
 - Database: SQLite (local file, WAL mode)
 - Data Access: `sqliter-py`
-- Package Management: `uv` (not pip)
+- Package Management: `uv`
 
 The project intentionally separates:
 
-- Textual UI layer (screens and widgets)
+- `Textual` UI layer (screens and widgets)
 - Repository/service layer for database access
 - Schema and migration management
 
