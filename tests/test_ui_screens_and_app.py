@@ -26,7 +26,6 @@ from textual.widgets import (
     TextArea,
     Tree,
 )
-from textual.widgets._header import HeaderIcon
 from textual.worker import WorkerState
 
 from cogitus import datefmt as datefmt_module
@@ -1318,7 +1317,7 @@ async def test_main_screen_shows_custom_app_header(
     async with app.run_test() as pilot:
         await pilot.pause()
         header = screen.query_one(Header)
-        header_icon = screen.query_one(HeaderIcon)
+        header_icon = header.children[0]
 
         assert header.icon == "v0.10.0"
         assert header_icon.content_size.width >= len(header.icon)
