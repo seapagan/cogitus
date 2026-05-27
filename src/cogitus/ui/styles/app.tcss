@@ -4,6 +4,10 @@ MainScreen {
     layout: horizontal;
 }
 
+HeaderIcon {
+    width: auto;
+}
+
 CogitusStatusBar {
     dock: bottom;
     height: 1;
