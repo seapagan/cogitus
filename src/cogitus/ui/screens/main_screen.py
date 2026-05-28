@@ -821,6 +821,7 @@ class MainScreen(Screen[None]):
                 self._service,
                 initial_group_pk=initial_group_pk,
                 edit_body_cursor_mode=self._edit_body_cursor_mode,
+                on_saved=self._on_form_saved,
             ),
             callback=self._on_form_dismiss,
         )
@@ -868,6 +869,7 @@ class MainScreen(Screen[None]):
                 self._service,
                 idea=fresh,
                 edit_body_cursor_mode=self._edit_body_cursor_mode,
+                on_saved=self._on_form_saved,
             ),
             callback=self._on_form_dismiss,
         )
@@ -1096,6 +1098,10 @@ class MainScreen(Screen[None]):
         """Handle form dismiss — result is the idea pk."""
         if result is not None:
             self.refresh_ideas(select_pk=result)
+
+    def _on_form_saved(self, idea_pk: int) -> None:
+        """Refresh the visible idea after a stay-open form save."""
+        self.refresh_ideas(select_pk=idea_pk)
 
     def _on_group_form_dismiss(self, result: int | None) -> None:
         """Refresh tree after group create."""

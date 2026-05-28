@@ -47,6 +47,8 @@ from cogitus.ui.widgets.select_all import (
 from cogitus.ui.widgets.text_area import CogitusTextArea
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from textual.app import ComposeResult
     from textual.events import Key, Resize
     from textual.widget import Widget
@@ -93,9 +95,16 @@ class IdeaFormScreen(ModalScreen[int | None]):
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "cancel", "Cancel", show=False),
         Binding(
-            "ctrl+s",
+            "f5",
             "save",
             "Save",
+            show=False,
+            priority=True,
+        ),
+        Binding(
+            "ctrl+s",
+            "save_and_close",
+            "Save & Close",
             show=False,
             priority=True,
         ),
@@ -110,6 +119,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         edit_body_cursor_mode: EditBodyCursorMode = (
             DEFAULT_EDIT_BODY_CURSOR_MODE
         ),
+        on_saved: Callable[[int], None] | None = None,
     ) -> None:
         """Initialize the idea form.
 
@@ -118,12 +128,14 @@ class IdeaFormScreen(ModalScreen[int | None]):
             idea: Existing idea to edit, or None for new.
             initial_group_pk: Initial group pk for new-idea mode.
             edit_body_cursor_mode: Cursor mode for edit form body.
+            on_saved: Optional callback for successful stay-open saves.
         """
         super().__init__()
         self._service = service
         self._idea = idea
         self._initial_group_pk = initial_group_pk
         self._edit_body_cursor_mode = edit_body_cursor_mode
+        self._on_saved = on_saved
         self._tag_usage_by_name: tuple[tuple[str, int], ...] = ()
         self._tag_autocomplete_state: _AutocompleteState | None = None
         self._suspend_tag_autocomplete_sync = False
@@ -179,12 +191,17 @@ class IdeaFormScreen(ModalScreen[int | None]):
                         )
             with Horizontal(id="form-buttons"):
                 yield Button(
-                    "Save [Ctrl+s]",
+                    r"Save \[F5]",
                     variant="primary",
                     id="save-btn",
                 )
                 yield Button(
-                    "Cancel [Esc]",
+                    r"Save & Close \[Ctrl+s]",
+                    variant="success",
+                    id="save-close-btn",
+                )
+                yield Button(
+                    r"Cancel \[Esc]",
                     variant="default",
                     id="cancel-btn",
                 )
@@ -652,18 +669,23 @@ class IdeaFormScreen(ModalScreen[int | None]):
         """Save the idea when the save button is pressed."""
         self.action_save()
 
+    @on(Button.Pressed, "#save-close-btn")
+    def _handle_save_close_button(self) -> None:
+        """Save and close the form when the save-and-close button is pressed."""
+        self.action_save_and_close()
+
     @on(Button.Pressed, "#cancel-btn")
     def _handle_cancel_button(self) -> None:
         """Cancel the form when the cancel button is pressed."""
         self.action_cancel()
 
-    def action_save(self) -> None:
-        """Save the idea."""
+    def _save_idea(self) -> tuple[bool, int | None]:
+        """Persist form values and return success with the saved idea pk."""
         title = self.query_one("#title-input", Input).value.strip()
         if not title:
             self.notify("Title is required", severity="error")
             self.query_one("#title-input", Input).focus()
-            return
+            return (False, None)
 
         body = self.query_one("#body-input", CogitusTextArea).text
         tags_str = self.query_one("#tags-input", Input).value
@@ -675,7 +697,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
         )
         if not isinstance(group_value, int):
             self.notify("Invalid group selection", severity="error")
-            return
+            return (False, None)
         group_pk = group_value
 
         if self._idea is not None:
@@ -689,22 +711,42 @@ class IdeaFormScreen(ModalScreen[int | None]):
                 )
             except ValueError as exc:
                 self.notify(str(exc), severity="error")
-                return
+                return (False, None)
             pk = result.pk if result else None
+            if result is not None:
+                self._idea = result
             self._persist_edit_cursor_position()
-        else:
-            try:
-                idea = self._service.create_idea(
-                    title=title,
-                    body=body,
-                    tags=tags or None,
-                    group_pk=group_pk,
-                )
-            except ValueError as exc:
-                self.notify(str(exc), severity="error")
-                return
-            pk = idea.pk
+            return (True, pk)
 
+        try:
+            idea = self._service.create_idea(
+                title=title,
+                body=body,
+                tags=tags or None,
+                group_pk=group_pk,
+            )
+        except ValueError as exc:
+            self.notify(str(exc), severity="error")
+            return (False, None)
+        self._idea = idea
+        return (True, idea.pk)
+
+    def action_save(self) -> None:
+        """Save the idea and keep the form open."""
+        saved, pk = self._save_idea()
+        if not saved or pk is None:
+            return
+        self._initial_form_state = self._current_form_state()
+        self._load_tag_autocomplete_source()
+        self.notify("Idea saved")
+        if self._on_saved is not None:
+            self._on_saved(pk)
+
+    def action_save_and_close(self) -> None:
+        """Save the idea and dismiss the form."""
+        saved, pk = self._save_idea()
+        if not saved:
+            return
         self.dismiss(pk)
 
     def action_cancel(self) -> None:
@@ -739,12 +781,12 @@ class ConfirmDialog(ModalScreen[bool]):
             yield Static(self._message, id="confirm-message")
             with Horizontal(id="confirm-buttons"):
                 yield Button(
-                    "Yes [Y]",
+                    r"Yes \[Y]",
                     variant="error",
                     id="confirm-yes-btn",
                 )
                 yield Button(
-                    "No [N]",
+                    r"No \[N]",
                     variant="default",
                     id="confirm-no-btn",
                 )
@@ -813,22 +855,22 @@ class RemoteStartupRecoveryScreen(
             )
             with Horizontal(id="remote-startup-buttons"):
                 yield Button(
-                    "Retry [R]",
+                    r"Retry \[R]",
                     variant="primary",
                     id="retry-remote-btn",
                 )
                 yield Button(
-                    "Use Cache [C]",
+                    r"Use Cache \[C]",
                     variant="default",
                     id="use-cache-btn",
                 )
                 yield Button(
-                    "Use Local [L]",
+                    r"Use Local \[L]",
                     variant="default",
                     id="use-local-btn",
                 )
                 yield Button(
-                    "Quit [Q]",
+                    r"Quit \[Q]",
                     variant="error",
                     id="quit-startup-btn",
                 )
@@ -966,12 +1008,12 @@ class RemoteCloneSwitchModeScreen(
             )
             with Horizontal(id="remote-clone-switch-buttons"):
                 yield Button(
-                    "Stay Remote [S]",
+                    r"Stay Remote \[S]",
                     variant="default",
                     id="stay-remote-btn",
                 )
                 yield Button(
-                    "Use Local [L]",
+                    r"Use Local \[L]",
                     variant="primary",
                     id="switch-local-after-clone-btn",
                 )
@@ -1024,12 +1066,12 @@ class GroupFormScreen(ModalScreen[int | None]):
             )
             with Horizontal(id="confirm-buttons"):
                 yield Button(
-                    "Save [Ctrl+s]",
+                    r"Save \[Ctrl+s]",
                     variant="primary",
                     id="save-group-btn",
                 )
                 yield Button(
-                    "Cancel [Esc]",
+                    r"Cancel \[Esc]",
                     variant="default",
                     id="cancel-group-btn",
                 )
@@ -1086,7 +1128,7 @@ class NameInputScreen(ModalScreen[str | None]):
         title: str,
         initial_value: str = "",
         placeholder: str,
-        save_label: str = "Save [Enter/Ctrl+s]",
+        save_label: str = r"Save \[Enter/Ctrl+s]",
     ) -> None:
         """Initialize the modal with labels and initial input value."""
         super().__init__()
@@ -1111,7 +1153,7 @@ class NameInputScreen(ModalScreen[str | None]):
                     id="save-name-btn",
                 )
                 yield Button(
-                    "Cancel [Esc]",
+                    r"Cancel \[Esc]",
                     variant="default",
                     id="cancel-name-btn",
                 )
@@ -1213,12 +1255,12 @@ class BackendConfigScreen(ModalScreen[BackendConfig | None]):
             )
             with Horizontal(id="name-input-buttons"):
                 yield Button(
-                    "Save [Ctrl+s]",
+                    r"Save \[Ctrl+s]",
                     variant="primary",
                     id="save-backend-btn",
                 )
                 yield Button(
-                    "Cancel [Esc]",
+                    r"Cancel \[Esc]",
                     variant="default",
                     id="cancel-backend-btn",
                 )
@@ -1303,12 +1345,12 @@ class GroupDeleteReassignScreen(ModalScreen[int | None]):
             )
             with Horizontal(id="confirm-buttons"):
                 yield Button(
-                    "Move + Delete [Ctrl+s]",
+                    r"Move + Delete \[Ctrl+s]",
                     variant="error",
                     id="move-delete-btn",
                 )
                 yield Button(
-                    "Cancel [Esc]",
+                    r"Cancel \[Esc]",
                     variant="default",
                     id="cancel-move-btn",
                 )
