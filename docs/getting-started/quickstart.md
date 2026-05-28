@@ -17,7 +17,7 @@ The app opens with:
 
 1. Press `n` to create a new idea.
 2. Enter a title and optional body/tags/group.
-3. Save with `Ctrl+S`.
+3. Save with `F5`, or save and close with `Ctrl+S`.
 4. Select ideas in the tree and press `e` to edit.
    Pressing `Esc` or choosing Cancel with unsaved edit changes asks for
    confirmation before closing the form.
