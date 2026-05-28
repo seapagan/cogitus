@@ -458,11 +458,11 @@ async def test_idea_form_save_notifies_and_reports_saved_idea(
 
 
 @pytest.mark.asyncio
-async def test_idea_form_save_without_returned_pk_still_marks_clean(
+async def test_idea_form_save_missing_idea_reports_error(
     service: IdeaService,
     mocker: MockerFixture,
 ) -> None:
-    """Stay-open save should not require a returned pk for local cleanup."""
+    """Stay-open save should report a missing edited idea."""
     idea = service.create_idea("Original", body="old")
     on_saved = mocker.Mock()
     screen = IdeaFormScreen(service, idea=idea, on_saved=on_saved)
@@ -471,15 +471,17 @@ async def test_idea_form_save_without_returned_pk_still_marks_clean(
     async with app.run_test() as pilot:
         notify = mocker.patch.object(screen, "notify")
         push_screen = mocker.patch.object(app, "push_screen")
+        dismiss = mocker.patch.object(screen, "dismiss")
         mocker.patch.object(service, "update_idea", return_value=None)
         screen.query_one("#body-input", CogitusTextArea).text = "new body"
 
         screen.action_save()
         screen.action_cancel()
 
-        notify.assert_called_once_with("Idea saved")
+        notify.assert_called_once_with("Idea not found", severity="error")
         on_saved.assert_not_called()
-        push_screen.assert_not_called()
+        push_screen.assert_called_once()
+        dismiss.assert_not_called()
         await pilot.pause()
 
 

@@ -743,9 +743,12 @@ class IdeaFormScreen(ModalScreen[int | None]):
         except ValueError as exc:
             self.notify(str(exc), severity="error")
             return (False, None)
-        pk = result.pk if result else None
-        if result is not None:
-            self._idea = result
+        if result is None:
+            self.notify("Idea not found", severity="error")
+            return (False, None)
+
+        pk = result.pk
+        self._idea = result
         self._persist_edit_cursor_position()
         return (True, pk)
 
