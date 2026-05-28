@@ -1309,16 +1309,18 @@ async def test_main_screen_shows_custom_app_header(
         service,
         app_metadata=AppMetadata(
             title="Cogitus",
-            version="1.2.3",
+            version="0.10.0",
         ),
     )
-    app = _SingleScreenApp(screen)
+    app = _StyledSingleScreenApp(screen)
 
     async with app.run_test() as pilot:
-        header = screen.query_one(Header)
-
-        assert header.icon == "v1.2.3"
         await pilot.pause()
+        header = screen.query_one(Header)
+        header_icon = header.children[0]
+
+        assert header.icon == "v0.10.0"
+        assert header_icon.content_size.width >= len(header.icon)
 
 
 @pytest.mark.asyncio
