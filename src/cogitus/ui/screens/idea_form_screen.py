@@ -67,6 +67,16 @@ class _IdeaFormState:
     group_pk: int | None
 
 
+@dataclass(frozen=True)
+class _IdeaSaveValues:
+    """Validated form values ready for persistence."""
+
+    title: str
+    body: str
+    tags: list[str]
+    group_pk: int
+
+
 class TagsInput(SelectAllInput):
     """Input that delegates comma-accept behavior to IdeaFormScreen."""
 
@@ -681,11 +691,21 @@ class IdeaFormScreen(ModalScreen[int | None]):
 
     def _save_idea(self) -> tuple[bool, int | None]:
         """Persist form values and return success with the saved idea pk."""
+        values = self._collect_save_values()
+        if values is None:
+            return (False, None)
+
+        if self._idea is not None:
+            return self._update_existing_idea(self._idea.pk, values)
+        return self._create_new_idea(values)
+
+    def _collect_save_values(self) -> _IdeaSaveValues | None:
+        """Return validated form values or notify about validation failure."""
         title = self.query_one("#title-input", Input).value.strip()
         if not title:
             self.notify("Title is required", severity="error")
             self.query_one("#title-input", Input).focus()
-            return (False, None)
+            return None
 
         body = self.query_one("#body-input", CogitusTextArea).text
         tags_str = self.query_one("#tags-input", Input).value
@@ -697,33 +717,49 @@ class IdeaFormScreen(ModalScreen[int | None]):
         )
         if not isinstance(group_value, int):
             self.notify("Invalid group selection", severity="error")
+            return None
+
+        return _IdeaSaveValues(
+            title=title,
+            body=body,
+            tags=tags,
+            group_pk=group_value,
+        )
+
+    def _update_existing_idea(
+        self,
+        idea_pk: int,
+        values: _IdeaSaveValues,
+    ) -> tuple[bool, int | None]:
+        """Update the current idea and return success with saved idea pk."""
+        try:
+            result = self._service.update_idea(
+                pk=idea_pk,
+                title=values.title,
+                body=values.body,
+                tags=values.tags,
+                group_pk=values.group_pk,
+            )
+        except ValueError as exc:
+            self.notify(str(exc), severity="error")
             return (False, None)
-        group_pk = group_value
+        pk = result.pk if result else None
+        if result is not None:
+            self._idea = result
+        self._persist_edit_cursor_position()
+        return (True, pk)
 
-        if self._idea is not None:
-            try:
-                result = self._service.update_idea(
-                    pk=self._idea.pk,
-                    title=title,
-                    body=body,
-                    tags=tags,
-                    group_pk=group_pk,
-                )
-            except ValueError as exc:
-                self.notify(str(exc), severity="error")
-                return (False, None)
-            pk = result.pk if result else None
-            if result is not None:
-                self._idea = result
-            self._persist_edit_cursor_position()
-            return (True, pk)
-
+    def _create_new_idea(
+        self,
+        values: _IdeaSaveValues,
+    ) -> tuple[bool, int | None]:
+        """Create an idea and return success with saved idea pk."""
         try:
             idea = self._service.create_idea(
-                title=title,
-                body=body,
-                tags=tags or None,
-                group_pk=group_pk,
+                title=values.title,
+                body=values.body,
+                tags=values.tags or None,
+                group_pk=values.group_pk,
             )
         except ValueError as exc:
             self.notify(str(exc), severity="error")
