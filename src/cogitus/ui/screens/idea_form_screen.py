@@ -734,12 +734,12 @@ class IdeaFormScreen(ModalScreen[int | None]):
     def action_save(self) -> None:
         """Save the idea and keep the form open."""
         saved, pk = self._save_idea()
-        if not saved or pk is None:
+        if not saved:
             return
         self._initial_form_state = self._current_form_state()
         self._load_tag_autocomplete_source()
         self.notify("Idea saved")
-        if self._on_saved is not None:
+        if self._on_saved is not None and pk is not None:
             self._on_saved(pk)
 
     def action_save_and_close(self) -> None:
