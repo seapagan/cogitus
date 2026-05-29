@@ -2,62 +2,74 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://cogitus.grantramsay.dev/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/getting-started/installation/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/getting-started/quickstart/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/project/changelog/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/project/contributing/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/project/license/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/project/todo/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
+    </url>
+    <url>
+         <loc>https://cogitus.grantramsay.dev/user-guide/api/</loc>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/user-guide/cli/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/user-guide/clipboard/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/user-guide/ideas-groups-tags/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/user-guide/keybindings/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/user-guide/overview/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
+    </url>
+    <url>
+         <loc>https://cogitus.grantramsay.dev/user-guide/remote-clone/</loc>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/user-guide/search/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/user-guide/settings/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
+    </url>
+    <url>
+         <loc>https://cogitus.grantramsay.dev/user-guide/theming/</loc>
+         <lastmod>2026-05-29</lastmod>
     </url>
     <url>
          <loc>https://cogitus.grantramsay.dev/user-guide/troubleshooting/</loc>
-         <lastmod>2026-02-15</lastmod>
+         <lastmod>2026-05-29</lastmod>
     </url>
 </urlset>
