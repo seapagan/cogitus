@@ -85,7 +85,7 @@ frozenlist==1.8.0
     #   aiosignal
 ghp-import==2.1.0
     # via mkdocs
-github-changelog-md==0.9.8
+github-changelog-md==0.9.9
 h11==0.16.0
     # via
     #   httpcore

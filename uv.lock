@@ -499,7 +499,7 @@ wheels = [
 
 [[package]]
 name = "cogitus"
-version = "0.10.0"
+version = "0.11.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
@@ -980,7 +980,7 @@ wheels = [
 
 [[package]]
 name = "github-changelog-md"
-version = "0.9.8"
+version = "0.9.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pygithub" },
@@ -989,9 +989,9 @@ dependencies = [
     { name = "simple-toml-settings" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ee/b4/6aff7b8f42210ec57e970b7e5163a85e6d1f26da00166f1469c87a23db57/github_changelog_md-0.9.8.tar.gz", hash = "sha256:f1aa1273ba753b8b7d80ef82968610e928531bc8300c36d8fbfa3adc18cf7142", size = 16787, upload-time = "2026-02-06T16:19:31.426Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6a/01/d35d3b4881e06597452b75f9bf47284029d185141fe263a49104ec264c76/github_changelog_md-0.9.9.tar.gz", hash = "sha256:8bdd2a9f4fe2409103e1ca677e416abdce5312b6a47af70af102812251655a10", size = 17499, upload-time = "2026-05-12T19:33:41.497Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5a/9c/67abb7a6b7f9966c916e9c961d533aecbcdc56096d308590bb69eb7427f1/github_changelog_md-0.9.8-py3-none-any.whl", hash = "sha256:012647bde58013f8cdc09db25a289244ae0727269a214338e318c0feb245afb2", size = 18823, upload-time = "2026-02-06T16:19:32.498Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/a4/8813e3dc3f81da2b416fa41c0ed7d8e66c6581def75e7ea3ea1185c2100d/github_changelog_md-0.9.9-py3-none-any.whl", hash = "sha256:6d69fa50b137001ed4d362a1c6a65e9af11d68856179d7235584326728db1bd1", size = 19864, upload-time = "2026-05-12T19:33:40.002Z" },
 ]
 
 [[package]]

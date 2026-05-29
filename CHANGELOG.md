@@ -5,6 +5,18 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0](https://github.com/seapagan/cogitus/releases/tag/0.11.0) (May 29, 2026)
+
+**Merged Pull Requests**
+
+- Split idea form save actions ([#77](https://github.com/seapagan/cogitus/pull/77)) by [seapagan](https://github.com/seapagan)
+
+**Bug Fixes**
+
+- Fix: prevent header version clipping ([#76](https://github.com/seapagan/cogitus/pull/76)) by [seapagan](https://github.com/seapagan)
+
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.10.0...0.11.0) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.10.0...0.11.0.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.10.0...0.11.0.patch)
+
 ## [0.10.0](https://github.com/seapagan/cogitus/releases/tag/0.10.0) (May 27, 2026)
 
 **New Features**
