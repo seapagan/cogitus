@@ -2467,6 +2467,32 @@ async def test_group_form_and_reassign_validation_branches(
 
 
 @pytest.mark.asyncio
+async def test_group_form_creates_subgroup(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Subgroup form should save with the selected parent group."""
+    parent = service.create_group("parent")
+    subgroup_form = GroupFormScreen(
+        service=service,
+        parent_pk=parent.pk,
+        show_parent_select=True,
+    )
+    app = _SingleScreenApp(subgroup_form)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(subgroup_form, "dismiss")
+
+        subgroup_form.query_one("#group-name-input", Input).value = "child"
+        subgroup_form.action_save()
+
+        child = service.get_group(dismiss.call_args.args[0])
+        assert child is not None
+        assert child.parent_pk == parent.pk
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_selection_and_search(
     service: IdeaService,
     mocker: MockerFixture,
@@ -4174,6 +4200,7 @@ async def test_main_screen_search_input_disables_non_search_actions(
         for action in (
             "new_idea",
             "new_group",
+            "new_subgroup",
             "delete_group",
             "delete_idea",
             "edit_idea",
@@ -4247,6 +4274,7 @@ async def test_main_screen_search_results_disable_structural_actions_only(
         for action in (
             "new_idea",
             "new_group",
+            "new_subgroup",
             "delete_group",
             "delete_idea",
         ):
@@ -6682,6 +6710,7 @@ async def test_main_screen_cached_remote_mode_is_read_only(
 
         screen.action_new_idea()
         screen.action_new_group()
+        screen.action_new_subgroup()
         screen.action_edit_idea()
         screen.action_delete_idea()
         screen.action_rename_selected()
@@ -6689,9 +6718,10 @@ async def test_main_screen_cached_remote_mode_is_read_only(
 
         assert screen._sync_remote_before_edit() is False
         assert screen.check_action("new_idea", ()) is False
+        assert screen.check_action("new_subgroup", ()) is False
         assert screen.check_action("edit_idea", ()) is False
         push_screen.assert_not_called()
-        assert notify.call_count == 7
+        assert notify.call_count == 8
         await pilot.pause()
 
 
@@ -6738,6 +6768,15 @@ async def test_main_screen_check_action_and_bindings_cover_runtime_branches(
     app = _SingleScreenApp(screen)
 
     async with app.run_test() as pilot:
+        subgroup_binding = next(
+            binding
+            for binding in screen.BINDINGS
+            if isinstance(binding, Binding)
+            if binding.action == "new_subgroup"
+        )
+        assert subgroup_binding.key == "ctrl+g"
+        assert subgroup_binding.description == "New Subgroup"
+
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         screen._remote_cached_read_only = True
         assert screen.check_action("new_idea", ()) is False

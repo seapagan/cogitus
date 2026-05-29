@@ -309,6 +309,40 @@ async def test_idea_list_panel_uses_stronger_group_label_emphasis(
 
 
 @pytest.mark.asyncio
+async def test_idea_list_panel_renders_nested_groups(
+    service: IdeaService,
+) -> None:
+    """Grouped tree should render child groups under their parents."""
+    parent = service.create_group("parent")
+    child = service.create_group("child", parent_pk=parent.pk)
+    idea = service.create_idea("Nested idea", group_pk=child.pk)
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        await pilot.pause()
+
+        tree = panel.query_one("#idea-list", Tree)
+        parent_node = next(
+            node
+            for node in tree.root.children
+            if node.data == IdeaTreeNodeData(kind="group", group_pk=parent.pk)
+        )
+        child_node = next(
+            node
+            for node in parent_node.children
+            if node.data == IdeaTreeNodeData(kind="group", group_pk=child.pk)
+        )
+
+        assert child_node.children[0].data == IdeaTreeNodeData(
+            kind="idea",
+            group_pk=child.pk,
+            idea_pk=idea.pk,
+        )
+
+
+@pytest.mark.asyncio
 async def test_idea_list_panel_refreshes_relative_timestamps_in_place(
     service: IdeaService,
     monkeypatch: pytest.MonkeyPatch,

@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from textual.widget import Widget
 
     from cogitus.backends.protocols import IdeaBackend
+    from cogitus.models.group import Group
     from cogitus.models.idea import Idea
 
 
@@ -75,6 +76,36 @@ class _IdeaSaveValues:
     body: str
     tags: list[str]
     group_pk: int
+
+
+def _depth_first_group_options(groups: list[Group]) -> list[tuple[str, int]]:
+    """Build indented depth-first group options."""
+    groups_by_pk = {group.pk: group for group in groups}
+    children_by_parent: dict[int | None, list[Group]] = {}
+    for group in groups:
+        parent_pk = group.parent_pk
+        if parent_pk not in groups_by_pk:
+            parent_pk = None
+        children_by_parent.setdefault(parent_pk, []).append(group)
+    for siblings in children_by_parent.values():
+        siblings.sort(key=lambda group: group.name)
+
+    options: list[tuple[str, int]] = []
+    seen: set[int] = set()
+
+    def append_group(group: Group, depth: int) -> None:
+        if group.pk in seen:
+            return
+        seen.add(group.pk)
+        options.append((f"{'  ' * depth}{group.name}", group.pk))
+        for child in children_by_parent.get(group.pk, []):
+            append_group(child, depth + 1)
+
+    for root in children_by_parent.get(None, []):
+        append_group(root, 0)
+    for group in groups:
+        append_group(group, 0)
+    return options
 
 
 class TagsInput(SelectAllInput):
@@ -643,8 +674,7 @@ class IdeaFormScreen(ModalScreen[int | None]):
 
     def _group_options(self) -> list[tuple[str, int]]:
         """Build Select options for available groups."""
-        groups = self._service.list_groups()
-        return [(group.name, group.pk) for group in groups]
+        return _depth_first_group_options(self._service.list_groups())
 
     def _get_existing_group_pk(self) -> int:
         """Return selected group pk for edit mode or create defaults."""
@@ -1090,19 +1120,52 @@ class GroupFormScreen(ModalScreen[int | None]):
         ),
     ]
 
-    def __init__(self, service: IdeaBackend) -> None:
+    def __init__(
+        self,
+        service: IdeaBackend,
+        *,
+        parent_pk: int | None = None,
+        show_parent_select: bool = False,
+    ) -> None:
         """Initialize the group form."""
         super().__init__()
         self._service = service
+        self._parent_pk = parent_pk
+        self._show_parent_select = show_parent_select
 
     def compose(self) -> ComposeResult:
         """Compose the group form."""
         with Vertical(id="confirm-container"):
-            yield Static("New Group", id="form-title")
+            yield Static(
+                "New Subgroup" if self._show_parent_select else "New Group",
+                id="form-title",
+            )
             yield SelectAllInput(
                 placeholder="Group name...",
                 id="group-name-input",
             )
+            if self._show_parent_select:
+                parent_options = _depth_first_group_options(
+                    self._service.list_groups()
+                )
+                yield Label("Parent")
+                if parent_options:
+                    selected_parent = self._parent_pk
+                    parent_value = (
+                        selected_parent
+                        if selected_parent is not None
+                        and any(
+                            pk == selected_parent
+                            for _label, pk in parent_options
+                        )
+                        else parent_options[0][1]
+                    )
+                    yield Select[int](
+                        options=parent_options,
+                        value=parent_value,
+                        allow_blank=False,
+                        id="parent-group-select",
+                    )
             with Horizontal(id="confirm-buttons"):
                 yield Button(
                     r"Save \[Ctrl+s]",
@@ -1135,8 +1198,12 @@ class GroupFormScreen(ModalScreen[int | None]):
         if not name:
             self.notify("Group name is required", severity="error")
             return
+        parent_pk = self._parent_pk
+        if self._show_parent_select:
+            selected = self.query_one("#parent-group-select", Select).value
+            parent_pk = selected if isinstance(selected, int) else None
         try:
-            group = self._service.create_group(name)
+            group = self._service.create_group(name, parent_pk=parent_pk)
         except ValueError as exc:
             self.notify(str(exc), severity="error")
             return

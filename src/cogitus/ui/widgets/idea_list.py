@@ -193,8 +193,17 @@ class IdeaListPanel(Vertical):
         self.query_one("#search-results", SearchResultsList).clear_results()
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
         ordered_pks: list[int] = []
-        for group, ideas in grouped_ideas:
-            group_node = tree.root.add(
+        ideas_by_group_pk, children_by_parent = self._group_tree_maps(
+            grouped_ideas
+        )
+
+        def add_group(
+            group: Group,
+            parent_node: TreeNode[IdeaTreeNodeData],
+        ) -> None:
+            nonlocal first_idea_node
+            ideas = ideas_by_group_pk[group.pk]
+            group_node = parent_node.add(
                 _format_group_label(group.name, len(ideas)),
                 data=IdeaTreeNodeData(kind="group", group_pk=group.pk),
                 expand=True,
@@ -209,6 +218,11 @@ class IdeaListPanel(Vertical):
                 if first_idea_node is None:
                     first_idea_node = idea_node
                 ordered_pks.append(idea.pk)
+            for child in children_by_parent.get(group.pk, []):
+                add_group(child, group_node)
+
+        for group in children_by_parent.get(None, []):
+            add_group(group, tree.root)
         self._result_order_pks = tuple(ordered_pks)
         tree.root.expand()
         if auto_select_first and first_idea_node is not None:
@@ -216,6 +230,21 @@ class IdeaListPanel(Vertical):
             tree.move_cursor(first_idea_node, animate=False)
         else:
             tree.unselect()
+
+    @staticmethod
+    def _group_tree_maps(
+        grouped_ideas: list[tuple[Group, list[Idea]]],
+    ) -> tuple[dict[int, list[Idea]], dict[int | None, list[Group]]]:
+        """Return idea and child-group maps for nested tree rendering."""
+        groups_by_pk = {group.pk: group for group, _ideas in grouped_ideas}
+        ideas_by_group_pk = {group.pk: ideas for group, ideas in grouped_ideas}
+        children_by_parent: dict[int | None, list[Group]] = {}
+        for group, _ideas in grouped_ideas:
+            parent_pk = group.parent_pk
+            if parent_pk not in groups_by_pk:
+                parent_pk = None
+            children_by_parent.setdefault(parent_pk, []).append(group)
+        return ideas_by_group_pk, children_by_parent
 
     def load_grouped_search_results(
         self,

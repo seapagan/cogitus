@@ -68,6 +68,7 @@ class MainScreen(Screen[None]):
         {
             "new_idea",
             "new_group",
+            "new_subgroup",
             "delete_group",
             "delete_idea",
         }
@@ -96,6 +97,7 @@ class MainScreen(Screen[None]):
         {
             "new_idea",
             "new_group",
+            "new_subgroup",
             "delete_group",
             "edit_idea",
             "rename_selected",
@@ -106,6 +108,12 @@ class MainScreen(Screen[None]):
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("n", "new_idea", "New", key_display="n"),
         Binding("g", "new_group", "New Group", key_display="g"),
+        Binding(
+            "ctrl+g",
+            "new_subgroup",
+            "New Subgroup",
+            key_display="ctrl+g",
+        ),
         Binding(
             "G",
             "delete_group",
@@ -847,6 +855,29 @@ class MainScreen(Screen[None]):
             callback=self._on_group_form_dismiss,
         )
 
+    def action_new_subgroup(self) -> None:
+        """Open the new subgroup form."""
+        if not self._ensure_mutation_allowed():
+            return
+        parent_pk = self._get_contextual_new_idea_group_pk()
+        if parent_pk is None:
+            parent_pk = self._get_default_group_pk()
+        self.app.push_screen(
+            GroupFormScreen(
+                self._service,
+                parent_pk=parent_pk,
+                show_parent_select=True,
+            ),
+            callback=self._on_group_form_dismiss,
+        )
+
+    def _get_default_group_pk(self) -> int | None:
+        """Return the default group primary key if available."""
+        for group in self._service.list_groups():
+            if group.name == self._service.default_group_name:
+                return group.pk
+        return None
+
     def action_edit_idea(self) -> None:
         """Open the edit form for the selected idea."""
         if not self._ensure_mutation_allowed():
@@ -1004,6 +1035,12 @@ class MainScreen(Screen[None]):
             return
         if group.name == self._service.default_group_name:
             self.notify("Default group cannot be deleted", severity="warning")
+            return
+        if any(item.parent_pk == group_pk for item in groups):
+            self.notify(
+                "Group with child groups cannot be deleted",
+                severity="warning",
+            )
             return
 
         self._show_delete_group_flow(group_pk, group.name, groups)
