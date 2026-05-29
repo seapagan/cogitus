@@ -196,6 +196,7 @@ class SnapshotImportRepository:
                 len(groups),
                 progress_callback,
             )
+        self._validate_snapshot_group_parents(groups, inserted)
         return inserted
 
     def _insert_tags(
@@ -330,7 +331,9 @@ class SnapshotImportRepository:
             [self._group_model(group) for group in groups],
             timestamp_override=True,
         )
-        return {group.pk: group for group in inserted}
+        inserted_by_pk = {group.pk: group for group in inserted}
+        self._validate_snapshot_group_parents(groups, inserted_by_pk)
+        return inserted_by_pk
 
     def _bulk_insert_tags(
         self,
@@ -430,7 +433,38 @@ class SnapshotImportRepository:
             created_at=group.created_at,
             updated_at=group.updated_at,
             name=group.name,
+            parent_pk=group.parent_pk,
         )
+
+    @staticmethod
+    def _validate_snapshot_group_parents(
+        groups: list[GroupResponse],
+        inserted_by_pk: dict[int, Group],
+    ) -> None:
+        """Fail clearly when snapshot group parent links are inconsistent."""
+        parent_by_pk = {group.pk: group.parent_pk for group in groups}
+        for group in groups:
+            parent_pk = group.parent_pk
+            if parent_pk is None:
+                continue
+            if parent_pk == group.pk or parent_pk not in inserted_by_pk:
+                msg = (
+                    "Snapshot is inconsistent: "
+                    f"group {group.pk} references missing parent "
+                    f"{parent_pk}"
+                )
+                raise RuntimeError(msg)
+            seen: set[int] = {group.pk}
+            current_pk: int | None = parent_pk
+            while current_pk is not None:
+                if current_pk in seen:
+                    msg = (
+                        "Snapshot is inconsistent: "
+                        f"group {group.pk} parent chain contains a cycle"
+                    )
+                    raise RuntimeError(msg)
+                seen.add(current_pk)
+                current_pk = parent_by_pk.get(current_pk)
 
     @staticmethod
     def _tag_model(tag: TagResponse) -> Tag:

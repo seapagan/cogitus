@@ -34,6 +34,7 @@ class StoredGroup:
     created_at: int
     updated_at: int
     name: str
+    parent_pk: int | None = None
 
 
 @dataclass
@@ -377,13 +378,21 @@ class MockRemoteAPI:
 
     def _handle_create_group(self, request: httpx.Request) -> httpx.Response:
         """Create a new group."""
-        name = str(self._json_payload(request)["name"]).strip().lower()
+        payload = self._json_payload(request)
+        name = str(payload["name"]).strip().lower()
+        parent_pk = self._int_payload_value(payload.get("parent_pk"))
+        if parent_pk is not None and parent_pk not in self.groups:
+            return self._json_response(
+                409,
+                {"detail": "Parent group not found"},
+            )
         self._tick += 1
         group = StoredGroup(
             pk=self._next_group_pk,
             created_at=self._tick,
             updated_at=self._tick,
             name=name,
+            parent_pk=parent_pk,
         )
         self.groups[group.pk] = group
         self._next_group_pk += 1
@@ -509,6 +518,18 @@ class MockRemoteAPI:
             return []
         return [str(item) for item in value]
 
+    @staticmethod
+    def _int_payload_value(value: object) -> int | None:
+        """Extract an optional int value from a JSON payload field."""
+        if value is None:
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            return int(value)
+        msg = f"Expected int-compatible payload value, got {value!r}"
+        raise TypeError(msg)
+
     def _group_payload(self, group: StoredGroup) -> dict[str, object]:
         """Serialize a group for API responses."""
         return {
@@ -516,6 +537,7 @@ class MockRemoteAPI:
             "created_at": group.created_at,
             "updated_at": group.updated_at,
             "name": group.name,
+            "parent_pk": group.parent_pk,
         }
 
     def _tag_payload(self, tag: StoredTag) -> dict[str, object]:
@@ -546,7 +568,7 @@ class MockRemoteAPI:
         """Return a deterministic hash for the fake remote dataset."""
         group_parts = [
             f"group:{group.pk}:{group.created_at}:{group.updated_at}:"
-            f"{group.name}"
+            f"{group.name}:{group.parent_pk}"
             for group in self.groups.values()
         ]
         tag_parts = [

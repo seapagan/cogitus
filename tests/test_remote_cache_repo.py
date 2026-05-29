@@ -26,6 +26,7 @@ def _group(
     name: str,
     created_at: int,
     updated_at: int,
+    parent_pk: int | None = None,
 ) -> GroupResponse:
     """Build a group API response for cache-repository tests."""
     return GroupResponse(
@@ -33,6 +34,7 @@ def _group(
         created_at=created_at,
         updated_at=updated_at,
         name=name,
+        parent_pk=parent_pk,
     )
 
 
@@ -239,6 +241,7 @@ def test_upsert_group_and_tag_update_existing_rows(
             name="platform",
             created_at=4,
             updated_at=9,
+            parent_pk=1,
         )
     )
     repo.upsert_tag(
@@ -263,6 +266,7 @@ def test_upsert_group_and_tag_update_existing_rows(
 
     assert cached_group is not None
     assert cached_group.name == "platform"
+    assert cached_group.parent_pk == 1
     assert cached_group.created_at == 4
     assert cached_group.updated_at == 9
     assert cached_tag is not None

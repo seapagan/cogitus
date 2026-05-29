@@ -14,6 +14,7 @@ class GroupCreateRequest(BaseModel):
     )
 
     name: str = Field(min_length=1)
+    parent_pk: int | None = Field(default=None, ge=1)
 
 
 class GroupUpdateRequest(BaseModel):

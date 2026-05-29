@@ -72,6 +72,7 @@ class RemoteCacheRepository:
                 "created_at": group.created_at,
                 "updated_at": group.updated_at,
                 "name": group.name,
+                "parent_pk": group.parent_pk,
             },
         )
 
@@ -185,6 +186,7 @@ class RemoteCacheRepository:
             created_at=group.created_at,
             updated_at=group.updated_at,
             name=group.name,
+            parent_pk=group.parent_pk,
         )
 
     @staticmethod

@@ -14,3 +14,4 @@ class GroupResponse(BaseModel):
     created_at: int
     updated_at: int
     name: str
+    parent_pk: int | None = None
