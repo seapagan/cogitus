@@ -34,7 +34,8 @@
 
 | Key         | Action                                             |
 | ----------- | -------------------------------------------------- |
-| `Ctrl+s`    | Save                                               |
+| `F5`        | Save and keep the form open                       |
+| `Ctrl+s`    | Save and close                                    |
 | `Esc`       | Cancel, with confirmation if the edit is dirty     |
 | `Tab`       | Next field (or cycle tag suggestions when visible) |
 | `Shift+Tab` | Previous field (or reverse-cycle tag suggestions)  |

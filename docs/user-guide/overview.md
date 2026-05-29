@@ -12,7 +12,7 @@ This guide covers day-to-day usage of Cogitus in the terminal UI.
 
 1. Create a new idea with `n`.
 2. Add title/body/tags/group.
-3. Save with `Ctrl+S`.
+3. Save with `F5`, or save and close with `Ctrl+S`.
 4. Re-open and edit with `e`.
 5. Search ideas with `/`.
 6. Copy body/selection with `y`.

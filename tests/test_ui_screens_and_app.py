@@ -12,6 +12,7 @@ from rich.table import Table
 from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Container, Vertical, VerticalScroll
 from textual.widgets import (
     Button,
@@ -114,6 +115,13 @@ class _ScrollConfigSingleScreenApp(_SingleScreenApp):
     ) -> None:
         super().__init__(screen)
         self._preserve_idea_scroll_position = save_idea_scroll_pos
+
+
+def _button_label_plain(button: Button) -> str:
+    """Return the rendered plain button label."""
+    label = button.label
+    assert not isinstance(label, str)
+    return label.plain
 
 
 class _FakeSettings:
@@ -304,17 +312,33 @@ async def test_idea_form_screen_create_and_validation(
         notify.assert_called_once()
         dismiss.assert_not_called()
 
+        notify.reset_mock()
+        screen.action_save_and_close()
+        notify.assert_called_once()
+        dismiss.assert_not_called()
+
         screen.query_one("#title-input", Input).value = "My Idea"
         screen.query_one("#body-input", TextArea).text = "Body"
         screen.query_one("#tags-input", Input).value = "python, testing"
         screen.action_save()
 
-        dismiss.assert_called_once()
-        pk = dismiss.call_args.args[0]
-        created = service.get_idea(pk)
-        assert created is not None
+        dismiss.assert_not_called()
+        created = service.list_ideas()[0]
+        pk = created.pk
+        assert screen._idea is not None
+        assert screen._idea.pk == pk
         assert created.title == "My Idea"
         assert {tag.name for tag in created.tags.fetch_all()} == {
+            "python",
+            "testing",
+        }
+
+        screen.action_save_and_close()
+        dismiss.assert_called_once_with(pk)
+        created_after_close = service.get_idea(pk)
+        assert created_after_close is not None
+        assert created_after_close.title == "My Idea"
+        assert {tag.name for tag in created_after_close.tags.fetch_all()} == {
             "python",
             "testing",
         }
@@ -339,18 +363,27 @@ async def test_idea_form_screen_edit_and_buttons(
         screen.query_one("#body-input", TextArea).text = "new"
         screen.query_one("#tags-input", Input).value = "three"
         screen.action_save()
-        dismiss.assert_called_once()
+        dismiss.assert_not_called()
 
         updated = service.get_idea(idea.pk)
         assert updated is not None
         assert updated.title == "Updated"
 
         save_action = mocker.patch.object(screen, "action_save")
+        save_close_action = mocker.patch.object(
+            screen,
+            "action_save_and_close",
+        )
         cancel_action = mocker.patch.object(screen, "action_cancel")
         await pilot.click("#save-btn")
         save_action.assert_called_once()
+        await pilot.click("#save-close-btn")
+        save_close_action.assert_called_once()
         await pilot.click("#cancel-btn")
         cancel_action.assert_called_once()
+
+        IdeaFormScreen.action_save_and_close(screen)
+        dismiss.assert_called_once_with(idea.pk)
         await pilot.pause()
 
     clean_screen = IdeaFormScreen(service, idea=updated)
@@ -364,6 +397,91 @@ async def test_idea_form_screen_edit_and_buttons(
         IdeaFormScreen.action_cancel(clean_screen)
 
         dismiss_clean.assert_called_once_with(None)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_keyboard_save_shortcuts_from_body_editor(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Body editor shortcuts should route save actions without text edits."""
+    idea = service.create_idea("Original", body="old")
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+        body = screen.query_one("#body-input", CogitusTextArea)
+        body.text = "keyboard body"
+        body.cursor_location = (0, 8)
+        body.focus()
+        await pilot.pause()
+
+        await pilot.press("f5")
+        await pilot.pause()
+
+        dismiss.assert_not_called()
+        saved = service.get_idea(idea.pk)
+        assert saved is not None
+        assert saved.body == "keyboard body"
+
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+
+        dismiss.assert_called_once_with(idea.pk)
+        assert body.text == "keyboard body"
+
+
+@pytest.mark.asyncio
+async def test_idea_form_save_notifies_and_reports_saved_idea(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Stay-open save should toast and report the saved idea pk."""
+    idea = service.create_idea("Original", body="old")
+    on_saved = mocker.Mock()
+    screen = IdeaFormScreen(service, idea=idea, on_saved=on_saved)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+        dismiss = mocker.patch.object(screen, "dismiss")
+        screen.query_one("#body-input", CogitusTextArea).text = "new body"
+
+        screen.action_save()
+
+        notify.assert_called_once_with("Idea saved")
+        on_saved.assert_called_once_with(idea.pk)
+        dismiss.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_save_missing_idea_reports_error(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Stay-open save should report a missing edited idea."""
+    idea = service.create_idea("Original", body="old")
+    on_saved = mocker.Mock()
+    screen = IdeaFormScreen(service, idea=idea, on_saved=on_saved)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        notify = mocker.patch.object(screen, "notify")
+        push_screen = mocker.patch.object(app, "push_screen")
+        dismiss = mocker.patch.object(screen, "dismiss")
+        mocker.patch.object(service, "update_idea", return_value=None)
+        screen.query_one("#body-input", CogitusTextArea).text = "new body"
+
+        screen.action_save()
+        screen.action_cancel()
+
+        notify.assert_called_once_with("Idea not found", severity="error")
+        on_saved.assert_not_called()
+        push_screen.assert_called_once()
+        dismiss.assert_not_called()
         await pilot.pause()
 
 
@@ -388,6 +506,14 @@ async def test_idea_form_screen_create_notifies_backend_errors(
         screen.query_one("#title-input", Input).value = "Remote Idea"
         screen.action_save()
 
+        notify.assert_called_once_with(
+            "Remote API authentication failed",
+            severity="error",
+        )
+        dismiss.assert_not_called()
+
+        notify.reset_mock()
+        screen.action_save_and_close()
         notify.assert_called_once_with(
             "Remote API authentication failed",
             severity="error",
@@ -423,6 +549,14 @@ async def test_idea_form_screen_update_notifies_backend_errors(
             severity="error",
         )
         dismiss.assert_not_called()
+
+        notify.reset_mock()
+        screen.action_save_and_close()
+        notify.assert_called_once_with(
+            "Idea has been modified on the server",
+            severity="error",
+        )
+        dismiss.assert_not_called()
         await pilot.pause()
 
 
@@ -435,13 +569,30 @@ async def test_idea_form_buttons_size_to_content(
     app = _StyledSingleScreenApp(screen)
 
     async with app.run_test() as pilot:
-        for button_id in ("#save-btn", "#cancel-btn"):
+        expected_labels = {
+            "#save-btn": "Save [F5]",
+            "#save-close-btn": "Save & Close [Ctrl+s]",
+            "#cancel-btn": "Cancel [Esc]",
+        }
+        for button_id, expected_label in expected_labels.items():
             button = screen.query_one(button_id, Button)
-            leftover = button.region.width - len(str(button.label))
+            assert _button_label_plain(button) == expected_label
+            leftover = button.region.width - len(expected_label)
             assert leftover % 2 == 0
             assert leftover >= 4
 
         await pilot.pause()
+
+
+def test_idea_form_save_bindings_are_split() -> None:
+    """Idea form should bind checkpoint and close saves separately."""
+    actions_by_key: dict[str, str] = {}
+    for binding in IdeaFormScreen.BINDINGS:
+        assert isinstance(binding, Binding)
+        actions_by_key[binding.key] = binding.action
+
+    assert actions_by_key["f5"] == "save"
+    assert actions_by_key["ctrl+s"] == "save_and_close"
 
 
 @pytest.mark.asyncio
@@ -467,6 +618,15 @@ async def test_idea_form_screen_invalid_group_selection(
         )
 
         screen.action_save()
+
+        notify.assert_called_once_with(
+            "Invalid group selection",
+            severity="error",
+        )
+        dismiss.assert_not_called()
+
+        notify.reset_mock()
+        screen.action_save_and_close()
 
         notify.assert_called_once_with(
             "Invalid group selection",
@@ -945,6 +1105,38 @@ async def test_idea_form_cancel_confirms_before_discarding_dirty_new(
 
         callback(True)
         dismiss.assert_called_once_with(None)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_cancel_after_save_stays_clean(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Cancel after save-in-place should not prompt until more edits occur."""
+    screen = IdeaFormScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(screen, "dismiss")
+        push_screen = mocker.patch.object(app, "push_screen")
+        title = screen.query_one("#title-input", Input)
+        body = screen.query_one("#body-input", CogitusTextArea)
+
+        title.value = "Saved draft"
+        body.text = "Saved body"
+        screen.action_save()
+        screen.action_cancel()
+
+        dismiss.assert_called_once_with(None)
+        push_screen.assert_not_called()
+
+        dismiss.reset_mock()
+        title.value = "Changed after save"
+        screen.action_cancel()
+
+        dismiss.assert_not_called()
+        push_screen.assert_called_once()
         await pilot.pause()
 
 
@@ -1439,10 +1631,36 @@ async def test_idea_form_persists_cursor_position_on_edit_save(
         body = screen.query_one("#body-input", CogitusTextArea)
         body.cursor_location = screen._cursor_location_from_index(body.text, 2)
         screen.query_one("#title-input", Input).value = "Updated"
+        dismiss = mocker.patch.object(screen, "dismiss")
 
         screen.action_save()
 
         set_cursor.assert_called_with(idea.pk, 2)
+        dismiss.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_idea_form_persists_cursor_position_on_edit_save_and_close(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Edit save-and-close should persist current body cursor position."""
+    idea = service.create_idea("Original", body="abcdef")
+    set_cursor = mocker.patch.object(service, "set_idea_cursor_position")
+    screen = IdeaFormScreen(service, idea=idea)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        body = screen.query_one("#body-input", CogitusTextArea)
+        body.cursor_location = screen._cursor_location_from_index(body.text, 3)
+        screen.query_one("#title-input", Input).value = "Updated"
+        dismiss = mocker.patch.object(screen, "dismiss")
+
+        screen.action_save_and_close()
+
+        set_cursor.assert_called_with(idea.pk, 3)
+        dismiss.assert_called_once_with(idea.pk)
         await pilot.pause()
 
 
@@ -1616,14 +1834,16 @@ async def test_remote_startup_recovery_screen_layout() -> None:
         assert abs(center_y - (app.size.height // 2)) <= 2
         assert container.region.width >= 70
 
-        for button_id in (
-            "#retry-remote-btn",
-            "#use-cache-btn",
-            "#use-local-btn",
-            "#quit-startup-btn",
-        ):
+        expected_labels = {
+            "#retry-remote-btn": "Retry [R]",
+            "#use-cache-btn": "Use Cache [C]",
+            "#use-local-btn": "Use Local [L]",
+            "#quit-startup-btn": "Quit [Q]",
+        }
+        for button_id, expected_label in expected_labels.items():
             button = screen.query_one(button_id, Button)
-            leftover = button.region.width - len(str(button.label))
+            assert _button_label_plain(button) == expected_label
+            leftover = button.region.width - len(expected_label)
             assert leftover % 2 == 0
             assert leftover >= 4
 
@@ -1656,9 +1876,14 @@ async def test_group_form_buttons_size_to_content(
     app = _StyledSingleScreenApp(group_form)
 
     async with app.run_test() as pilot:
-        for button_id in ("#save-group-btn", "#cancel-group-btn"):
+        expected_labels = {
+            "#save-group-btn": "Save [Ctrl+s]",
+            "#cancel-group-btn": "Cancel [Esc]",
+        }
+        for button_id, expected_label in expected_labels.items():
             button = group_form.query_one(button_id, Button)
-            leftover = button.region.width - len(str(button.label))
+            assert _button_label_plain(button) == expected_label
+            leftover = button.region.width - len(expected_label)
             assert leftover % 2 == 0
             assert leftover >= 4
 
@@ -1947,6 +2172,14 @@ async def test_backend_config_screen_button_routing_and_guard_paths(
     app = _SingleScreenApp(screen)
 
     async with app.run_test() as pilot:
+        assert (
+            _button_label_plain(screen.query_one("#save-backend-btn", Button))
+            == "Save [Ctrl+s]"
+        )
+        assert (
+            _button_label_plain(screen.query_one("#cancel-backend-btn", Button))
+            == "Cancel [Esc]"
+        )
         save_action = mocker.patch.object(screen, "action_save")
         cancel_action = mocker.patch.object(screen, "action_cancel")
 
@@ -2001,6 +2234,14 @@ async def test_name_input_screen_button_routing(
     app = _SingleScreenApp(screen)
 
     async with app.run_test() as pilot:
+        assert (
+            _button_label_plain(screen.query_one("#save-name-btn", Button))
+            == "Save [Enter/Ctrl+s]"
+        )
+        assert (
+            _button_label_plain(screen.query_one("#cancel-name-btn", Button))
+            == "Cancel [Esc]"
+        )
         save_action = mocker.patch.object(screen, "action_save")
         cancel_action = mocker.patch.object(screen, "action_cancel")
 
@@ -2019,9 +2260,14 @@ async def test_confirm_dialog_buttons_size_to_content() -> None:
     app = _StyledSingleScreenApp(confirm)
 
     async with app.run_test() as pilot:
-        for button_id in ("#confirm-yes-btn", "#confirm-no-btn"):
+        expected_labels = {
+            "#confirm-yes-btn": "Yes [Y]",
+            "#confirm-no-btn": "No [N]",
+        }
+        for button_id, expected_label in expected_labels.items():
             button = confirm.query_one(button_id, Button)
-            leftover = button.region.width - len(str(button.label))
+            assert _button_label_plain(button) == expected_label
+            leftover = button.region.width - len(expected_label)
             assert leftover % 2 == 0
             assert leftover >= 4
 
@@ -2186,6 +2432,14 @@ async def test_group_form_and_reassign_validation_branches(
     )
     app_reassign = _SingleScreenApp(reassign)
     async with app_reassign.run_test() as pilot:
+        assert (
+            _button_label_plain(reassign.query_one("#move-delete-btn", Button))
+            == "Move + Delete [Ctrl+s]"
+        )
+        assert (
+            _button_label_plain(reassign.query_one("#cancel-move-btn", Button))
+            == "Cancel [Esc]"
+        )
         notify = mocker.patch.object(reassign, "notify")
         dismiss = mocker.patch.object(reassign, "dismiss")
 
@@ -2343,6 +2597,9 @@ async def test_main_screen_create_edit_delete_and_form_result(
         screen._on_form_dismiss(None)
         refresh.assert_not_called()
         screen._on_form_dismiss(first.pk)
+        refresh.assert_called_once_with(select_pk=first.pk)
+        refresh.reset_mock()
+        screen._on_form_saved(first.pk)
         refresh.assert_called_once_with(select_pk=first.pk)
 
 
@@ -4595,6 +4852,16 @@ async def test_remote_clone_switch_mode_screen_actions(
     app = _StyledSingleScreenApp(screen)
 
     async with app.run_test() as pilot:
+        assert (
+            _button_label_plain(screen.query_one("#stay-remote-btn", Button))
+            == "Stay Remote [S]"
+        )
+        assert (
+            _button_label_plain(
+                screen.query_one("#switch-local-after-clone-btn", Button)
+            )
+            == "Use Local [L]"
+        )
         dismiss = mocker.patch.object(screen, "dismiss")
 
         screen.action_stay_remote()
