@@ -96,6 +96,7 @@ def test_get_db_memory_creates_tables() -> None:
         assert tag.pk > 0
         assert idea.pk > 0
         assert state.pk > 0
+        assert group.parent_pk is None
     finally:
         db.close()
 
@@ -162,6 +163,7 @@ def test_get_db_initializes_missing_ideas_table_in_partial_schema(
         assert idea.group is not None
         assert idea.group.name == "default"
         assert group_names == {"default", "existing"}
+        assert all(group.parent_pk is None for group in groups)
     finally:
         migrated.close()
 

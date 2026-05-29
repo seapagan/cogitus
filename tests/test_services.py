@@ -295,6 +295,22 @@ class TestIdeaService:
         assert "default" in names
         assert "backend" in names
 
+    def test_create_child_group(self, service: IdeaService) -> None:
+        """Groups can be created beneath an existing parent group."""
+        parent = service.create_group("parent")
+
+        child = service.create_group("child", parent_pk=parent.pk)
+
+        assert child.parent_pk == parent.pk
+
+    def test_create_child_group_rejects_missing_parent(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Child group creation should reject missing parents."""
+        with pytest.raises(ValueError, match="Parent group not found"):
+            service.create_group("child", parent_pk=99999)
+
     def test_get_group(self, service: IdeaService) -> None:
         """Group should be retrievable by primary key."""
         group = service.create_group("backend")
@@ -407,6 +423,17 @@ class TestIdeaService:
         moved = service.get_idea(idea.pk)
         assert moved is not None
         assert moved.group.pk == target.pk
+
+    def test_delete_group_with_children_raises(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Deleting a parent group should be blocked while children exist."""
+        parent = service.create_group("parent")
+        service.create_group("child", parent_pk=parent.pk)
+
+        with pytest.raises(ValueError, match="child groups"):
+            service.delete_group(parent.pk)
 
     def test_default_group_cannot_be_deleted(
         self,

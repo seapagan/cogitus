@@ -1238,6 +1238,50 @@ class TestGroupRepository:
         assert found is not None
         assert found.pk == group.pk
 
+    def test_create_child_group(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Group creation should persist an optional parent pointer."""
+        parent = group_repo.create("parent")
+
+        child = group_repo.create("child", parent_pk=parent.pk)
+
+        assert child.parent_pk == parent.pk
+
+    def test_create_child_group_rejects_missing_parent(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Group creation should reject unknown parent pointers."""
+        with pytest.raises(ValueError, match="Parent group not found"):
+            group_repo.create("child", parent_pk=99999)
+
+    def test_update_parent_rejects_self_and_cycles(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Parent updates should reject invalid hierarchy shapes."""
+        parent = group_repo.create("parent")
+        child = group_repo.create("child", parent_pk=parent.pk)
+
+        with pytest.raises(ValueError, match="own parent"):
+            group_repo.update_parent(parent.pk, parent.pk)
+
+        with pytest.raises(ValueError, match="cycle"):
+            group_repo.update_parent(parent.pk, child.pk)
+
+    def test_has_children(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Child detection should report direct descendants."""
+        parent = group_repo.create("parent")
+
+        assert not group_repo.has_children(parent.pk)
+        group_repo.create("child", parent_pk=parent.pk)
+        assert group_repo.has_children(parent.pk)
+
     def test_create_duplicate_raises(self, group_repo: GroupRepository) -> None:
         """Duplicate names are rejected."""
         group_repo.create("backend")

@@ -316,9 +316,13 @@ class IdeaService:
         """Fetch a single group by primary key."""
         return self._group_repo.get(pk)
 
-    def create_group(self, name: str) -> Group:
+    def create_group(
+        self,
+        name: str,
+        parent_pk: int | None = None,
+    ) -> Group:
         """Create a new group."""
-        group = self._group_repo.create(name)
+        group = self._group_repo.create(name, parent_pk=parent_pk)
         self._dataset_state_repo.invalidate()
         return group
 
@@ -405,6 +409,9 @@ class IdeaService:
         if group.name == self._default_group_name:
             msg = "Default group cannot be deleted"
             raise ValueError(msg)
+        if self._group_repo.has_children(group_pk):
+            msg = "Group with child groups cannot be deleted"
+            raise ValueError(msg)
 
         target_group = (
             self._group_repo.get_or_create(self._default_group_name)
@@ -468,13 +475,9 @@ class IdeaService:
         query_active: bool,
     ) -> list[tuple[Group, list[Idea]]]:
         """Build sorted grouped idea tuples, filtering empty query groups."""
-        sorted_groups = sorted(
+        sorted_groups = self._sort_groups_depth_first(
             groups,
-            key=lambda group: self._group_sort_key(
-                group.updated_at,
-                by_group.get(group.pk, []),
-            ),
-            reverse=True,
+            by_group=by_group,
         )
 
         grouped: list[tuple[Group, list[Idea]]] = []
@@ -484,6 +487,54 @@ class IdeaService:
                 continue
             grouped.append((group, group_ideas))
         return grouped
+
+    def _sort_groups_depth_first(
+        self,
+        groups: list[Group],
+        *,
+        by_group: dict[int, list[Idea]],
+    ) -> list[Group]:
+        """Return groups in activity-sorted depth-first hierarchy order."""
+        groups_by_parent: dict[int | None, list[Group]] = {}
+        group_pks = {group.pk for group in groups}
+        for group in groups:
+            parent_pk = group.parent_pk
+            if parent_pk not in group_pks:
+                parent_pk = None
+            groups_by_parent.setdefault(parent_pk, []).append(group)
+
+        ordered: list[Group] = []
+        visited: set[int] = set()
+
+        def append_group(group: Group) -> None:
+            if group.pk in visited:
+                return
+            visited.add(group.pk)
+            ordered.append(group)
+            children = sorted(
+                groups_by_parent.get(group.pk, []),
+                key=lambda child: self._group_sort_key(
+                    child.updated_at,
+                    by_group.get(child.pk, []),
+                ),
+                reverse=True,
+            )
+            for child in children:
+                append_group(child)
+
+        roots = sorted(
+            groups_by_parent.get(None, []),
+            key=lambda group: self._group_sort_key(
+                group.updated_at,
+                by_group.get(group.pk, []),
+            ),
+            reverse=True,
+        )
+        for root in roots:
+            append_group(root)
+        for group in groups:
+            append_group(group)
+        return ordered
 
     @staticmethod
     def _normalize_tags(
