@@ -2521,6 +2521,36 @@ async def test_group_form_creates_subgroup(
 
 
 @pytest.mark.asyncio
+async def test_group_form_creates_root_group_when_parent_options_missing(
+    mocker: MockerFixture,
+) -> None:
+    """Subgroup form should not crash if no parent groups are available."""
+    service = mocker.Mock()
+    created = mocker.Mock()
+    created.pk = 123
+    service.list_groups.return_value = []
+    service.create_group.return_value = created
+    subgroup_form = GroupFormScreen(
+        service=service,
+        show_parent_select=True,
+    )
+    app = _SingleScreenApp(subgroup_form)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(subgroup_form, "dismiss")
+
+        subgroup_form.query_one("#group-name-input", Input).value = "child"
+        subgroup_form.action_save()
+
+        service.create_group.assert_called_once_with(
+            "child",
+            parent_pk=None,
+        )
+        dismiss.assert_called_once_with(created.pk)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_selection_and_search(
     service: IdeaService,
     mocker: MockerFixture,

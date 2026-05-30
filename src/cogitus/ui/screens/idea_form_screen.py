@@ -11,6 +11,7 @@ from rich.text import Text
 from textual import on
 from textual.binding import Binding, BindingType
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import (
     Button,
@@ -1200,7 +1201,13 @@ class GroupFormScreen(ModalScreen[int | None]):
             return
         parent_pk = self._parent_pk
         if self._show_parent_select:
-            selected = self.query_one("#parent-group-select", Select).value
+            try:
+                selected = self.query_one(
+                    "#parent-group-select",
+                    Select,
+                ).value
+            except NoMatches:
+                selected = None
             parent_pk = selected if isinstance(selected, int) else None
         try:
             group = self._service.create_group(name, parent_pk=parent_pk)
