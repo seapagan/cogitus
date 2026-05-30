@@ -449,6 +449,11 @@ class MockRemoteAPI:
             response_payload = {
                 "detail": "Cannot move ideas into the same group being deleted"
             }
+        elif any(child.parent_pk == group_pk for child in self.groups.values()):
+            status_code = 409
+            response_payload = {
+                "detail": "Group has child groups and cannot be deleted"
+            }
         else:
             for idea in self.ideas.values():
                 if idea.group_pk == group_pk:

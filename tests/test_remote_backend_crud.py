@@ -395,3 +395,13 @@ def test_remote_backend_group_rules_match_service_errors(
         backend.delete_group(
             created_group.pk, move_to_group_pk=created_group.pk
         )
+
+    child_group = backend.create_group(
+        "child backend",
+        parent_pk=created_group.pk,
+    )
+    with pytest.raises(ValueError, match="child groups"):
+        backend.delete_group(created_group.pk)
+
+    assert backend.get_group(created_group.pk) is not None
+    assert backend.get_group(child_group.pk) is not None

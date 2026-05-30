@@ -38,6 +38,10 @@ Ideas to add to Cogitus
 - review `ty` type-checker findings in tests, especially whether intentionally
   invalid `SearchFilter` construction should use a clearer explicit escape hatch
   than `invalid_field: Any = "status"`.
+- replace most uses of `tests/remote_api_support.py` with tests that exercise
+  the real FastAPI app via FastAPI/httpx test transports, keeping fake transport
+  helpers only for narrow client/network failure cases. Duplicating server rules
+  in `MockRemoteAPI` lets tests pass against behavior the real API would reject.
 
 ## Search and Filtering
 
