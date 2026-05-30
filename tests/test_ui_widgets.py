@@ -37,7 +37,7 @@ from cogitus.ui.widgets.search_results import (
     SearchResultsList,
     _marked_text_to_text,
 )
-from tests.helpers import DEEP_GROUP_DEPTH, _focused_widget, deep_group_chain
+from tests.helpers import _focused_widget, deep_group_chain
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -353,7 +353,7 @@ async def test_idea_list_panel_loads_deep_group_hierarchy() -> None:
     async with app.run_test():
         panel.load_grouped_ideas([(group, []) for group in groups])
 
-        assert DEEP_GROUP_DEPTH in panel._group_nodes_by_pk
+        assert set(panel._group_nodes_by_pk) == {group.pk for group in groups}
 
 
 @pytest.mark.asyncio
