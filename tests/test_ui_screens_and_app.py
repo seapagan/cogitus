@@ -57,6 +57,7 @@ from cogitus.ui.screens.idea_form_screen import (
     RemoteCloneSwitchModeScreen,
     RemoteStartupRecoveryAction,
     RemoteStartupRecoveryScreen,
+    _depth_first_group_options,
 )
 from cogitus.ui.screens.main_screen import MainScreen
 from cogitus.ui.widgets.footer import CogitusStatusBar, FooterNotice
@@ -1718,6 +1719,33 @@ def test_idea_form_create_mode_invalid_initial_group_falls_back_default(
     assert screen._get_existing_group_pk() == screen._get_default_group_pk()
 
 
+def test_idea_form_group_options_are_depth_first(
+    service: IdeaService,
+) -> None:
+    """Group dropdown options should show nested groups in tree order."""
+    writing = service.create_group("writing")
+    scenes = service.create_group("scenes", parent_pk=writing.pk)
+    work = service.create_group("work")
+    cogitus = service.create_group("cogitus", parent_pk=work.pk)
+    api = service.create_group("api", parent_pk=cogitus.pk)
+    default = next(
+        group
+        for group in service.list_groups()
+        if group.name == service.default_group_name
+    )
+
+    options = _depth_first_group_options(service.list_groups())
+
+    assert options == [
+        ("default", default.pk),
+        ("work", work.pk),
+        ("  cogitus", cogitus.pk),
+        ("    api", api.pk),
+        ("writing", writing.pk),
+        ("  scenes", scenes.pk),
+    ]
+
+
 def test_idea_form_initial_edit_cursor_index_for_new_mode(
     service: IdeaService,
 ) -> None:
@@ -2936,6 +2964,35 @@ async def test_main_screen_new_idea_default_group_mode_ignores_context(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_new_subgroup_falls_back_to_default_group(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """New subgroup should use default group when nothing is selected."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+    default = next(
+        group
+        for group in service.list_groups()
+        if group.name == service.default_group_name
+    )
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        push = mocker.patch.object(app, "push_screen")
+        mocker.patch.object(panel, "get_selected_group_pk", return_value=None)
+        mocker.patch.object(panel, "get_selected_idea", return_value=None)
+
+        screen.action_new_subgroup()
+
+        form = push.call_args.args[0]
+        assert isinstance(form, GroupFormScreen)
+        assert form._parent_pk == default.pk
+        assert form._show_parent_select is True
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_group_actions(
     service: IdeaService,
     mocker: MockerFixture,
@@ -3036,6 +3093,38 @@ async def test_main_screen_group_actions(
             severity="warning",
         )
         push.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_delete_group_blocks_parent_groups(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Deleting a group with children should warn and leave it untouched."""
+    parent = service.create_group("parent")
+    service.create_group("child", parent_pk=parent.pk)
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        notify = mocker.patch.object(screen, "notify")
+        push = mocker.patch.object(app, "push_screen")
+        mocker.patch.object(
+            panel,
+            "get_selected_group_pk",
+            return_value=parent.pk,
+        )
+
+        screen.action_delete_group()
+
+        notify.assert_called_once_with(
+            "Group with child groups cannot be deleted",
+            severity="warning",
+        )
+        push.assert_not_called()
+        assert service.get_group(parent.pk) is not None
         await pilot.pause()
 
 

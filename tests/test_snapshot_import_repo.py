@@ -488,6 +488,35 @@ def test_snapshot_import_rejects_missing_group_parent(
         )
 
 
+def test_snapshot_import_rejects_group_parent_cycle(
+    db: SqliterDB,
+) -> None:
+    """Snapshot import should fail clearly on cyclic group parents."""
+    importer = SnapshotImportRepository(db)
+    first = _group(
+        pk=1,
+        name="first",
+        created_at=1,
+        updated_at=1,
+        parent_pk=2,
+    )
+    second = _group(
+        pk=2,
+        name="second",
+        created_at=2,
+        updated_at=2,
+        parent_pk=1,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="group 1 parent chain contains a cycle",
+    ):
+        importer.replace_snapshot(
+            RemoteSnapshot(groups=[first, second], tags=[], ideas=[])
+        )
+
+
 def test_snapshot_import_progress_path_reports_missing_tag(
     db: SqliterDB,
 ) -> None:

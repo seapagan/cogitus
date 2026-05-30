@@ -1304,6 +1304,34 @@ class TestGroupRepository:
         with pytest.raises(ValueError, match="cycle"):
             group_repo.update_parent(parent.pk, child.pk)
 
+    def test_update_parent_rejects_missing_groups(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Parent updates should fail clearly for missing group references."""
+        child = group_repo.create("child")
+
+        assert group_repo.update_parent(99999, None) is None
+
+        with pytest.raises(ValueError, match="Parent group not found"):
+            group_repo.update_parent(child.pk, 99999)
+
+    def test_update_parent_moves_group(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Parent updates should persist valid hierarchy changes."""
+        parent = group_repo.create("parent")
+        child = group_repo.create("child")
+
+        updated = group_repo.update_parent(child.pk, parent.pk)
+
+        assert updated is not None
+        assert updated.parent_pk == parent.pk
+        persisted = group_repo.get(child.pk)
+        assert persisted is not None
+        assert persisted.parent_pk == parent.pk
+
     def test_has_children(
         self,
         group_repo: GroupRepository,
