@@ -1291,6 +1291,22 @@ class TestGroupRepository:
         with pytest.raises(ValueError, match="Parent group not found"):
             group_repo.create("child", parent_pk=99999)
 
+    def test_create_child_group_rejects_corrupt_parent_cycle(
+        self,
+        db: SqliterDB,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Group creation should not attach to corrupt parent chains."""
+        first = group_repo.create("first")
+        second = group_repo.create("second")
+        first.parent_pk = second.pk
+        db.update(first)
+        second.parent_pk = first.pk
+        db.update(second)
+
+        with pytest.raises(ValueError, match="cycle"):
+            group_repo.create("child", parent_pk=first.pk)
+
     def test_update_parent_rejects_self_and_cycles(
         self,
         group_repo: GroupRepository,

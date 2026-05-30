@@ -25,9 +25,13 @@ class GroupRepository:
         if not normalized:
             msg = "Group name cannot be empty"
             raise ValueError(msg)
-        if parent_pk is not None and self.get(parent_pk) is None:
-            msg = "Parent group not found"
-            raise ValueError(msg)
+        if parent_pk is not None:
+            if self.get(parent_pk) is None:
+                msg = "Parent group not found"
+                raise ValueError(msg)
+            if self._would_create_cycle(0, parent_pk):
+                msg = "Group parent would create a cycle"
+                raise ValueError(msg)
         try:
             return self._db.insert(Group(name=normalized, parent_pk=parent_pk))
         except RecordInsertionError as exc:
