@@ -488,6 +488,28 @@ def test_snapshot_import_rejects_missing_group_parent(
         )
 
 
+def test_snapshot_import_rejects_self_referencing_group_parent(
+    db: SqliterDB,
+) -> None:
+    """Snapshot import should fail clearly on self-parenting groups."""
+    importer = SnapshotImportRepository(db)
+    group = _group(
+        pk=2,
+        name="self-parent",
+        created_at=2,
+        updated_at=2,
+        parent_pk=2,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="group 2 has self-referencing parent 2",
+    ):
+        importer.replace_snapshot(
+            RemoteSnapshot(groups=[group], tags=[], ideas=[])
+        )
+
+
 def test_snapshot_import_rejects_group_parent_cycle(
     db: SqliterDB,
 ) -> None:

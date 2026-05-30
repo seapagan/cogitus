@@ -447,7 +447,14 @@ class SnapshotImportRepository:
             parent_pk = group.parent_pk
             if parent_pk is None:
                 continue
-            if parent_pk == group.pk or parent_pk not in inserted_by_pk:
+            if parent_pk == group.pk:
+                msg = (
+                    "Snapshot is inconsistent: "
+                    f"group {group.pk} has self-referencing parent "
+                    f"{parent_pk}"
+                )
+                raise RuntimeError(msg)
+            if parent_pk not in inserted_by_pk:
                 msg = (
                     "Snapshot is inconsistent: "
                     f"group {group.pk} references missing parent "
