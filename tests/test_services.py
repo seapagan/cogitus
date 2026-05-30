@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from cogitus.models.group import Group
+from cogitus.models.idea import Idea
 from cogitus.services.idea_service import IdeaService
 from tests.helpers import DEEP_GROUP_DEPTH, deep_group_chain
 
@@ -563,6 +565,50 @@ class TestIdeaService:
         assert [group.pk for group in ordered] == list(
             range(1, DEEP_GROUP_DEPTH + 1)
         )
+
+    def test_sort_groups_depth_first_uses_descendant_activity(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Active child groups should lift their parent branch."""
+        work = Group(pk=1, created_at=1, updated_at=1, name="work")
+        cogitus = Group(
+            pk=2,
+            created_at=2,
+            updated_at=2,
+            name="cogitus",
+            parent_pk=work.pk,
+        )
+        archive = Group(pk=3, created_at=3, updated_at=50, name="archive")
+        cogitus_idea = Idea(
+            pk=1,
+            created_at=1,
+            updated_at=100,
+            title="Recent child idea",
+            group=cogitus,
+        )
+        archive_idea = Idea(
+            pk=2,
+            created_at=2,
+            updated_at=50,
+            title="Older archive idea",
+            group=archive,
+        )
+
+        ordered = service._sort_groups_depth_first(
+            [work, cogitus, archive],
+            by_group={
+                work.pk: [],
+                cogitus.pk: [cogitus_idea],
+                archive.pk: [archive_idea],
+            },
+        )
+
+        assert [group.name for group in ordered] == [
+            "work",
+            "cogitus",
+            "archive",
+        ]
 
     def test_list_search_results_grouped_skips_groups_without_matches(
         self,

@@ -543,14 +543,16 @@ class IdeaService:
 
         ordered: list[Group] = []
         visited: set[int] = set()
+        activity_by_group = self._subtree_activity_by_group(
+            groups,
+            groups_by_parent=groups_by_parent,
+            by_group=by_group,
+        )
 
         def sorted_children(group_pk: int) -> list[Group]:
             return sorted(
                 groups_by_parent.get(group_pk, []),
-                key=lambda child: self._group_sort_key(
-                    child.updated_at,
-                    by_group.get(child.pk, []),
-                ),
+                key=lambda child: activity_by_group[child.pk],
                 reverse=True,
             )
 
@@ -566,15 +568,40 @@ class IdeaService:
 
         roots = sorted(
             groups_by_parent.get(None, []),
-            key=lambda group: self._group_sort_key(
-                group.updated_at,
-                by_group.get(group.pk, []),
-            ),
+            key=lambda group: activity_by_group[group.pk],
             reverse=True,
         )
         append_groups(roots)
         append_groups(groups)
         return ordered
+
+    def _subtree_activity_by_group(
+        self,
+        groups: list[Group],
+        *,
+        groups_by_parent: dict[int | None, list[Group]],
+        by_group: dict[int, list[Idea]],
+    ) -> dict[int, int]:
+        """Return each group's max direct or descendant activity."""
+        activity = {
+            group.pk: self._group_sort_key(
+                group.updated_at,
+                by_group.get(group.pk, []),
+            )
+            for group in groups
+        }
+        changed = True
+        while changed:
+            changed = False
+            for group in groups:
+                updated = activity[group.pk]
+                for child in groups_by_parent.get(group.pk, []):
+                    updated = max(updated, activity[child.pk])
+                current = activity[group.pk]
+                if updated > current:
+                    activity[group.pk] = updated
+                    changed = True
+        return activity
 
     @staticmethod
     def _normalize_tags(
