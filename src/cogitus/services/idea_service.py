@@ -380,19 +380,26 @@ class IdeaService:
         for result in results:
             by_group.setdefault(result.idea.group.pk, []).append(result)
 
-        sorted_groups = sorted(
+        sorted_groups = self._sort_groups_depth_first(
             groups,
-            key=lambda group: self._group_sort_key(
-                group.updated_at,
-                [result.idea for result in by_group.get(group.pk, [])],
-            ),
-            reverse=True,
+            by_group={
+                group_pk: [result.idea for result in group_results]
+                for group_pk, group_results in by_group.items()
+            },
         )
 
         grouped: list[tuple[Group, list[SearchResult]]] = []
+        included_group_pks = self._group_pks_with_ancestors(
+            groups,
+            {
+                group_pk
+                for group_pk, group_results in by_group.items()
+                if group_results
+            },
+        )
         for group in sorted_groups:
             group_results = by_group.get(group.pk, [])
-            if not group_results:
+            if group.pk not in included_group_pks:
                 continue
             grouped.append((group, group_results))
         return grouped
@@ -479,14 +486,45 @@ class IdeaService:
             groups,
             by_group=by_group,
         )
+        included_group_pks = (
+            self._group_pks_with_ancestors(
+                groups,
+                {
+                    group_pk
+                    for group_pk, group_ideas in by_group.items()
+                    if group_ideas
+                },
+            )
+            if query_active
+            else {group.pk for group in groups}
+        )
 
         grouped: list[tuple[Group, list[Idea]]] = []
         for group in sorted_groups:
             group_ideas = by_group.get(group.pk, [])
-            if query_active and not group_ideas:
+            if group.pk not in included_group_pks:
                 continue
             grouped.append((group, group_ideas))
         return grouped
+
+    @staticmethod
+    def _group_pks_with_ancestors(
+        groups: list[Group],
+        group_pks: set[int],
+    ) -> set[int]:
+        """Return selected group PKs plus all available parent group PKs."""
+        parent_by_pk = {group.pk: group.parent_pk for group in groups}
+        included: set[int] = set()
+        for group_pk in group_pks:
+            seen: set[int] = set()
+            current_pk: int | None = group_pk
+            while current_pk is not None:
+                if current_pk in seen or current_pk not in parent_by_pk:
+                    break
+                seen.add(current_pk)
+                included.add(current_pk)
+                current_pk = parent_by_pk[current_pk]
+        return included
 
     def _sort_groups_depth_first(
         self,

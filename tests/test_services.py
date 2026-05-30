@@ -491,6 +491,23 @@ class TestIdeaService:
         assert "backend" in names
         assert "empty-group" not in names
 
+    def test_list_ideas_grouped_keeps_matching_group_ancestors(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Query mode should keep empty ancestors for matching child groups."""
+        parent = service.create_group("work")
+        child = service.create_group("cogitus", parent_pk=parent.pk)
+        service.create_group("empty-group")
+        idea = service.create_idea("Matching idea", group_pk=child.pk)
+
+        grouped = service.list_ideas_grouped("matching")
+
+        assert [(group.name, ideas) for group, ideas in grouped] == [
+            ("work", []),
+            ("cogitus", [idea]),
+        ]
+
     def test_list_ideas_grouped_filters_empty_groups_on_structured_query(
         self,
         service: IdeaService,
@@ -509,6 +526,27 @@ class TestIdeaService:
 
         assert "backend" in names
         assert "empty-group" not in names
+
+    def test_list_ideas_grouped_keeps_ancestors_on_structured_query(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Structured query mode should keep matching group ancestors."""
+        parent = service.create_group("work")
+        child = service.create_group("cogitus", parent_pk=parent.pk)
+        service.create_group("empty-group")
+        idea = service.create_idea(
+            "Matching idea",
+            tags=["python"],
+            group_pk=child.pk,
+        )
+
+        grouped = service.list_ideas_grouped("tag:python")
+
+        assert [(group.name, ideas) for group, ideas in grouped] == [
+            ("work", []),
+            ("cogitus", [idea]),
+        ]
 
     def test_sort_groups_depth_first_handles_deep_hierarchy(
         self,
@@ -539,6 +577,41 @@ class TestIdeaService:
         names = [group.name for group, _ in grouped]
 
         assert names == ["backend"]
+
+    def test_list_search_results_grouped_keeps_matching_group_ancestors(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Ranked search grouping should keep matching group ancestors."""
+        parent = service.create_group("work")
+        child = service.create_group("cogitus", parent_pk=parent.pk)
+        service.create_group("empty-group")
+        idea = service.create_idea("Matching idea", group_pk=child.pk)
+
+        grouped = service.list_search_results_grouped("matching")
+
+        assert [group.name for group, _results in grouped] == [
+            "work",
+            "cogitus",
+        ]
+        assert grouped[0][1] == []
+        assert [result.idea.pk for result in grouped[1][1]] == [idea.pk]
+
+    def test_group_pks_with_ancestors_handles_corrupt_parent_cycle(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Ancestor expansion should terminate on corrupt parent cycles."""
+        first, second = deep_group_chain(2)
+        first.parent_pk = second.pk
+        second.parent_pk = first.pk
+
+        included = service._group_pks_with_ancestors(
+            [first, second],
+            {first.pk},
+        )
+
+        assert included == {first.pk, second.pk}
 
     def test_search_ideas_advanced_aliases_search_behavior(
         self,
