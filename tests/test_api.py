@@ -100,7 +100,10 @@ def test_snapshot_returns_full_remote_dataset(api_client: TestClient) -> None:
         "backend",
         "default",
     ]
-    assert child.json()["parent_pk"] == group_pk
+    snapshot_child = next(
+        group for group in body["groups"] if group["name"] == "api"
+    )
+    assert snapshot_child["parent_pk"] == group_pk
     assert [tag["name"] for tag in body["tags"]] == [
         "remote",
         "snapshot",
