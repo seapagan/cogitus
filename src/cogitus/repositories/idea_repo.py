@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from cogitus.constants import DEFAULT_GROUP_NAME
 from cogitus.hashing import idea_detail_hash
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from sqliter import SqliterDB
+    from sqliter.query.query import FilterValue
 
     from cogitus.models.group import Group
     from cogitus.repositories.group_repo import GroupRepository
@@ -409,7 +410,7 @@ class IdeaRepository:
         group_pks = self._group_repo.descendant_pks(group.pk)
         matched = (
             self._db.select(Idea)
-            .filter(group_id__in=list(group_pks))
+            .filter(group_id__in=cast("FilterValue", list(group_pks)))
             .fetch_all()
         )
         return {idea.pk for idea in matched}
