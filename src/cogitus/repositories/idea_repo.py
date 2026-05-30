@@ -402,11 +402,16 @@ class IdeaRepository:
         return {idea.pk for idea in tag.ideas.fetch_all()}  # type: ignore[attr-defined]
 
     def _matching_pks_for_group(self, group_name: str) -> set[int]:
-        """Return idea primary keys for a single exact group name."""
+        """Return idea primary keys for a group and its descendants."""
         group = self._group_repo.find_by_name(group_name)
         if group is None:
             return set()
-        matched = self._db.select(Idea).filter(group_id=group.pk).fetch_all()
+        group_pks = self._group_repo.descendant_pks(group.pk)
+        matched = (
+            self._db.select(Idea)
+            .filter(group_id__in=list(group_pks))
+            .fetch_all()
+        )
         return {idea.pk for idea in matched}
 
     def _fetch_ideas_by_pk(self, idea_pks: Sequence[int]) -> list[Idea]:

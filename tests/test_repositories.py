@@ -791,6 +791,39 @@ class TestIdeaRepository:
 
         assert [idea.pk for idea in results] == [wanted.pk]
 
+    def test_search_group_filter_includes_descendants(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Structured group filters should match a group's full subtree."""
+        parent = group_repo.create("parent")
+        child = group_repo.create("child", parent_pk=parent.pk)
+        grandchild = group_repo.create("grandchild", parent_pk=child.pk)
+        sibling = group_repo.create("sibling", parent_pk=parent.pk)
+        parent_idea = idea_repo.create("Parent", group_pk=parent.pk)
+        child_idea = idea_repo.create("Child", group_pk=child.pk)
+        grandchild_idea = idea_repo.create(
+            "Grandchild",
+            group_pk=grandchild.pk,
+        )
+        sibling_idea = idea_repo.create("Sibling", group_pk=sibling.pk)
+        idea_repo.create("Default")
+
+        parent_results = idea_repo.search("group:parent")
+        child_results = idea_repo.search("group:child")
+
+        assert {idea.pk for idea in parent_results} == {
+            parent_idea.pk,
+            child_idea.pk,
+            grandchild_idea.pk,
+            sibling_idea.pk,
+        }
+        assert {idea.pk for idea in child_results} == {
+            child_idea.pk,
+            grandchild_idea.pk,
+        }
+
     def test_search_structured_filters_support_or(
         self,
         idea_repo: IdeaRepository,
@@ -1281,6 +1314,28 @@ class TestGroupRepository:
         assert not group_repo.has_children(parent.pk)
         group_repo.create("child", parent_pk=parent.pk)
         assert group_repo.has_children(parent.pk)
+
+    def test_descendant_pks(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Descendant lookup should include a group's full subtree."""
+        parent = group_repo.create("parent")
+        child = group_repo.create("child", parent_pk=parent.pk)
+        grandchild = group_repo.create("grandchild", parent_pk=child.pk)
+        sibling = group_repo.create("sibling", parent_pk=parent.pk)
+
+        assert group_repo.descendant_pks(parent.pk) == {
+            parent.pk,
+            child.pk,
+            grandchild.pk,
+            sibling.pk,
+        }
+        assert group_repo.descendant_pks(child.pk) == {
+            child.pk,
+            grandchild.pk,
+        }
+        assert group_repo.descendant_pks(99999) == set()
 
     def test_create_duplicate_raises(self, group_repo: GroupRepository) -> None:
         """Duplicate names are rejected."""

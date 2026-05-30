@@ -95,6 +95,28 @@ class GroupRepository:
             self._db.select(Group).filter(parent_pk=pk).fetch_one() is not None
         )
 
+    def descendant_pks(self, root_pk: int) -> set[int]:
+        """Return the root group pk and all descendant group pks."""
+        if self.get(root_pk) is None:
+            return set()
+
+        children_by_parent: dict[int, list[int]] = {}
+        for group in self.list_all():
+            if group.parent_pk is not None:
+                children_by_parent.setdefault(group.parent_pk, []).append(
+                    group.pk
+                )
+
+        descendants: set[int] = set()
+        pending = [root_pk]
+        while pending:
+            group_pk = pending.pop()
+            if group_pk in descendants:
+                continue
+            descendants.add(group_pk)
+            pending.extend(children_by_parent.get(group_pk, []))
+        return descendants
+
     def update_parent(self, pk: int, parent_pk: int | None) -> Group | None:
         """Update a group's parent pointer after validating the hierarchy."""
         group = self.get(pk)

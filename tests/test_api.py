@@ -286,6 +286,61 @@ def test_idea_list_supports_query_limit_and_offset(
     assert len(paged.json()) == 1
 
 
+def test_idea_query_group_filter_includes_child_groups(
+    api_client: TestClient,
+) -> None:
+    """API group search should match ideas in child groups."""
+    parent = api_client.post("/api/v1/groups", json={"name": "parent"})
+    assert parent.status_code == 201
+    child = api_client.post(
+        "/api/v1/groups",
+        json={"name": "child", "parent_pk": parent.json()["pk"]},
+    )
+    assert child.status_code == 201
+    parent_idea = api_client.post(
+        "/api/v1/ideas",
+        json={
+            "title": "Parent idea",
+            "body": "",
+            "tags": [],
+            "group_pk": parent.json()["pk"],
+        },
+    )
+    child_idea = api_client.post(
+        "/api/v1/ideas",
+        json={
+            "title": "Child idea",
+            "body": "",
+            "tags": [],
+            "group_pk": child.json()["pk"],
+        },
+    )
+    api_client.post(
+        "/api/v1/ideas",
+        json={"title": "Default idea", "body": "", "tags": []},
+    )
+
+    ideas = api_client.get(
+        "/api/v1/ideas",
+        params={"query": "group:parent"},
+    )
+    refs = api_client.get(
+        "/api/v1/ideas/refs",
+        params={"query": "group:parent"},
+    )
+
+    assert ideas.status_code == 200
+    assert refs.status_code == 200
+    assert {idea["pk"] for idea in ideas.json()} == {
+        parent_idea.json()["pk"],
+        child_idea.json()["pk"],
+    }
+    assert {idea["pk"] for idea in refs.json()} == {
+        parent_idea.json()["pk"],
+        child_idea.json()["pk"],
+    }
+
+
 def test_create_idea_with_missing_group_returns_not_found(
     api_client: TestClient,
 ) -> None:

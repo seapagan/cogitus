@@ -306,6 +306,36 @@ def test_upsert_idea_rebuilds_search_index_with_updated_group(
     assert service.search_results("group:platform")[0].idea.pk == 1
 
 
+def test_cached_search_group_filter_includes_child_groups(
+    db: SqliterDB,
+) -> None:
+    """Cached remote search should match ideas in child groups."""
+    service = IdeaService(db)
+    repo = RemoteCacheRepository(db, default_group_name="default")
+    parent = _group(pk=2, name="parent", created_at=2, updated_at=2)
+    child = _group(
+        pk=3,
+        name="child",
+        created_at=3,
+        updated_at=3,
+        parent_pk=parent.pk,
+    )
+    repo.upsert_group(parent)
+    repo.upsert_group(child)
+    repo.upsert_idea(
+        _idea(
+            pk=1,
+            title="Child cached",
+            body="",
+            group=child,
+            tags=[],
+            timestamps=(4, 4),
+        )
+    )
+
+    assert service.search_results("group:parent")[0].idea.pk == 1
+
+
 def test_delete_operations_update_cache_without_raw_sql(
     db: SqliterDB,
 ) -> None:
