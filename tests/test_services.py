@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from cogitus.services.idea_service import IdeaService
+from tests.helpers import DEEP_GROUP_DEPTH, deep_group_chain
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -508,6 +509,22 @@ class TestIdeaService:
 
         assert "backend" in names
         assert "empty-group" not in names
+
+    def test_sort_groups_depth_first_handles_deep_hierarchy(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Depth-first group sorting should not recurse through deep trees."""
+        groups = deep_group_chain()
+
+        ordered = service._sort_groups_depth_first(
+            groups,
+            by_group={group.pk: [] for group in groups},
+        )
+
+        assert [group.pk for group in ordered] == list(
+            range(1, DEEP_GROUP_DEPTH + 1)
+        )
 
     def test_list_search_results_grouped_skips_groups_without_matches(
         self,

@@ -66,7 +66,7 @@ from cogitus.ui.widgets.idea_view import IdeaView
 from cogitus.ui.widgets.search_results import SearchResultsList
 from cogitus.ui.widgets.select_all import select_all_focused_text
 from cogitus.ui.widgets.text_area import CogitusTextArea
-from tests.helpers import _focused_widget
+from tests.helpers import DEEP_GROUP_DEPTH, _focused_widget, deep_group_chain
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -1744,6 +1744,19 @@ def test_idea_form_group_options_are_depth_first(
         ("writing", writing.pk),
         ("  scenes", scenes.pk),
     ]
+
+
+def test_idea_form_group_options_handle_deep_hierarchy() -> None:
+    """Group dropdown options should not recurse through deep hierarchies."""
+    groups = deep_group_chain()
+
+    options = _depth_first_group_options(groups)
+
+    assert len(options) == DEEP_GROUP_DEPTH
+    assert options[-1] == (
+        f"{'  ' * (DEEP_GROUP_DEPTH - 1)}group-{DEEP_GROUP_DEPTH}",
+        DEEP_GROUP_DEPTH,
+    )
 
 
 def test_idea_form_initial_edit_cursor_index_for_new_mode(

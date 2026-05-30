@@ -36,7 +36,7 @@ from cogitus.ui.widgets.search_results import (
     SearchResultsList,
     _marked_text_to_text,
 )
-from tests.helpers import _focused_widget
+from tests.helpers import DEEP_GROUP_DEPTH, _focused_widget, deep_group_chain
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -340,6 +340,19 @@ async def test_idea_list_panel_renders_nested_groups(
             group_pk=child.pk,
             idea_pk=idea.pk,
         )
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_loads_deep_group_hierarchy() -> None:
+    """Grouped tree rendering should not recurse through deep hierarchies."""
+    groups = deep_group_chain()
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test():
+        panel.load_grouped_ideas([(group, []) for group in groups])
+
+        assert DEEP_GROUP_DEPTH in panel._group_nodes_by_pk
 
 
 @pytest.mark.asyncio

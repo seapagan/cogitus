@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from cogitus.search import SearchResult
 
 _MAX_SNIPPET_LENGTH = 88
+_MAX_AUTO_EXPANDED_GROUP_DEPTH = 200
 _RELATIVE_TIMESTAMP_REFRESH_INTERVAL = 30.0
 _SEARCH_OPERATORS: tuple[str, ...] = ("tag:", "group:")
 
@@ -197,16 +198,17 @@ class IdeaListPanel(Vertical):
             grouped_ideas
         )
 
-        def add_group(
+        def add_group_node(
             group: Group,
             parent_node: TreeNode[IdeaTreeNodeData],
-        ) -> None:
+            depth: int,
+        ) -> TreeNode[IdeaTreeNodeData]:
             nonlocal first_idea_node
             ideas = ideas_by_group_pk[group.pk]
             group_node = parent_node.add(
                 _format_group_label(group.name, len(ideas)),
                 data=IdeaTreeNodeData(kind="group", group_pk=group.pk),
-                expand=True,
+                expand=depth < _MAX_AUTO_EXPANDED_GROUP_DEPTH,
             )
             self._group_nodes_by_pk[group.pk] = group_node
             for idea in ideas:
@@ -218,11 +220,19 @@ class IdeaListPanel(Vertical):
                 if first_idea_node is None:
                     first_idea_node = idea_node
                 ordered_pks.append(idea.pk)
-            for child in children_by_parent.get(group.pk, []):
-                add_group(child, group_node)
+            return group_node
 
-        for group in children_by_parent.get(None, []):
-            add_group(group, tree.root)
+        stack = [
+            (group, tree.root, 0)
+            for group in reversed(children_by_parent.get(None, []))
+        ]
+        while stack:
+            group, parent_node, depth = stack.pop()
+            group_node = add_group_node(group, parent_node, depth)
+            stack.extend(
+                (child, group_node, depth + 1)
+                for child in reversed(children_by_parent.get(group.pk, []))
+            )
         self._result_order_pks = tuple(ordered_pks)
         tree.root.expand()
         if auto_select_first and first_idea_node is not None:

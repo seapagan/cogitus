@@ -506,21 +506,25 @@ class IdeaService:
         ordered: list[Group] = []
         visited: set[int] = set()
 
-        def append_group(group: Group) -> None:
-            if group.pk in visited:
-                return
-            visited.add(group.pk)
-            ordered.append(group)
-            children = sorted(
-                groups_by_parent.get(group.pk, []),
+        def sorted_children(group_pk: int) -> list[Group]:
+            return sorted(
+                groups_by_parent.get(group_pk, []),
                 key=lambda child: self._group_sort_key(
                     child.updated_at,
                     by_group.get(child.pk, []),
                 ),
                 reverse=True,
             )
-            for child in children:
-                append_group(child)
+
+        def append_groups(initial_groups: list[Group]) -> None:
+            stack = list(reversed(initial_groups))
+            while stack:
+                group = stack.pop()
+                if group.pk in visited:
+                    continue
+                visited.add(group.pk)
+                ordered.append(group)
+                stack.extend(reversed(sorted_children(group.pk)))
 
         roots = sorted(
             groups_by_parent.get(None, []),
@@ -530,10 +534,8 @@ class IdeaService:
             ),
             reverse=True,
         )
-        for root in roots:
-            append_group(root)
-        for group in groups:
-            append_group(group)
+        append_groups(roots)
+        append_groups(groups)
         return ordered
 
     @staticmethod

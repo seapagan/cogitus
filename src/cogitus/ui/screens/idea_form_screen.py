@@ -94,18 +94,19 @@ def _depth_first_group_options(groups: list[Group]) -> list[tuple[str, int]]:
     options: list[tuple[str, int]] = []
     seen: set[int] = set()
 
-    def append_group(group: Group, depth: int) -> None:
-        if group.pk in seen:
-            return
-        seen.add(group.pk)
-        options.append((f"{'  ' * depth}{group.name}", group.pk))
-        for child in children_by_parent.get(group.pk, []):
-            append_group(child, depth + 1)
+    def append_groups(initial_groups: list[tuple[Group, int]]) -> None:
+        stack = list(reversed(initial_groups))
+        while stack:
+            group, depth = stack.pop()
+            if group.pk in seen:
+                continue
+            seen.add(group.pk)
+            options.append((f"{'  ' * depth}{group.name}", group.pk))
+            children = children_by_parent.get(group.pk, [])
+            stack.extend((child, depth + 1) for child in reversed(children))
 
-    for root in children_by_parent.get(None, []):
-        append_group(root, 0)
-    for group in groups:
-        append_group(group, 0)
+    append_groups([(root, 0) for root in children_by_parent.get(None, [])])
+    append_groups([(group, 0) for group in groups])
     return options
 
 
