@@ -488,6 +488,26 @@ def test_snapshot_import_rejects_missing_group_parent(
         )
 
 
+def test_snapshot_import_rejects_missing_group_parent_with_progress(
+    db: SqliterDB,
+) -> None:
+    """Progress-aware import should fail clearly on missing parents."""
+    importer = SnapshotImportRepository(db)
+    child = _group(
+        pk=2,
+        name="child",
+        created_at=2,
+        updated_at=2,
+        parent_pk=99,
+    )
+
+    with pytest.raises(RuntimeError, match="group 2 references missing parent"):
+        importer.replace_snapshot(
+            RemoteSnapshot(groups=[child], tags=[], ideas=[]),
+            progress_callback=lambda _progress: None,
+        )
+
+
 def test_snapshot_import_rejects_self_referencing_group_parent(
     db: SqliterDB,
 ) -> None:
@@ -507,6 +527,29 @@ def test_snapshot_import_rejects_self_referencing_group_parent(
     ):
         importer.replace_snapshot(
             RemoteSnapshot(groups=[group], tags=[], ideas=[])
+        )
+
+
+def test_snapshot_import_rejects_self_parent_with_progress(
+    db: SqliterDB,
+) -> None:
+    """Progress-aware import should fail clearly on self-parenting groups."""
+    importer = SnapshotImportRepository(db)
+    group = _group(
+        pk=2,
+        name="self-parent",
+        created_at=2,
+        updated_at=2,
+        parent_pk=2,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="group 2 has self-referencing parent 2",
+    ):
+        importer.replace_snapshot(
+            RemoteSnapshot(groups=[group], tags=[], ideas=[]),
+            progress_callback=lambda _progress: None,
         )
 
 
@@ -536,6 +579,36 @@ def test_snapshot_import_rejects_group_parent_cycle(
     ):
         importer.replace_snapshot(
             RemoteSnapshot(groups=[first, second], tags=[], ideas=[])
+        )
+
+
+def test_snapshot_import_rejects_group_parent_cycle_with_progress(
+    db: SqliterDB,
+) -> None:
+    """Progress-aware import should fail clearly on cyclic group parents."""
+    importer = SnapshotImportRepository(db)
+    first = _group(
+        pk=1,
+        name="first",
+        created_at=1,
+        updated_at=1,
+        parent_pk=2,
+    )
+    second = _group(
+        pk=2,
+        name="second",
+        created_at=2,
+        updated_at=2,
+        parent_pk=1,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="group 1 parent chain contains a cycle",
+    ):
+        importer.replace_snapshot(
+            RemoteSnapshot(groups=[first, second], tags=[], ideas=[]),
+            progress_callback=lambda _progress: None,
         )
 
 
