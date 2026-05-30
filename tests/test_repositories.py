@@ -17,6 +17,7 @@ from cogitus.search.result import SearchMatchFragment
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
+    from sqliter import SqliterDB
 
     from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.idea_cursor_state_repo import (
@@ -1332,6 +1333,23 @@ class TestGroupRepository:
         assert persisted is not None
         assert persisted.parent_pk == parent.pk
 
+    def test_update_parent_rejects_corrupt_parent_cycle(
+        self,
+        db: SqliterDB,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Parent updates should not attach groups to corrupt parent chains."""
+        group = group_repo.create("group")
+        first = group_repo.create("first")
+        second = group_repo.create("second")
+        first.parent_pk = second.pk
+        db.update(first)
+        second.parent_pk = first.pk
+        db.update(second)
+
+        with pytest.raises(ValueError, match="cycle"):
+            group_repo.update_parent(group.pk, first.pk)
+
     def test_has_children(
         self,
         group_repo: GroupRepository,
@@ -1364,6 +1382,22 @@ class TestGroupRepository:
             grandchild.pk,
         }
         assert group_repo.descendant_pks(99999) == set()
+
+    def test_descendant_pks_handles_corrupt_cycle(
+        self,
+        db: SqliterDB,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Descendant lookup should terminate on corrupt cyclic group data."""
+        parent = group_repo.create("parent")
+        child = group_repo.create("child", parent_pk=parent.pk)
+        parent.parent_pk = child.pk
+        db.update(parent)
+
+        assert group_repo.descendant_pks(parent.pk) == {
+            parent.pk,
+            child.pk,
+        }
 
     def test_create_duplicate_raises(self, group_repo: GroupRepository) -> None:
         """Duplicate names are rejected."""

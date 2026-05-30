@@ -2993,6 +2993,32 @@ async def test_main_screen_new_subgroup_falls_back_to_default_group(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_new_subgroup_allows_missing_default_group(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """New subgroup should still open if the default group is missing."""
+    backend = service.create_group("backend")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        push = mocker.patch.object(app, "push_screen")
+        mocker.patch.object(panel, "get_selected_group_pk", return_value=None)
+        mocker.patch.object(panel, "get_selected_idea", return_value=None)
+        mocker.patch.object(service, "list_groups", return_value=[backend])
+
+        screen.action_new_subgroup()
+
+        form = push.call_args.args[0]
+        assert isinstance(form, GroupFormScreen)
+        assert form._parent_pk is None
+        assert form._show_parent_select is True
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_group_actions(
     service: IdeaService,
     mocker: MockerFixture,
