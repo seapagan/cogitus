@@ -18,6 +18,7 @@ from cogitus.datefmt import (
     format_full_timestamp,
     format_relative_timestamp,
 )
+from cogitus.models.group import Group
 from cogitus.search import SearchMatchFragment, SearchResult
 from cogitus.ui.widgets.autocomplete import _AutocompleteState
 from cogitus.ui.widgets.idea_list import (
@@ -353,6 +354,31 @@ async def test_idea_list_panel_loads_deep_group_hierarchy() -> None:
         panel.load_grouped_ideas([(group, []) for group in groups])
 
         assert DEEP_GROUP_DEPTH in panel._group_nodes_by_pk
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_renders_cyclic_group_component_once() -> None:
+    """Corrupt cyclic group components should remain visible once."""
+    groups = [
+        Group(pk=1, created_at=1, updated_at=1, name="alpha", parent_pk=2),
+        Group(pk=2, created_at=2, updated_at=2, name="beta", parent_pk=1),
+    ]
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test():
+        panel.load_grouped_ideas([(group, []) for group in groups])
+
+        tree = panel.query_one("#idea-list", Tree)
+        stack = list(tree.root.children)
+        group_pks: list[int] = []
+        while stack:
+            node = stack.pop()
+            if node.data is not None and node.data.kind == "group":
+                group_pks.append(node.data.group_pk)
+            stack.extend(node.children)
+
+        assert sorted(group_pks) == [1, 2]
 
 
 @pytest.mark.asyncio

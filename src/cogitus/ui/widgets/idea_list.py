@@ -222,17 +222,26 @@ class IdeaListPanel(Vertical):
                 ordered_pks.append(idea.pk)
             return group_node
 
-        stack = [
-            (group, tree.root, 0)
-            for group in reversed(children_by_parent.get(None, []))
-        ]
-        while stack:
-            group, parent_node, depth = stack.pop()
-            group_node = add_group_node(group, parent_node, depth)
-            stack.extend(
-                (child, group_node, depth + 1)
-                for child in reversed(children_by_parent.get(group.pk, []))
-            )
+        seen: set[int] = set()
+
+        def walk(
+            initial_groups: list[tuple[Group, TreeNode[IdeaTreeNodeData], int]],
+        ) -> None:
+            stack = list(reversed(initial_groups))
+            while stack:
+                group, parent_node, depth = stack.pop()
+                if group.pk in seen:
+                    continue
+                seen.add(group.pk)
+                group_node = add_group_node(group, parent_node, depth)
+                stack.extend(
+                    (child, group_node, depth + 1)
+                    for child in reversed(children_by_parent.get(group.pk, []))
+                )
+
+        root_groups = children_by_parent.get(None, [])
+        walk([(group, tree.root, 0) for group in root_groups])
+        walk([(group, tree.root, 0) for group, _ideas in grouped_ideas])
         self._result_order_pks = tuple(ordered_pks)
         tree.root.expand()
         if auto_select_first and first_idea_node is not None:
