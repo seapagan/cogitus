@@ -590,17 +590,38 @@ class IdeaService:
             )
             for group in groups
         }
-        changed = True
-        while changed:
-            changed = False
-            for group in groups:
-                updated = activity[group.pk]
-                for child in groups_by_parent.get(group.pk, []):
-                    updated = max(updated, activity[child.pk])
-                current = activity[group.pk]
-                if updated > current:
-                    activity[group.pk] = updated
-                    changed = True
+        visiting: set[int] = set()
+        visited: set[int] = set()
+
+        def calculate(initial_groups: list[Group]) -> None:
+            stack = [(group, False) for group in reversed(initial_groups)]
+            while stack:
+                group, expanded = stack.pop()
+                if group.pk in visited:
+                    continue
+                if expanded:
+                    visiting.discard(group.pk)
+                    children = groups_by_parent.get(group.pk, [])
+                    activity[group.pk] = max(
+                        [activity[group.pk]]
+                        + [
+                            activity[child.pk]
+                            for child in children
+                            if child.pk in visited
+                        ]
+                    )
+                    visited.add(group.pk)
+                    continue
+                visiting.add(group.pk)
+                stack.append((group, True))
+                stack.extend(
+                    (child, False)
+                    for child in reversed(groups_by_parent.get(group.pk, []))
+                    if child.pk not in visited and child.pk not in visiting
+                )
+
+        calculate(groups_by_parent.get(None, []))
+        calculate(groups)
         return activity
 
     @staticmethod
