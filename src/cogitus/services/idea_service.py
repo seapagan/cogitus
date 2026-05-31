@@ -593,6 +593,20 @@ class IdeaService:
         visiting: set[int] = set()
         visited: set[int] = set()
 
+        def final_activity(group: Group) -> int:
+            value = activity[group.pk]
+            for child in groups_by_parent.get(group.pk, []):
+                if child.pk in visited:
+                    value = max(value, activity[child.pk])
+            return value
+
+        def pending_children(group: Group) -> list[Group]:
+            return [
+                child
+                for child in reversed(groups_by_parent.get(group.pk, []))
+                if child.pk not in visited and child.pk not in visiting
+            ]
+
         def calculate(initial_groups: list[Group]) -> None:
             stack = [(group, False) for group in reversed(initial_groups)]
             while stack:
@@ -601,23 +615,13 @@ class IdeaService:
                     continue
                 if expanded:
                     visiting.discard(group.pk)
-                    children = groups_by_parent.get(group.pk, [])
-                    activity[group.pk] = max(
-                        [activity[group.pk]]
-                        + [
-                            activity[child.pk]
-                            for child in children
-                            if child.pk in visited
-                        ]
-                    )
+                    activity[group.pk] = final_activity(group)
                     visited.add(group.pk)
                     continue
                 visiting.add(group.pk)
                 stack.append((group, True))
                 stack.extend(
-                    (child, False)
-                    for child in reversed(groups_by_parent.get(group.pk, []))
-                    if child.pk not in visited and child.pk not in visiting
+                    (child, False) for child in pending_children(group)
                 )
 
         calculate(groups_by_parent.get(None, []))
