@@ -20,19 +20,27 @@ from cogitus.api.main import COGITUS_API_DB_PATH_ENV, create_api_app
 from cogitus.api.managers.auth_manager import AuthManager, MCPAuthManager
 from cogitus.api.mcp import create_mcp_app
 from cogitus.api.openapi_examples import (
+    GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES,
     GROUP_NAMES_RESPONSE_EXAMPLE,
     GROUP_RESPONSE_EXAMPLE,
+    GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES,
     GROUPS_RESPONSE_EXAMPLE,
     HEALTH_RESPONSE_EXAMPLE,
+    IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    IDEA_DELETE_REQUEST_OPENAPI_EXAMPLES,
     IDEA_HASH_RESPONSE_EXAMPLE,
     IDEA_REFS_RESPONSE_EXAMPLE,
     IDEA_RESPONSE_EXAMPLE,
+    IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES,
     IDEAS_RESPONSE_EXAMPLE,
     SNAPSHOT_RESPONSE_EXAMPLE,
     SNAPSHOT_STATE_RESPONSE_EXAMPLE,
+    TAG_CREATE_REQUEST_OPENAPI_EXAMPLES,
     TAG_NAMES_RESPONSE_EXAMPLE,
     TAG_RESPONSE_EXAMPLE,
+    TAG_UPDATE_REQUEST_OPENAPI_EXAMPLES,
     TAGS_RESPONSE_EXAMPLE,
+    TOKEN_REQUEST_OPENAPI_EXAMPLES,
     TOKEN_RESPONSE_EXAMPLE,
 )
 from cogitus.config import (
@@ -298,6 +306,68 @@ def test_delete_routes_do_not_publish_json_response_examples() -> None:
             "content"
             not in openapi["paths"][path]["delete"]["responses"]["204"]
         )
+
+
+def test_write_routes_include_openapi_request_examples() -> None:
+    """Write routes should publish realistic request body examples."""
+    openapi = create_api_app(
+        memory=True,
+        default_group_name="default",
+    ).openapi()
+
+    expected_examples = {
+        (
+            "post",
+            "/api/v1/auth/token",
+            "application/x-www-form-urlencoded",
+        ): TOKEN_REQUEST_OPENAPI_EXAMPLES,
+        (
+            "post",
+            "/api/v1/groups",
+            "application/json",
+        ): GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES,
+        (
+            "put",
+            "/api/v1/groups/{group_pk}",
+            "application/json",
+        ): GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+        (
+            "post",
+            "/api/v1/ideas",
+            "application/json",
+        ): IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES,
+        (
+            "put",
+            "/api/v1/ideas/{idea_pk}",
+            "application/json",
+        ): IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+        (
+            "delete",
+            "/api/v1/ideas/{idea_pk}",
+            "application/json",
+        ): IDEA_DELETE_REQUEST_OPENAPI_EXAMPLES,
+        (
+            "post",
+            "/api/v1/tags",
+            "application/json",
+        ): TAG_CREATE_REQUEST_OPENAPI_EXAMPLES,
+        (
+            "put",
+            "/api/v1/tags/{tag_pk}",
+            "application/json",
+        ): TAG_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    }
+
+    for (
+        method,
+        path,
+        content_type,
+    ), expected_example in expected_examples.items():
+        request_content = openapi["paths"][path][method]["requestBody"][
+            "content"
+        ][content_type]
+
+        assert request_content["examples"] == expected_example
 
 
 def test_token_endpoint_returns_service_unavailable_when_auth_unconfigured(

@@ -2,13 +2,15 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, Query, status
 
 from cogitus.api.dependencies import get_current_api_user, get_group_manager
 from cogitus.api.managers.group_manager import GroupManager
 from cogitus.api.openapi_examples import (
+    GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES,
     GROUP_NAMES_RESPONSE_EXAMPLE,
     GROUP_RESPONSE_EXAMPLE,
+    GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES,
     GROUPS_RESPONSE_EXAMPLE,
     json_response_example,
 )
@@ -62,7 +64,10 @@ async def list_group_names(
     },
 )
 async def create_group(
-    payload: GroupCreateRequest,
+    payload: Annotated[
+        GroupCreateRequest,
+        Body(openapi_examples=GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES),
+    ],
     manager: Annotated[GroupManager, Depends(get_group_manager)],
 ) -> GroupResponse:
     """Create a new group."""
@@ -91,7 +96,10 @@ async def get_group(
 )
 async def update_group(
     group_pk: int,
-    payload: GroupUpdateRequest,
+    payload: Annotated[
+        GroupUpdateRequest,
+        Body(openapi_examples=GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES),
+    ],
     manager: Annotated[GroupManager, Depends(get_group_manager)],
 ) -> GroupResponse:
     """Rename an existing group."""

@@ -2,13 +2,15 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Body, Depends, status
 
 from cogitus.api.dependencies import get_current_api_user, get_tag_manager
 from cogitus.api.managers.tag_manager import TagManager
 from cogitus.api.openapi_examples import (
+    TAG_CREATE_REQUEST_OPENAPI_EXAMPLES,
     TAG_NAMES_RESPONSE_EXAMPLE,
     TAG_RESPONSE_EXAMPLE,
+    TAG_UPDATE_REQUEST_OPENAPI_EXAMPLES,
     TAGS_RESPONSE_EXAMPLE,
     json_response_example,
 )
@@ -59,7 +61,10 @@ async def list_tag_names(
     },
 )
 async def create_tag(
-    payload: TagCreateRequest,
+    payload: Annotated[
+        TagCreateRequest,
+        Body(openapi_examples=TAG_CREATE_REQUEST_OPENAPI_EXAMPLES),
+    ],
     manager: Annotated[TagManager, Depends(get_tag_manager)],
 ) -> TagResponse:
     """Create a new tag."""
@@ -88,7 +93,10 @@ async def get_tag(
 )
 async def update_tag(
     tag_pk: int,
-    payload: TagUpdateRequest,
+    payload: Annotated[
+        TagUpdateRequest,
+        Body(openapi_examples=TAG_UPDATE_REQUEST_OPENAPI_EXAMPLES),
+    ],
     manager: Annotated[TagManager, Depends(get_tag_manager)],
 ) -> TagResponse:
     """Rename an existing tag."""

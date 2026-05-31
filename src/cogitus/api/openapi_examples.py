@@ -1,10 +1,11 @@
-"""Reusable OpenAPI response examples for the Cogitus API."""
+"""Reusable OpenAPI examples for the Cogitus API."""
 
 from __future__ import annotations
 
 from typing import Final
 
 JsonResponseExample = dict[str, dict[str, dict[str, object]]]
+OpenApiExamples = dict[str, dict[str, object]]
 
 GROUP_RESPONSE_EXAMPLE: Final = {
     "pk": 4,
@@ -30,6 +31,23 @@ GROUPS_RESPONSE_EXAMPLE: Final = [
     },
 ]
 GROUP_NAMES_RESPONSE_EXAMPLE: Final = ["api", "backend", "default"]
+GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
+    "child_group": {
+        "summary": "Create a child group",
+        "value": {
+            "name": "api",
+            "parent_pk": 3,
+        },
+    },
+}
+GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
+    "rename_group": {
+        "summary": "Rename a group",
+        "value": {
+            "name": "backend-services",
+        },
+    },
+}
 
 TAG_RESPONSE_EXAMPLE: Final = {
     "pk": 8,
@@ -53,6 +71,22 @@ TAGS_RESPONSE_EXAMPLE: Final = [
     },
 ]
 TAG_NAMES_RESPONSE_EXAMPLE: Final = ["sqlite", "search", "performance"]
+TAG_CREATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
+    "create_tag": {
+        "summary": "Create a tag",
+        "value": {
+            "name": "sqlite",
+        },
+    },
+}
+TAG_UPDATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
+    "rename_tag": {
+        "summary": "Rename a tag",
+        "value": {
+            "name": "sqlite-fts",
+        },
+    },
+}
 
 IDEA_RESPONSE_EXAMPLE: Final = {
     "pk": 42,
@@ -108,6 +142,43 @@ IDEA_HASH_RESPONSE_EXAMPLE: Final = {
     "pk": 42,
     "detail_hash": IDEA_RESPONSE_EXAMPLE["detail_hash"],
 }
+IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
+    "create_idea": {
+        "summary": "Create an idea in a group",
+        "value": {
+            "title": "Compare SQLite FTS query strategies",
+            "body": (
+                "Review prefix matching, tag filters, and ranking behavior "
+                "before settling on the next search implementation."
+            ),
+            "tags": ["sqlite", "search", "performance"],
+            "group_pk": 3,
+        },
+    },
+}
+IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
+    "replace_idea": {
+        "summary": "Replace an idea with optimistic locking",
+        "value": {
+            "title": "Compare SQLite FTS query strategies",
+            "body": (
+                "Capture benchmark notes and choose the search query plan "
+                "for the next release."
+            ),
+            "tags": ["sqlite", "search"],
+            "group_pk": 3,
+            "last_known_updated_at": 1763904000,
+        },
+    },
+}
+IDEA_DELETE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
+    "delete_with_lock": {
+        "summary": "Delete an idea with optimistic locking",
+        "value": {
+            "last_known_updated_at": 1763904000,
+        },
+    },
+}
 
 SNAPSHOT_RESPONSE_EXAMPLE: Final = {
     "groups": GROUPS_RESPONSE_EXAMPLE,
@@ -127,6 +198,15 @@ TOKEN_RESPONSE_EXAMPLE: Final = {
         "synthetic-signature"
     ),
     "token_type": "bearer",
+}
+TOKEN_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
+    "password_login": {
+        "summary": "Request a bearer token",
+        "value": {
+            "username": "api-user",
+            "password": "correct horse battery staple",
+        },
+    },
 }
 HEALTH_RESPONSE_EXAMPLE: Final = {"status": "ok"}
 

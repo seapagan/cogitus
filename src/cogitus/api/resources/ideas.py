@@ -2,14 +2,17 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi import APIRouter, Body, Depends, Path, Query, status
 
 from cogitus.api.dependencies import get_current_api_user, get_idea_manager
 from cogitus.api.managers.idea_manager import IdeaManager
 from cogitus.api.openapi_examples import (
+    IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    IDEA_DELETE_REQUEST_OPENAPI_EXAMPLES,
     IDEA_HASH_RESPONSE_EXAMPLE,
     IDEA_REFS_RESPONSE_EXAMPLE,
     IDEA_RESPONSE_EXAMPLE,
+    IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES,
     IDEAS_RESPONSE_EXAMPLE,
     json_response_example,
 )
@@ -122,7 +125,10 @@ async def list_idea_refs(
     },
 )
 async def create_idea(
-    payload: IdeaCreateRequest,
+    payload: Annotated[
+        IdeaCreateRequest,
+        Body(openapi_examples=IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES),
+    ],
     manager: Annotated[IdeaManager, Depends(get_idea_manager)],
 ) -> IdeaResponse:
     """Create a new idea."""
@@ -179,7 +185,10 @@ async def get_idea(
 )
 async def update_idea(
     idea_pk: int,
-    payload: IdeaUpdateRequest,
+    payload: Annotated[
+        IdeaUpdateRequest,
+        Body(openapi_examples=IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES),
+    ],
     manager: Annotated[IdeaManager, Depends(get_idea_manager)],
 ) -> IdeaResponse:
     """Update an existing idea."""
@@ -189,7 +198,10 @@ async def update_idea(
 @router.delete("/{idea_pk}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_idea(
     idea_pk: int,
-    payload: IdeaDeleteRequest,
+    payload: Annotated[
+        IdeaDeleteRequest,
+        Body(openapi_examples=IDEA_DELETE_REQUEST_OPENAPI_EXAMPLES),
+    ],
     manager: Annotated[IdeaManager, Depends(get_idea_manager)],
 ) -> None:
     """Delete an existing idea."""
