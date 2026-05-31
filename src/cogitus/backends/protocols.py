@@ -81,7 +81,11 @@ class IdeaBackend(Protocol):
     def get_group(self, pk: int) -> Group | None:
         """Fetch a single group."""
 
-    def create_group(self, name: str) -> Group:
+    def create_group(
+        self,
+        name: str,
+        parent_pk: int | None = None,
+    ) -> Group:
         """Create a group."""
 
     def rename_group(self, pk: int, name: str) -> Group | None:

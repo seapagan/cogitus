@@ -40,7 +40,10 @@ class GroupManager:
     def create_group(self, payload: GroupCreateRequest) -> GroupResponse:
         """Create a new group."""
         try:
-            group = self._service.create_group(payload.name)
+            group = self._service.create_group(
+                payload.name,
+                parent_pk=payload.parent_pk,
+            )
         except ValueError as error:
             raise_http_for_value_error(error)
         return to_group_response(group)

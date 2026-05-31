@@ -57,6 +57,7 @@ from cogitus.ui.screens.idea_form_screen import (
     RemoteCloneSwitchModeScreen,
     RemoteStartupRecoveryAction,
     RemoteStartupRecoveryScreen,
+    _depth_first_group_options,
 )
 from cogitus.ui.screens.main_screen import MainScreen
 from cogitus.ui.widgets.footer import CogitusStatusBar, FooterNotice
@@ -65,7 +66,7 @@ from cogitus.ui.widgets.idea_view import IdeaView
 from cogitus.ui.widgets.search_results import SearchResultsList
 from cogitus.ui.widgets.select_all import select_all_focused_text
 from cogitus.ui.widgets.text_area import CogitusTextArea
-from tests.helpers import _focused_widget
+from tests.helpers import DEEP_GROUP_DEPTH, _focused_widget, deep_group_chain
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -1718,6 +1719,46 @@ def test_idea_form_create_mode_invalid_initial_group_falls_back_default(
     assert screen._get_existing_group_pk() == screen._get_default_group_pk()
 
 
+def test_idea_form_group_options_are_depth_first(
+    service: IdeaService,
+) -> None:
+    """Group dropdown options should show nested groups in tree order."""
+    writing = service.create_group("writing")
+    scenes = service.create_group("scenes", parent_pk=writing.pk)
+    work = service.create_group("work")
+    cogitus = service.create_group("cogitus", parent_pk=work.pk)
+    api = service.create_group("api", parent_pk=cogitus.pk)
+    default = next(
+        group
+        for group in service.list_groups()
+        if group.name == service.default_group_name
+    )
+
+    options = _depth_first_group_options(service.list_groups())
+
+    assert options == [
+        ("default", default.pk),
+        ("work", work.pk),
+        ("  cogitus", cogitus.pk),
+        ("    api", api.pk),
+        ("writing", writing.pk),
+        ("  scenes", scenes.pk),
+    ]
+
+
+def test_idea_form_group_options_handle_deep_hierarchy() -> None:
+    """Group dropdown options should not recurse through deep hierarchies."""
+    groups = deep_group_chain()
+
+    options = _depth_first_group_options(groups)
+
+    assert len(options) == DEEP_GROUP_DEPTH
+    assert options[-1] == (
+        f"{'  ' * (DEEP_GROUP_DEPTH - 1)}group-{DEEP_GROUP_DEPTH}",
+        DEEP_GROUP_DEPTH,
+    )
+
+
 def test_idea_form_initial_edit_cursor_index_for_new_mode(
     service: IdeaService,
 ) -> None:
@@ -2467,6 +2508,62 @@ async def test_group_form_and_reassign_validation_branches(
 
 
 @pytest.mark.asyncio
+async def test_group_form_creates_subgroup(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Subgroup form should save with the selected parent group."""
+    parent = service.create_group("parent")
+    subgroup_form = GroupFormScreen(
+        service=service,
+        parent_pk=parent.pk,
+        show_parent_select=True,
+    )
+    app = _SingleScreenApp(subgroup_form)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(subgroup_form, "dismiss")
+
+        subgroup_form.query_one("#group-name-input", Input).value = "child"
+        subgroup_form.action_save()
+
+        child = service.get_group(dismiss.call_args.args[0])
+        assert child is not None
+        assert child.parent_pk == parent.pk
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_group_form_creates_root_group_when_parent_options_missing(
+    mocker: MockerFixture,
+) -> None:
+    """Subgroup form should not crash if no parent groups are available."""
+    service = mocker.Mock()
+    created = mocker.Mock()
+    created.pk = 123
+    service.list_groups.return_value = []
+    service.create_group.return_value = created
+    subgroup_form = GroupFormScreen(
+        service=service,
+        show_parent_select=True,
+    )
+    app = _SingleScreenApp(subgroup_form)
+
+    async with app.run_test() as pilot:
+        dismiss = mocker.patch.object(subgroup_form, "dismiss")
+
+        subgroup_form.query_one("#group-name-input", Input).value = "child"
+        subgroup_form.action_save()
+
+        service.create_group.assert_called_once_with(
+            "child",
+            parent_pk=None,
+        )
+        dismiss.assert_called_once_with(created.pk)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_selection_and_search(
     service: IdeaService,
     mocker: MockerFixture,
@@ -2910,6 +3007,61 @@ async def test_main_screen_new_idea_default_group_mode_ignores_context(
 
 
 @pytest.mark.asyncio
+async def test_main_screen_new_subgroup_falls_back_to_default_group(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """New subgroup should use default group when nothing is selected."""
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+    default = next(
+        group
+        for group in service.list_groups()
+        if group.name == service.default_group_name
+    )
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        push = mocker.patch.object(app, "push_screen")
+        mocker.patch.object(panel, "get_selected_group_pk", return_value=None)
+        mocker.patch.object(panel, "get_selected_idea", return_value=None)
+
+        screen.action_new_subgroup()
+
+        form = push.call_args.args[0]
+        assert isinstance(form, GroupFormScreen)
+        assert form._parent_pk == default.pk
+        assert form._show_parent_select is True
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_new_subgroup_allows_missing_default_group(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """New subgroup should still open if the default group is missing."""
+    backend = service.create_group("backend")
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        push = mocker.patch.object(app, "push_screen")
+        mocker.patch.object(panel, "get_selected_group_pk", return_value=None)
+        mocker.patch.object(panel, "get_selected_idea", return_value=None)
+        mocker.patch.object(service, "list_groups", return_value=[backend])
+
+        screen.action_new_subgroup()
+
+        form = push.call_args.args[0]
+        assert isinstance(form, GroupFormScreen)
+        assert form._parent_pk is None
+        assert form._show_parent_select is True
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
 async def test_main_screen_group_actions(
     service: IdeaService,
     mocker: MockerFixture,
@@ -3010,6 +3162,38 @@ async def test_main_screen_group_actions(
             severity="warning",
         )
         push.assert_not_called()
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_main_screen_delete_group_blocks_parent_groups(
+    service: IdeaService,
+    mocker: MockerFixture,
+) -> None:
+    """Deleting a group with children should warn and leave it untouched."""
+    parent = service.create_group("parent")
+    service.create_group("child", parent_pk=parent.pk)
+    screen = MainScreen(service)
+    app = _SingleScreenApp(screen)
+
+    async with app.run_test() as pilot:
+        panel = screen.query_one("#idea-list-panel", IdeaListPanel)
+        notify = mocker.patch.object(screen, "notify")
+        push = mocker.patch.object(app, "push_screen")
+        mocker.patch.object(
+            panel,
+            "get_selected_group_pk",
+            return_value=parent.pk,
+        )
+
+        screen.action_delete_group()
+
+        notify.assert_called_once_with(
+            "Group with child groups cannot be deleted",
+            severity="warning",
+        )
+        push.assert_not_called()
+        assert service.get_group(parent.pk) is not None
         await pilot.pause()
 
 
@@ -4174,6 +4358,7 @@ async def test_main_screen_search_input_disables_non_search_actions(
         for action in (
             "new_idea",
             "new_group",
+            "new_subgroup",
             "delete_group",
             "delete_idea",
             "edit_idea",
@@ -4247,6 +4432,7 @@ async def test_main_screen_search_results_disable_structural_actions_only(
         for action in (
             "new_idea",
             "new_group",
+            "new_subgroup",
             "delete_group",
             "delete_idea",
         ):
@@ -6682,6 +6868,7 @@ async def test_main_screen_cached_remote_mode_is_read_only(
 
         screen.action_new_idea()
         screen.action_new_group()
+        screen.action_new_subgroup()
         screen.action_edit_idea()
         screen.action_delete_idea()
         screen.action_rename_selected()
@@ -6689,9 +6876,10 @@ async def test_main_screen_cached_remote_mode_is_read_only(
 
         assert screen._sync_remote_before_edit() is False
         assert screen.check_action("new_idea", ()) is False
+        assert screen.check_action("new_subgroup", ()) is False
         assert screen.check_action("edit_idea", ()) is False
         push_screen.assert_not_called()
-        assert notify.call_count == 7
+        assert notify.call_count == 8
         await pilot.pause()
 
 
@@ -6738,6 +6926,15 @@ async def test_main_screen_check_action_and_bindings_cover_runtime_branches(
     app = _SingleScreenApp(screen)
 
     async with app.run_test() as pilot:
+        subgroup_binding = next(
+            binding
+            for binding in screen.BINDINGS
+            if isinstance(binding, Binding)
+            if binding.action == "new_subgroup"
+        )
+        assert subgroup_binding.key == "ctrl+g"
+        assert subgroup_binding.description == "New Subgroup"
+
         panel = screen.query_one("#idea-list-panel", IdeaListPanel)
         screen._remote_cached_read_only = True
         assert screen.check_action("new_idea", ()) is False

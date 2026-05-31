@@ -17,6 +17,7 @@ from cogitus.search.result import SearchMatchFragment
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
+    from sqliter import SqliterDB
 
     from cogitus.repositories.group_repo import GroupRepository
     from cogitus.repositories.idea_cursor_state_repo import (
@@ -791,6 +792,39 @@ class TestIdeaRepository:
 
         assert [idea.pk for idea in results] == [wanted.pk]
 
+    def test_search_group_filter_includes_descendants(
+        self,
+        idea_repo: IdeaRepository,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Structured group filters should match a group's full subtree."""
+        parent = group_repo.create("parent")
+        child = group_repo.create("child", parent_pk=parent.pk)
+        grandchild = group_repo.create("grandchild", parent_pk=child.pk)
+        sibling = group_repo.create("sibling", parent_pk=parent.pk)
+        parent_idea = idea_repo.create("Parent", group_pk=parent.pk)
+        child_idea = idea_repo.create("Child", group_pk=child.pk)
+        grandchild_idea = idea_repo.create(
+            "Grandchild",
+            group_pk=grandchild.pk,
+        )
+        sibling_idea = idea_repo.create("Sibling", group_pk=sibling.pk)
+        idea_repo.create("Default")
+
+        parent_results = idea_repo.search("group:parent")
+        child_results = idea_repo.search("group:child")
+
+        assert {idea.pk for idea in parent_results} == {
+            parent_idea.pk,
+            child_idea.pk,
+            grandchild_idea.pk,
+            sibling_idea.pk,
+        }
+        assert {idea.pk for idea in child_results} == {
+            child_idea.pk,
+            grandchild_idea.pk,
+        }
+
     def test_search_structured_filters_support_or(
         self,
         idea_repo: IdeaRepository,
@@ -1237,6 +1271,149 @@ class TestGroupRepository:
         assert group.name == "backend"
         assert found is not None
         assert found.pk == group.pk
+
+    def test_create_child_group(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Group creation should persist an optional parent pointer."""
+        parent = group_repo.create("parent")
+
+        child = group_repo.create("child", parent_pk=parent.pk)
+
+        assert child.parent_pk == parent.pk
+
+    def test_create_child_group_rejects_missing_parent(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Group creation should reject unknown parent pointers."""
+        with pytest.raises(ValueError, match="Parent group not found"):
+            group_repo.create("child", parent_pk=99999)
+
+    def test_create_child_group_rejects_corrupt_parent_cycle(
+        self,
+        db: SqliterDB,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Group creation should not attach to corrupt parent chains."""
+        first = group_repo.create("first")
+        second = group_repo.create("second")
+        first.parent_pk = second.pk
+        db.update(first)
+        second.parent_pk = first.pk
+        db.update(second)
+
+        with pytest.raises(ValueError, match="cycle"):
+            group_repo.create("child", parent_pk=first.pk)
+
+    def test_update_parent_rejects_self_and_cycles(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Parent updates should reject invalid hierarchy shapes."""
+        parent = group_repo.create("parent")
+        child = group_repo.create("child", parent_pk=parent.pk)
+
+        with pytest.raises(ValueError, match="own parent"):
+            group_repo.update_parent(parent.pk, parent.pk)
+
+        with pytest.raises(ValueError, match="cycle"):
+            group_repo.update_parent(parent.pk, child.pk)
+
+    def test_update_parent_rejects_missing_groups(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Parent updates should fail clearly for missing group references."""
+        child = group_repo.create("child")
+
+        assert group_repo.update_parent(99999, None) is None
+
+        with pytest.raises(ValueError, match="Parent group not found"):
+            group_repo.update_parent(child.pk, 99999)
+
+    def test_update_parent_moves_group(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Parent updates should persist valid hierarchy changes."""
+        parent = group_repo.create("parent")
+        child = group_repo.create("child")
+
+        updated = group_repo.update_parent(child.pk, parent.pk)
+
+        assert updated is not None
+        assert updated.parent_pk == parent.pk
+        persisted = group_repo.get(child.pk)
+        assert persisted is not None
+        assert persisted.parent_pk == parent.pk
+
+    def test_update_parent_rejects_corrupt_parent_cycle(
+        self,
+        db: SqliterDB,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Parent updates should not attach groups to corrupt parent chains."""
+        group = group_repo.create("group")
+        first = group_repo.create("first")
+        second = group_repo.create("second")
+        first.parent_pk = second.pk
+        db.update(first)
+        second.parent_pk = first.pk
+        db.update(second)
+
+        with pytest.raises(ValueError, match="cycle"):
+            group_repo.update_parent(group.pk, first.pk)
+
+    def test_has_children(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Child detection should report direct descendants."""
+        parent = group_repo.create("parent")
+
+        assert not group_repo.has_children(parent.pk)
+        group_repo.create("child", parent_pk=parent.pk)
+        assert group_repo.has_children(parent.pk)
+
+    def test_descendant_pks(
+        self,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Descendant lookup should include a group's full subtree."""
+        parent = group_repo.create("parent")
+        child = group_repo.create("child", parent_pk=parent.pk)
+        grandchild = group_repo.create("grandchild", parent_pk=child.pk)
+        sibling = group_repo.create("sibling", parent_pk=parent.pk)
+
+        assert group_repo.descendant_pks(parent.pk) == {
+            parent.pk,
+            child.pk,
+            grandchild.pk,
+            sibling.pk,
+        }
+        assert group_repo.descendant_pks(child.pk) == {
+            child.pk,
+            grandchild.pk,
+        }
+        assert group_repo.descendant_pks(99999) == set()
+
+    def test_descendant_pks_handles_corrupt_cycle(
+        self,
+        db: SqliterDB,
+        group_repo: GroupRepository,
+    ) -> None:
+        """Descendant lookup should terminate on corrupt cyclic group data."""
+        parent = group_repo.create("parent")
+        child = group_repo.create("child", parent_pk=parent.pk)
+        parent.parent_pk = child.pk
+        db.update(parent)
+
+        assert group_repo.descendant_pks(parent.pk) == {
+            parent.pk,
+            child.pk,
+        }
 
     def test_create_duplicate_raises(self, group_repo: GroupRepository) -> None:
         """Duplicate names are rejected."""

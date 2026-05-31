@@ -12,6 +12,7 @@ class Group(BaseDBModel):
     """A named group that owns ideas."""
 
     name: Annotated[str, unique()]
+    parent_pk: int | None = None
 
     class Meta:
         """Metadata for the Group model."""

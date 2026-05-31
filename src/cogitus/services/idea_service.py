@@ -316,9 +316,13 @@ class IdeaService:
         """Fetch a single group by primary key."""
         return self._group_repo.get(pk)
 
-    def create_group(self, name: str) -> Group:
+    def create_group(
+        self,
+        name: str,
+        parent_pk: int | None = None,
+    ) -> Group:
         """Create a new group."""
-        group = self._group_repo.create(name)
+        group = self._group_repo.create(name, parent_pk=parent_pk)
         self._dataset_state_repo.invalidate()
         return group
 
@@ -376,19 +380,26 @@ class IdeaService:
         for result in results:
             by_group.setdefault(result.idea.group.pk, []).append(result)
 
-        sorted_groups = sorted(
+        sorted_groups = self._sort_groups_depth_first(
             groups,
-            key=lambda group: self._group_sort_key(
-                group.updated_at,
-                [result.idea for result in by_group.get(group.pk, [])],
-            ),
-            reverse=True,
+            by_group={
+                group_pk: [result.idea for result in group_results]
+                for group_pk, group_results in by_group.items()
+            },
         )
 
         grouped: list[tuple[Group, list[SearchResult]]] = []
+        included_group_pks = self._group_pks_with_ancestors(
+            groups,
+            {
+                group_pk
+                for group_pk, group_results in by_group.items()
+                if group_results
+            },
+        )
         for group in sorted_groups:
             group_results = by_group.get(group.pk, [])
-            if not group_results:
+            if group.pk not in included_group_pks:
                 continue
             grouped.append((group, group_results))
         return grouped
@@ -404,6 +415,9 @@ class IdeaService:
             return
         if group.name == self._default_group_name:
             msg = "Default group cannot be deleted"
+            raise ValueError(msg)
+        if self._group_repo.has_children(group_pk):
+            msg = "Group with child groups cannot be deleted"
             raise ValueError(msg)
 
         target_group = (
@@ -468,22 +482,151 @@ class IdeaService:
         query_active: bool,
     ) -> list[tuple[Group, list[Idea]]]:
         """Build sorted grouped idea tuples, filtering empty query groups."""
-        sorted_groups = sorted(
+        sorted_groups = self._sort_groups_depth_first(
             groups,
-            key=lambda group: self._group_sort_key(
-                group.updated_at,
-                by_group.get(group.pk, []),
-            ),
-            reverse=True,
+            by_group=by_group,
+        )
+        included_group_pks = (
+            self._group_pks_with_ancestors(
+                groups,
+                {
+                    group_pk
+                    for group_pk, group_ideas in by_group.items()
+                    if group_ideas
+                },
+            )
+            if query_active
+            else {group.pk for group in groups}
         )
 
         grouped: list[tuple[Group, list[Idea]]] = []
         for group in sorted_groups:
             group_ideas = by_group.get(group.pk, [])
-            if query_active and not group_ideas:
+            if group.pk not in included_group_pks:
                 continue
             grouped.append((group, group_ideas))
         return grouped
+
+    @staticmethod
+    def _group_pks_with_ancestors(
+        groups: list[Group],
+        group_pks: set[int],
+    ) -> set[int]:
+        """Return selected group PKs plus all available parent group PKs."""
+        parent_by_pk = {group.pk: group.parent_pk for group in groups}
+        included: set[int] = set()
+        for group_pk in group_pks:
+            seen: set[int] = set()
+            current_pk: int | None = group_pk
+            while current_pk is not None:
+                if current_pk in seen or current_pk not in parent_by_pk:
+                    break
+                seen.add(current_pk)
+                included.add(current_pk)
+                current_pk = parent_by_pk[current_pk]
+        return included
+
+    def _sort_groups_depth_first(
+        self,
+        groups: list[Group],
+        *,
+        by_group: dict[int, list[Idea]],
+    ) -> list[Group]:
+        """Return groups in activity-sorted depth-first hierarchy order."""
+        groups_by_parent: dict[int | None, list[Group]] = {}
+        group_pks = {group.pk for group in groups}
+        for group in groups:
+            parent_pk = group.parent_pk
+            if parent_pk not in group_pks:
+                parent_pk = None
+            groups_by_parent.setdefault(parent_pk, []).append(group)
+
+        ordered: list[Group] = []
+        visited: set[int] = set()
+        activity_by_group = self._subtree_activity_by_group(
+            groups,
+            groups_by_parent=groups_by_parent,
+            by_group=by_group,
+        )
+
+        def sorted_children(group_pk: int) -> list[Group]:
+            return sorted(
+                groups_by_parent.get(group_pk, []),
+                key=lambda child: activity_by_group[child.pk],
+                reverse=True,
+            )
+
+        def append_groups(initial_groups: list[Group]) -> None:
+            stack = list(reversed(initial_groups))
+            while stack:
+                group = stack.pop()
+                if group.pk in visited:
+                    continue
+                visited.add(group.pk)
+                ordered.append(group)
+                stack.extend(reversed(sorted_children(group.pk)))
+
+        roots = sorted(
+            groups_by_parent.get(None, []),
+            key=lambda group: activity_by_group[group.pk],
+            reverse=True,
+        )
+        append_groups(roots)
+        append_groups(groups)
+        return ordered
+
+    def _subtree_activity_by_group(
+        self,
+        groups: list[Group],
+        *,
+        groups_by_parent: dict[int | None, list[Group]],
+        by_group: dict[int, list[Idea]],
+    ) -> dict[int, int]:
+        """Return each group's max direct or descendant activity."""
+        activity = {
+            group.pk: self._group_sort_key(
+                group.updated_at,
+                by_group.get(group.pk, []),
+            )
+            for group in groups
+        }
+        visiting: set[int] = set()
+        visited: set[int] = set()
+
+        def final_activity(group: Group) -> int:
+            value = activity[group.pk]
+            for child in groups_by_parent.get(group.pk, []):
+                if child.pk in visited:
+                    value = max(value, activity[child.pk])
+            return value
+
+        def pending_children(group: Group) -> list[Group]:
+            return [
+                child
+                for child in reversed(groups_by_parent.get(group.pk, []))
+                if child.pk not in visited and child.pk not in visiting
+            ]
+
+        def calculate(initial_groups: list[Group]) -> None:
+            stack = [(group, False) for group in reversed(initial_groups)]
+            while stack:
+                group, expanded = stack.pop()
+                if group.pk in visited:
+                    continue
+                if expanded:
+                    visiting.discard(group.pk)
+                    activity[group.pk] = final_activity(group)
+                    visited.add(group.pk)
+                    continue
+                visiting.add(group.pk)
+                stack.append((group, True))
+                stack.extend(
+                    (child, False) for child in pending_children(group)
+                )
+
+        calculate(groups_by_parent.get(None, []))
+        calculate(groups)
+        return activity
 
     @staticmethod
     def _normalize_tags(

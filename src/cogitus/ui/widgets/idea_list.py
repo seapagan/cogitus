@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from cogitus.search import SearchResult
 
 _MAX_SNIPPET_LENGTH = 88
+_MAX_AUTO_EXPANDED_GROUP_DEPTH = 200
 _RELATIVE_TIMESTAMP_REFRESH_INTERVAL = 30.0
 _SEARCH_OPERATORS: tuple[str, ...] = ("tag:", "group:")
 
@@ -193,11 +194,21 @@ class IdeaListPanel(Vertical):
         self.query_one("#search-results", SearchResultsList).clear_results()
         first_idea_node: TreeNode[IdeaTreeNodeData] | None = None
         ordered_pks: list[int] = []
-        for group, ideas in grouped_ideas:
-            group_node = tree.root.add(
+        ideas_by_group_pk, children_by_parent = self._group_tree_maps(
+            grouped_ideas
+        )
+
+        def add_group_node(
+            group: Group,
+            parent_node: TreeNode[IdeaTreeNodeData],
+            depth: int,
+        ) -> TreeNode[IdeaTreeNodeData]:
+            nonlocal first_idea_node
+            ideas = ideas_by_group_pk[group.pk]
+            group_node = parent_node.add(
                 _format_group_label(group.name, len(ideas)),
                 data=IdeaTreeNodeData(kind="group", group_pk=group.pk),
-                expand=True,
+                expand=depth < _MAX_AUTO_EXPANDED_GROUP_DEPTH,
             )
             self._group_nodes_by_pk[group.pk] = group_node
             for idea in ideas:
@@ -209,6 +220,28 @@ class IdeaListPanel(Vertical):
                 if first_idea_node is None:
                     first_idea_node = idea_node
                 ordered_pks.append(idea.pk)
+            return group_node
+
+        seen: set[int] = set()
+
+        def walk(
+            initial_groups: list[tuple[Group, TreeNode[IdeaTreeNodeData], int]],
+        ) -> None:
+            stack = list(reversed(initial_groups))
+            while stack:
+                group, parent_node, depth = stack.pop()
+                if group.pk in seen:
+                    continue
+                seen.add(group.pk)
+                group_node = add_group_node(group, parent_node, depth)
+                stack.extend(
+                    (child, group_node, depth + 1)
+                    for child in reversed(children_by_parent.get(group.pk, []))
+                )
+
+        root_groups = children_by_parent.get(None, [])
+        walk([(group, tree.root, 0) for group in root_groups])
+        walk([(group, tree.root, 0) for group, _ideas in grouped_ideas])
         self._result_order_pks = tuple(ordered_pks)
         tree.root.expand()
         if auto_select_first and first_idea_node is not None:
@@ -216,6 +249,21 @@ class IdeaListPanel(Vertical):
             tree.move_cursor(first_idea_node, animate=False)
         else:
             tree.unselect()
+
+    @staticmethod
+    def _group_tree_maps(
+        grouped_ideas: list[tuple[Group, list[Idea]]],
+    ) -> tuple[dict[int, list[Idea]], dict[int | None, list[Group]]]:
+        """Return idea and child-group maps for nested tree rendering."""
+        groups_by_pk = {group.pk: group for group, _ideas in grouped_ideas}
+        ideas_by_group_pk = {group.pk: ideas for group, ideas in grouped_ideas}
+        children_by_parent: dict[int | None, list[Group]] = {}
+        for group, _ideas in grouped_ideas:
+            parent_pk = group.parent_pk
+            if parent_pk not in groups_by_pk:
+                parent_pk = None
+            children_by_parent.setdefault(parent_pk, []).append(group)
+        return ideas_by_group_pk, children_by_parent
 
     def load_grouped_search_results(
         self,

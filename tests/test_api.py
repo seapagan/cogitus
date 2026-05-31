@@ -74,6 +74,11 @@ def test_snapshot_returns_full_remote_dataset(api_client: TestClient) -> None:
     group = api_client.post("/api/v1/groups", json={"name": "backend"})
     assert group.status_code == 201
     group_pk = group.json()["pk"]
+    child = api_client.post(
+        "/api/v1/groups",
+        json={"name": "api", "parent_pk": group_pk},
+    )
+    assert child.status_code == 201
 
     created = api_client.post(
         "/api/v1/ideas",
@@ -91,9 +96,14 @@ def test_snapshot_returns_full_remote_dataset(api_client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert [group["name"] for group in body["groups"]] == [
+        "api",
         "backend",
         "default",
     ]
+    snapshot_child = next(
+        group for group in body["groups"] if group["name"] == "api"
+    )
+    assert snapshot_child["parent_pk"] == group_pk
     assert [tag["name"] for tag in body["tags"]] == [
         "remote",
         "snapshot",
@@ -277,6 +287,61 @@ def test_idea_list_supports_query_limit_and_offset(
     paged = api_client.get("/api/v1/ideas", params={"limit": 1, "offset": 1})
     assert paged.status_code == 200
     assert len(paged.json()) == 1
+
+
+def test_idea_query_group_filter_includes_child_groups(
+    api_client: TestClient,
+) -> None:
+    """API group search should match ideas in child groups."""
+    parent = api_client.post("/api/v1/groups", json={"name": "parent"})
+    assert parent.status_code == 201
+    child = api_client.post(
+        "/api/v1/groups",
+        json={"name": "child", "parent_pk": parent.json()["pk"]},
+    )
+    assert child.status_code == 201
+    parent_idea = api_client.post(
+        "/api/v1/ideas",
+        json={
+            "title": "Parent idea",
+            "body": "",
+            "tags": [],
+            "group_pk": parent.json()["pk"],
+        },
+    )
+    child_idea = api_client.post(
+        "/api/v1/ideas",
+        json={
+            "title": "Child idea",
+            "body": "",
+            "tags": [],
+            "group_pk": child.json()["pk"],
+        },
+    )
+    api_client.post(
+        "/api/v1/ideas",
+        json={"title": "Default idea", "body": "", "tags": []},
+    )
+
+    ideas = api_client.get(
+        "/api/v1/ideas",
+        params={"query": "group:parent"},
+    )
+    refs = api_client.get(
+        "/api/v1/ideas/refs",
+        params={"query": "group:parent"},
+    )
+
+    assert ideas.status_code == 200
+    assert refs.status_code == 200
+    assert {idea["pk"] for idea in ideas.json()} == {
+        parent_idea.json()["pk"],
+        child_idea.json()["pk"],
+    }
+    assert {idea["pk"] for idea in refs.json()} == {
+        parent_idea.json()["pk"],
+        child_idea.json()["pk"],
+    }
 
 
 def test_create_idea_with_missing_group_returns_not_found(
@@ -483,9 +548,30 @@ def test_delete_default_group_returns_conflict(
     assert response.status_code == 409
 
 
+def test_delete_parent_group_returns_conflict(
+    api_client: TestClient,
+) -> None:
+    """Deleting a group with child groups should be rejected."""
+    parent = api_client.post("/api/v1/groups", json={"name": "parent"})
+    assert parent.status_code == 201
+    child = api_client.post(
+        "/api/v1/groups",
+        json={"name": "child", "parent_pk": parent.json()["pk"]},
+    )
+    assert child.status_code == 201
+
+    response = api_client.delete(f"/api/v1/groups/{parent.json()['pk']}")
+
+    assert response.status_code == 409
+
+
 def test_group_missing_and_validation_paths(api_client: TestClient) -> None:
     """Group endpoints should surface missing and validation errors."""
     create_invalid = api_client.post("/api/v1/groups", json={"name": "   "})
+    create_bad_parent = api_client.post(
+        "/api/v1/groups",
+        json={"name": "child", "parent_pk": 99999},
+    )
     existing = api_client.post("/api/v1/groups", json={"name": "backend"})
     assert existing.status_code == 201
     update_invalid = api_client.put(
@@ -511,6 +597,7 @@ def test_group_missing_and_validation_paths(api_client: TestClient) -> None:
     delete_missing = api_client.delete("/api/v1/groups/99999")
 
     assert create_invalid.status_code == 422
+    assert create_bad_parent.status_code == 404
     assert update_invalid.status_code == 422
     assert update_duplicate.status_code == 409
     assert create_invalid.json()["detail"][0]["type"] == "string_too_short"

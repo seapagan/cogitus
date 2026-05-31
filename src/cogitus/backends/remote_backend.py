@@ -185,10 +185,14 @@ class RemoteIdeaBackend(SyncingIdeaBackend):
         """Fetch a cached group."""
         return self._cache_service.get_group(pk)
 
-    def create_group(self, name: str) -> Group:
+    def create_group(
+        self,
+        name: str,
+        parent_pk: int | None = None,
+    ) -> Group:
         """Create a remote group and mirror it into the cache."""
         with self._sync_lock:
-            created = self._api_client.create_group(name)
+            created = self._api_client.create_group(name, parent_pk=parent_pk)
             self._cache_repo.upsert_group(created)
             self._invalidate_cache_dataset_hash()
             return self._require_cached_group(created.pk)

@@ -80,6 +80,29 @@ def _migrate_ideas_group_fk(db: SqliterDB, default_group_pk: int) -> None:
         conn.commit()
 
 
+def _migrate_groups_parent_pk(db: SqliterDB) -> None:
+    """Add groups.parent_pk for nested group browsing when missing."""
+    with db.connect() as conn:
+        if not _column_exists(db, "groups", "parent_pk"):
+            conn.execute("ALTER TABLE groups ADD COLUMN parent_pk INTEGER;")
+        conn.execute(
+            """
+            UPDATE groups
+            SET parent_pk = NULL
+            WHERE parent_pk IS NOT NULL
+               AND (
+                    parent_pk = pk
+                    OR NOT EXISTS (
+                        SELECT 1
+                        FROM groups AS parents
+                        WHERE parents.pk = groups.parent_pk
+                    )
+               );
+            """
+        )
+        conn.commit()
+
+
 def _migrate_idea_detail_hash(db: SqliterDB) -> None:
     """Add and backfill ideas.detail_hash when missing or empty."""
     with db.connect() as conn:
@@ -168,6 +191,7 @@ def get_db(
 
     db.create_table(Tag)
     db.create_table(Group)
+    _migrate_groups_parent_pk(db)
     default_group_pk = _ensure_default_group(
         db,
         normalized_default_group_name,

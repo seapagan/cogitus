@@ -25,6 +25,7 @@ def _group(
     name: str,
     created_at: int,
     updated_at: int,
+    parent_pk: int | None = None,
 ) -> GroupResponse:
     """Build a group response for snapshot-import tests."""
     return GroupResponse(
@@ -32,6 +33,7 @@ def _group(
         created_at=created_at,
         updated_at=updated_at,
         name=name,
+        parent_pk=parent_pk,
     )
 
 
@@ -135,6 +137,30 @@ def test_snapshot_import_replaces_db_and_preserves_cursor_state(
     assert service.get_idea_scroll_position(1, imported.detail_hash) == 13
     assert _assert_first_search_hit_pk(service, "tag:cli") == 1
     assert service.get_idea_with_relations(extra_local.pk) is None
+
+
+def test_snapshot_import_preserves_group_parent_links(
+    db: SqliterDB,
+) -> None:
+    """Importing a snapshot should preserve group hierarchy pointers."""
+    service = IdeaService(db)
+    importer = SnapshotImportRepository(db)
+    parent = _group(pk=1, name="parent", created_at=1, updated_at=1)
+    child = _group(
+        pk=2,
+        name="child",
+        created_at=2,
+        updated_at=2,
+        parent_pk=parent.pk,
+    )
+
+    importer.replace_snapshot(
+        RemoteSnapshot(groups=[parent, child], tags=[], ideas=[])
+    )
+
+    imported = service.get_group(child.pk)
+    assert imported is not None
+    assert imported.parent_pk == parent.pk
 
 
 def test_snapshot_import_restores_previous_state_if_rebuild_fails(
@@ -441,6 +467,149 @@ def test_snapshot_import_bulk_path_reports_missing_group(
         match="idea 1 references missing group 99",
     ):
         importer.replace_snapshot(snapshot)
+
+
+def test_snapshot_import_rejects_missing_group_parent(
+    db: SqliterDB,
+) -> None:
+    """Snapshot import should fail clearly on missing parent groups."""
+    importer = SnapshotImportRepository(db)
+    child = _group(
+        pk=2,
+        name="child",
+        created_at=2,
+        updated_at=2,
+        parent_pk=99,
+    )
+
+    with pytest.raises(RuntimeError, match="group 2 references missing parent"):
+        importer.replace_snapshot(
+            RemoteSnapshot(groups=[child], tags=[], ideas=[])
+        )
+
+
+def test_snapshot_import_rejects_missing_group_parent_with_progress(
+    db: SqliterDB,
+) -> None:
+    """Progress-aware import should fail clearly on missing parents."""
+    importer = SnapshotImportRepository(db)
+    child = _group(
+        pk=2,
+        name="child",
+        created_at=2,
+        updated_at=2,
+        parent_pk=99,
+    )
+
+    with pytest.raises(RuntimeError, match="group 2 references missing parent"):
+        importer.replace_snapshot(
+            RemoteSnapshot(groups=[child], tags=[], ideas=[]),
+            progress_callback=lambda _progress: None,
+        )
+
+
+def test_snapshot_import_rejects_self_referencing_group_parent(
+    db: SqliterDB,
+) -> None:
+    """Snapshot import should fail clearly on self-parenting groups."""
+    importer = SnapshotImportRepository(db)
+    group = _group(
+        pk=2,
+        name="self-parent",
+        created_at=2,
+        updated_at=2,
+        parent_pk=2,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="group 2 has self-referencing parent 2",
+    ):
+        importer.replace_snapshot(
+            RemoteSnapshot(groups=[group], tags=[], ideas=[])
+        )
+
+
+def test_snapshot_import_rejects_self_parent_with_progress(
+    db: SqliterDB,
+) -> None:
+    """Progress-aware import should fail clearly on self-parenting groups."""
+    importer = SnapshotImportRepository(db)
+    group = _group(
+        pk=2,
+        name="self-parent",
+        created_at=2,
+        updated_at=2,
+        parent_pk=2,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="group 2 has self-referencing parent 2",
+    ):
+        importer.replace_snapshot(
+            RemoteSnapshot(groups=[group], tags=[], ideas=[]),
+            progress_callback=lambda _progress: None,
+        )
+
+
+def test_snapshot_import_rejects_group_parent_cycle(
+    db: SqliterDB,
+) -> None:
+    """Snapshot import should fail clearly on cyclic group parents."""
+    importer = SnapshotImportRepository(db)
+    first = _group(
+        pk=1,
+        name="first",
+        created_at=1,
+        updated_at=1,
+        parent_pk=2,
+    )
+    second = _group(
+        pk=2,
+        name="second",
+        created_at=2,
+        updated_at=2,
+        parent_pk=1,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="group 1 parent chain contains a cycle",
+    ):
+        importer.replace_snapshot(
+            RemoteSnapshot(groups=[first, second], tags=[], ideas=[])
+        )
+
+
+def test_snapshot_import_rejects_group_parent_cycle_with_progress(
+    db: SqliterDB,
+) -> None:
+    """Progress-aware import should fail clearly on cyclic group parents."""
+    importer = SnapshotImportRepository(db)
+    first = _group(
+        pk=1,
+        name="first",
+        created_at=1,
+        updated_at=1,
+        parent_pk=2,
+    )
+    second = _group(
+        pk=2,
+        name="second",
+        created_at=2,
+        updated_at=2,
+        parent_pk=1,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="group 1 parent chain contains a cycle",
+    ):
+        importer.replace_snapshot(
+            RemoteSnapshot(groups=[first, second], tags=[], ideas=[]),
+            progress_callback=lambda _progress: None,
+        )
 
 
 def test_snapshot_import_progress_path_reports_missing_tag(

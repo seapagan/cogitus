@@ -44,7 +44,7 @@ class DatasetStateRepository:
         """Compute one stable dataset hash from current API-visible rows."""
         group_parts = [
             f"group:{group.pk}:{group.created_at}:{group.updated_at}:"
-            f"{group.name}"
+            f"{group.name}:{group.parent_pk}"
             for group in self._db.select(Group).fetch_all()
         ]
         tag_parts = [

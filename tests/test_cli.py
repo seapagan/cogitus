@@ -135,12 +135,18 @@ class TestListCommand:
         db: SqliterDB,
         service: IdeaService,
     ) -> None:
-        """List query should support combined group and tag operators."""
+        """List query should support subtree group and tag operators."""
         backend = service.create_group("backend")
+        api = service.create_group("api", parent_pk=backend.pk)
         service.create_idea(
             "Backend python",
             tags=["python"],
             group_pk=backend.pk,
+        )
+        service.create_idea(
+            "API python",
+            tags=["python"],
+            group_pk=api.pk,
         )
         service.create_idea("Backend rust", tags=["rust"], group_pk=backend.pk)
         service.create_idea("Default python", tags=["python"])
@@ -152,6 +158,7 @@ class TestListCommand:
             )
             assert result.exit_code == 0
             assert "Backend python" in result.output
+            assert "API python" in result.output
             assert "Backend rust" not in result.output
             assert "Default python" not in result.output
 

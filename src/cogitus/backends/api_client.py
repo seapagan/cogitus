@@ -164,9 +164,13 @@ class RemoteAPIClient:
             json=payload.model_dump(exclude_unset=True),
         )
 
-    def create_group(self, name: str) -> GroupResponse:
+    def create_group(
+        self,
+        name: str,
+        parent_pk: int | None = None,
+    ) -> GroupResponse:
         """Create a remote group."""
-        payload = GroupCreateRequest(name=name)
+        payload = GroupCreateRequest(name=name, parent_pk=parent_pk)
         return GroupResponse.model_validate(
             self._request(
                 "POST",

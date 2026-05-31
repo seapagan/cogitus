@@ -104,7 +104,7 @@ async def list_ideas(
         Query(
             description=(
                 "Optional free-text search. Supports tag:<name> and "
-                "group:<name> filters, with and/or between filters."
+                "group:<name> subtree filters, with and/or between filters."
             ),
         ),
     ] = None,
@@ -112,8 +112,8 @@ async def list_ideas(
     """Return ideas, most recently updated first.
 
     When `query` is provided, search visible idea text and optional structured
-    filters. Use `tag:<name>` or `group:<name>` to filter by tag or group, and
-    combine filters with `and` or `or`.
+    filters. Use `tag:<name>` to filter by tag, or `group:<name>` to filter by
+    a group and its child groups, and combine filters with `and` or `or`.
     """
     return manager.list_ideas(limit=limit, offset=offset, query=query)
 
@@ -152,7 +152,7 @@ async def list_idea_refs(
         Query(
             description=(
                 "Optional free-text search. Supports tag:<name> and "
-                "group:<name> filters, with and/or between filters."
+                "group:<name> subtree filters, with and/or between filters."
             ),
         ),
     ] = None,

@@ -100,6 +100,8 @@ def test_remote_backend_delegate_and_guard_paths(
     assert backend.list_groups()[0].name == "default"
     assert backend.list_ideas_grouped()[0][1][0].pk == seed.pk
     assert backend.search_results("Seed")[0].idea.pk == seed.pk
+    current = backend.get_idea(seed.pk)
+    assert current is not None
 
     rename_update = mocker.patch.object(
         backend, "_update_cached_idea", return_value=seed
@@ -111,7 +113,7 @@ def test_remote_backend_delegate_and_guard_paths(
         body="",
         tags=["python"],
         group_pk=seed.group.pk,
-        last_known_updated_at=seed.updated_at,
+        last_known_updated_at=current.updated_at,
     )
 
     mocker.patch.object(
@@ -393,3 +395,13 @@ def test_remote_backend_group_rules_match_service_errors(
         backend.delete_group(
             created_group.pk, move_to_group_pk=created_group.pk
         )
+
+    child_group = backend.create_group(
+        "child backend",
+        parent_pk=created_group.pk,
+    )
+    with pytest.raises(ValueError, match="child groups"):
+        backend.delete_group(created_group.pk)
+
+    assert backend.get_group(created_group.pk) is not None
+    assert backend.get_group(child_group.pk) is not None

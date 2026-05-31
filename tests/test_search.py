@@ -139,15 +139,57 @@ class TestSearch:
         self,
         service: IdeaService,
     ) -> None:
-        """group: filter should match ideas by exact group name."""
+        """group: filter should match ideas in the group subtree."""
         backend = service.create_group("backend")
+        api = service.create_group("api", parent_pk=backend.pk)
+        docs = service.create_group("docs", parent_pk=api.pk)
+        other = service.create_group("other")
         service.create_idea("Backend only", group_pk=backend.pk)
+        service.create_idea("API only", group_pk=api.pk)
+        service.create_idea("Docs only", group_pk=docs.pk)
+        service.create_idea("Other only", group_pk=other.pk)
         service.create_idea("Default only")
 
         results = service.search_ideas("group:backend")
 
-        assert len(results) == 1
-        assert results[0].title == "Backend only"
+        assert {idea.title for idea in results} == {
+            "Backend only",
+            "API only",
+            "Docs only",
+        }
+
+    def test_search_child_group_filter_excludes_parent_and_siblings(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Child group filters should not include parents or siblings."""
+        parent = service.create_group("parent")
+        child = service.create_group("child", parent_pk=parent.pk)
+        grandchild = service.create_group("grandchild", parent_pk=child.pk)
+        sibling = service.create_group("sibling", parent_pk=parent.pk)
+        service.create_idea("Parent", group_pk=parent.pk)
+        service.create_idea("Child", group_pk=child.pk)
+        service.create_idea("Grandchild", group_pk=grandchild.pk)
+        service.create_idea("Sibling", group_pk=sibling.pk)
+
+        results = service.search_ideas("group:child")
+
+        assert {idea.title for idea in results} == {"Child", "Grandchild"}
+
+    def test_search_text_with_group_filter_uses_descendants(
+        self,
+        service: IdeaService,
+    ) -> None:
+        """Text plus group filters should intersect with descendant groups."""
+        parent = service.create_group("parent")
+        child = service.create_group("child", parent_pk=parent.pk)
+        service.create_idea("Matching child", body="python", group_pk=child.pk)
+        service.create_idea("Nonmatching child", body="rust", group_pk=child.pk)
+        service.create_idea("Matching default", body="python")
+
+        results = service.search_ideas("python group:parent")
+
+        assert [idea.title for idea in results] == ["Matching child"]
 
     def test_search_by_tag_filter(
         self,

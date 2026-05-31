@@ -18,6 +18,7 @@ from cogitus.datefmt import (
     format_full_timestamp,
     format_relative_timestamp,
 )
+from cogitus.models.group import Group
 from cogitus.search import SearchMatchFragment, SearchResult
 from cogitus.ui.widgets.autocomplete import _AutocompleteState
 from cogitus.ui.widgets.idea_list import (
@@ -36,7 +37,7 @@ from cogitus.ui.widgets.search_results import (
     SearchResultsList,
     _marked_text_to_text,
 )
-from tests.helpers import _focused_widget
+from tests.helpers import _focused_widget, deep_group_chain
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
@@ -306,6 +307,78 @@ async def test_idea_list_panel_uses_stronger_group_label_emphasis(
         assert idea_node.label.plain.startswith(idea.title)
         assert idea_node.label.style == ""
         assert any(span.style == "dim" for span in idea_node.label.spans)
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_renders_nested_groups(
+    service: IdeaService,
+) -> None:
+    """Grouped tree should render child groups under their parents."""
+    parent = service.create_group("parent")
+    child = service.create_group("child", parent_pk=parent.pk)
+    idea = service.create_idea("Nested idea", group_pk=child.pk)
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test() as pilot:
+        panel.load_grouped_ideas(service.list_ideas_grouped())
+        await pilot.pause()
+
+        tree = panel.query_one("#idea-list", Tree)
+        parent_node = next(
+            node
+            for node in tree.root.children
+            if node.data == IdeaTreeNodeData(kind="group", group_pk=parent.pk)
+        )
+        child_node = next(
+            node
+            for node in parent_node.children
+            if node.data == IdeaTreeNodeData(kind="group", group_pk=child.pk)
+        )
+
+        assert child_node.children[0].data == IdeaTreeNodeData(
+            kind="idea",
+            group_pk=child.pk,
+            idea_pk=idea.pk,
+        )
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_loads_deep_group_hierarchy() -> None:
+    """Grouped tree rendering should not recurse through deep hierarchies."""
+    groups = deep_group_chain()
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test():
+        panel.load_grouped_ideas([(group, []) for group in groups])
+
+        assert set(panel._group_nodes_by_pk) == {group.pk for group in groups}
+
+
+@pytest.mark.asyncio
+async def test_idea_list_panel_renders_cyclic_group_component_once() -> None:
+    """Corrupt cyclic group components should remain visible once."""
+    groups = [
+        Group(pk=1, created_at=1, updated_at=1, name="alpha", parent_pk=2),
+        Group(pk=2, created_at=2, updated_at=2, name="beta", parent_pk=1),
+    ]
+    panel = IdeaListPanel(id="idea-list-panel")
+    app = _WidgetApp(panel)
+
+    async with app.run_test():
+        panel.load_grouped_ideas([(group, []) for group in groups])
+
+        tree = panel.query_one("#idea-list", Tree)
+        stack = list(tree.root.children)
+        group_pks: list[int] = []
+        while stack:
+            node = stack.pop()
+            if node.data is not None and node.data.kind == "group":
+                group_pks.append(node.data.group_pk)
+            stack.extend(node.children)
+
+        assert sorted(group_pks) == [1, 2]
 
 
 @pytest.mark.asyncio
