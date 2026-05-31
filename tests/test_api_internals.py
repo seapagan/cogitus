@@ -19,12 +19,22 @@ from cogitus.api.dependencies import get_current_mcp_user, get_service
 from cogitus.api.main import COGITUS_API_DB_PATH_ENV, create_api_app
 from cogitus.api.managers.auth_manager import AuthManager, MCPAuthManager
 from cogitus.api.mcp import create_mcp_app
-from cogitus.api.resources.groups import GROUP_NAMES_RESPONSE_EXAMPLE
-from cogitus.api.resources.ideas import (
+from cogitus.api.openapi_examples import (
+    GROUP_NAMES_RESPONSE_EXAMPLE,
+    GROUP_RESPONSE_EXAMPLE,
+    GROUPS_RESPONSE_EXAMPLE,
+    HEALTH_RESPONSE_EXAMPLE,
+    IDEA_HASH_RESPONSE_EXAMPLE,
     IDEA_REFS_RESPONSE_EXAMPLE,
     IDEA_RESPONSE_EXAMPLE,
+    IDEAS_RESPONSE_EXAMPLE,
+    SNAPSHOT_RESPONSE_EXAMPLE,
+    SNAPSHOT_STATE_RESPONSE_EXAMPLE,
+    TAG_NAMES_RESPONSE_EXAMPLE,
+    TAG_RESPONSE_EXAMPLE,
+    TAGS_RESPONSE_EXAMPLE,
+    TOKEN_RESPONSE_EXAMPLE,
 )
-from cogitus.api.resources.tags import TAG_NAMES_RESPONSE_EXAMPLE
 from cogitus.config import (
     DEFAULT_API_AUTH_JWT_ALGORITHM,
     AppSettings,
@@ -207,6 +217,86 @@ def test_mcp_tool_routes_include_openapi_examples() -> None:
 
         assert response_content["application/json"]["example"] == (
             expected_example
+        )
+
+
+def test_api_routes_include_openapi_response_examples() -> None:
+    """Body-returning API routes should publish realistic examples."""
+    openapi = create_api_app(
+        memory=True,
+        default_group_name="default",
+    ).openapi()
+
+    expected_examples = {
+        ("post", "/api/v1/auth/token", "200"): TOKEN_RESPONSE_EXAMPLE,
+        ("get", "/api/v1/groups", "200"): GROUPS_RESPONSE_EXAMPLE,
+        ("post", "/api/v1/groups", "201"): GROUP_RESPONSE_EXAMPLE,
+        ("get", "/api/v1/groups/names", "200"): GROUP_NAMES_RESPONSE_EXAMPLE,
+        ("get", "/api/v1/groups/{group_pk}", "200"): GROUP_RESPONSE_EXAMPLE,
+        ("put", "/api/v1/groups/{group_pk}", "200"): GROUP_RESPONSE_EXAMPLE,
+        ("get", "/api/v1/ideas", "200"): IDEAS_RESPONSE_EXAMPLE,
+        ("post", "/api/v1/ideas", "201"): IDEA_RESPONSE_EXAMPLE,
+        ("get", "/api/v1/ideas/refs", "200"): IDEA_REFS_RESPONSE_EXAMPLE,
+        (
+            "get",
+            "/api/v1/ideas/{idea_pk}",
+            "200",
+        ): IDEA_RESPONSE_EXAMPLE,
+        (
+            "put",
+            "/api/v1/ideas/{idea_pk}",
+            "200",
+        ): IDEA_RESPONSE_EXAMPLE,
+        (
+            "get",
+            "/api/v1/ideas/{idea_pk}/hash",
+            "200",
+        ): IDEA_HASH_RESPONSE_EXAMPLE,
+        ("get", "/api/v1/snapshot", "200"): SNAPSHOT_RESPONSE_EXAMPLE,
+        (
+            "get",
+            "/api/v1/snapshot/state",
+            "200",
+        ): SNAPSHOT_STATE_RESPONSE_EXAMPLE,
+        ("get", "/api/v1/tags", "200"): TAGS_RESPONSE_EXAMPLE,
+        ("post", "/api/v1/tags", "201"): TAG_RESPONSE_EXAMPLE,
+        ("get", "/api/v1/tags/names", "200"): TAG_NAMES_RESPONSE_EXAMPLE,
+        ("get", "/api/v1/tags/{tag_pk}", "200"): TAG_RESPONSE_EXAMPLE,
+        ("put", "/api/v1/tags/{tag_pk}", "200"): TAG_RESPONSE_EXAMPLE,
+        ("get", "/health", "200"): HEALTH_RESPONSE_EXAMPLE,
+    }
+
+    for (
+        method,
+        path,
+        status_code,
+    ), expected_example in expected_examples.items():
+        response_content = openapi["paths"][path][method]["responses"][
+            status_code
+        ]["content"]
+
+        assert response_content["application/json"]["example"] == (
+            expected_example
+        )
+
+
+def test_delete_routes_do_not_publish_json_response_examples() -> None:
+    """No-content routes should not document fake JSON response bodies."""
+    openapi = create_api_app(
+        memory=True,
+        default_group_name="default",
+    ).openapi()
+
+    delete_paths = (
+        "/api/v1/groups/{group_pk}",
+        "/api/v1/ideas/{idea_pk}",
+        "/api/v1/tags/{tag_pk}",
+    )
+
+    for path in delete_paths:
+        assert (
+            "content"
+            not in openapi["paths"][path]["delete"]["responses"]["204"]
         )
 
 

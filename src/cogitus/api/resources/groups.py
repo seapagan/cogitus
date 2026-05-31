@@ -1,11 +1,17 @@
 """FastAPI routes for groups."""
 
-from typing import Annotated, Final
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
 from cogitus.api.dependencies import get_current_api_user, get_group_manager
 from cogitus.api.managers.group_manager import GroupManager
+from cogitus.api.openapi_examples import (
+    GROUP_NAMES_RESPONSE_EXAMPLE,
+    GROUP_RESPONSE_EXAMPLE,
+    GROUPS_RESPONSE_EXAMPLE,
+    json_response_example,
+)
 from cogitus.api.schemas.request.group import (
     GroupCreateRequest,
     GroupUpdateRequest,
@@ -17,10 +23,14 @@ router = APIRouter(
     tags=["groups"],
     dependencies=[Depends(get_current_api_user)],
 )
-GROUP_NAMES_RESPONSE_EXAMPLE: Final = ["backend", "docs", "ideas"]
 
 
-@router.get("")
+@router.get(
+    "",
+    responses={
+        status.HTTP_200_OK: json_response_example(GROUPS_RESPONSE_EXAMPLE),
+    },
+)
 async def list_groups(
     manager: Annotated[GroupManager, Depends(get_group_manager)],
 ) -> list[GroupResponse]:
@@ -34,13 +44,7 @@ async def list_groups(
     response_description="Group names available for group:<name> filters.",
     summary="List Cogitus group names",
     responses={
-        status.HTTP_200_OK: {
-            "content": {
-                "application/json": {
-                    "example": GROUP_NAMES_RESPONSE_EXAMPLE,
-                },
-            },
-        },
+        status.HTTP_200_OK: json_response_example(GROUP_NAMES_RESPONSE_EXAMPLE),
     },
 )
 async def list_group_names(
@@ -53,6 +57,9 @@ async def list_group_names(
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_201_CREATED: json_response_example(GROUP_RESPONSE_EXAMPLE),
+    },
 )
 async def create_group(
     payload: GroupCreateRequest,
@@ -62,7 +69,12 @@ async def create_group(
     return manager.create_group(payload)
 
 
-@router.get("/{group_pk}")
+@router.get(
+    "/{group_pk}",
+    responses={
+        status.HTTP_200_OK: json_response_example(GROUP_RESPONSE_EXAMPLE),
+    },
+)
 async def get_group(
     group_pk: int,
     manager: Annotated[GroupManager, Depends(get_group_manager)],
@@ -71,7 +83,12 @@ async def get_group(
     return manager.get_group(group_pk)
 
 
-@router.put("/{group_pk}")
+@router.put(
+    "/{group_pk}",
+    responses={
+        status.HTTP_200_OK: json_response_example(GROUP_RESPONSE_EXAMPLE),
+    },
+)
 async def update_group(
     group_pk: int,
     payload: GroupUpdateRequest,

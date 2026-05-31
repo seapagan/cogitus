@@ -1,11 +1,17 @@
 """FastAPI routes for tags."""
 
-from typing import Annotated, Final
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
 from cogitus.api.dependencies import get_current_api_user, get_tag_manager
 from cogitus.api.managers.tag_manager import TagManager
+from cogitus.api.openapi_examples import (
+    TAG_NAMES_RESPONSE_EXAMPLE,
+    TAG_RESPONSE_EXAMPLE,
+    TAGS_RESPONSE_EXAMPLE,
+    json_response_example,
+)
 from cogitus.api.schemas.request.tag import TagCreateRequest, TagUpdateRequest
 from cogitus.api.schemas.response.tag import TagResponse
 
@@ -14,10 +20,14 @@ router = APIRouter(
     tags=["tags"],
     dependencies=[Depends(get_current_api_user)],
 )
-TAG_NAMES_RESPONSE_EXAMPLE: Final = ["sqlite", "search", "mcp"]
 
 
-@router.get("")
+@router.get(
+    "",
+    responses={
+        status.HTTP_200_OK: json_response_example(TAGS_RESPONSE_EXAMPLE),
+    },
+)
 async def list_tags(
     manager: Annotated[TagManager, Depends(get_tag_manager)],
 ) -> list[TagResponse]:
@@ -31,13 +41,7 @@ async def list_tags(
     response_description="Tag names available for tag:<name> filters.",
     summary="List Cogitus tag names",
     responses={
-        status.HTTP_200_OK: {
-            "content": {
-                "application/json": {
-                    "example": TAG_NAMES_RESPONSE_EXAMPLE,
-                },
-            },
-        },
+        status.HTTP_200_OK: json_response_example(TAG_NAMES_RESPONSE_EXAMPLE),
     },
 )
 async def list_tag_names(
@@ -50,6 +54,9 @@ async def list_tag_names(
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_201_CREATED: json_response_example(TAG_RESPONSE_EXAMPLE),
+    },
 )
 async def create_tag(
     payload: TagCreateRequest,
@@ -59,7 +66,12 @@ async def create_tag(
     return manager.create_tag(payload)
 
 
-@router.get("/{tag_pk}")
+@router.get(
+    "/{tag_pk}",
+    responses={
+        status.HTTP_200_OK: json_response_example(TAG_RESPONSE_EXAMPLE),
+    },
+)
 async def get_tag(
     tag_pk: int,
     manager: Annotated[TagManager, Depends(get_tag_manager)],
@@ -68,7 +80,12 @@ async def get_tag(
     return manager.get_tag(tag_pk)
 
 
-@router.put("/{tag_pk}")
+@router.put(
+    "/{tag_pk}",
+    responses={
+        status.HTTP_200_OK: json_response_example(TAG_RESPONSE_EXAMPLE),
+    },
+)
 async def update_tag(
     tag_pk: int,
     payload: TagUpdateRequest,

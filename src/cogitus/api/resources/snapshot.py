@@ -2,13 +2,18 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 
 from cogitus.api.dependencies import (
     get_current_api_user,
     get_snapshot_manager,
 )
 from cogitus.api.managers.snapshot_manager import SnapshotManager
+from cogitus.api.openapi_examples import (
+    SNAPSHOT_RESPONSE_EXAMPLE,
+    SNAPSHOT_STATE_RESPONSE_EXAMPLE,
+    json_response_example,
+)
 from cogitus.api.schemas.response.snapshot import (
     SnapshotResponse,
     SnapshotStateResponse,
@@ -21,7 +26,12 @@ router = APIRouter(
 )
 
 
-@router.get("")
+@router.get(
+    "",
+    responses={
+        status.HTTP_200_OK: json_response_example(SNAPSHOT_RESPONSE_EXAMPLE),
+    },
+)
 async def get_snapshot(
     manager: Annotated[SnapshotManager, Depends(get_snapshot_manager)],
 ) -> SnapshotResponse:
@@ -29,7 +39,14 @@ async def get_snapshot(
     return manager.get_snapshot()
 
 
-@router.get("/state")
+@router.get(
+    "/state",
+    responses={
+        status.HTTP_200_OK: json_response_example(
+            SNAPSHOT_STATE_RESPONSE_EXAMPLE,
+        ),
+    },
+)
 async def get_snapshot_state(
     manager: Annotated[SnapshotManager, Depends(get_snapshot_manager)],
 ) -> SnapshotStateResponse:
