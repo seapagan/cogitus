@@ -20,25 +20,42 @@ from cogitus.api.main import COGITUS_API_DB_PATH_ENV, create_api_app
 from cogitus.api.managers.auth_manager import AuthManager, MCPAuthManager
 from cogitus.api.mcp import create_mcp_app
 from cogitus.api.openapi_examples import (
+    API_AUTH_ERROR_RESPONSE,
+    API_AUTH_NOT_CONFIGURED_RESPONSE,
+    AUTH_TOKEN_ERROR_RESPONSE,
     GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    GROUP_CREATE_VALIDATION_ERROR_RESPONSE,
+    GROUP_DELETE_CONFLICT_RESPONSE,
+    GROUP_DELETE_NOT_FOUND_RESPONSE,
     GROUP_NAMES_RESPONSE_EXAMPLE,
+    GROUP_PARENT_NOT_FOUND_RESPONSE,
     GROUP_RESPONSE_EXAMPLE,
+    GROUP_UPDATE_CONFLICT_RESPONSE,
     GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    GROUP_UPDATE_VALIDATION_ERROR_RESPONSE,
     GROUPS_RESPONSE_EXAMPLE,
     HEALTH_RESPONSE_EXAMPLE,
+    IDEA_CONFLICT_RESPONSE,
     IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES,
     IDEA_DELETE_REQUEST_OPENAPI_EXAMPLES,
+    IDEA_DELETE_VALIDATION_ERROR_RESPONSE,
+    IDEA_GROUP_NOT_FOUND_RESPONSE,
     IDEA_HASH_RESPONSE_EXAMPLE,
     IDEA_REFS_RESPONSE_EXAMPLE,
     IDEA_RESPONSE_EXAMPLE,
+    IDEA_UPDATE_NOT_FOUND_RESPONSE,
     IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    IDEA_UPDATE_VALIDATION_ERROR_RESPONSE,
     IDEAS_RESPONSE_EXAMPLE,
     SNAPSHOT_RESPONSE_EXAMPLE,
     SNAPSHOT_STATE_RESPONSE_EXAMPLE,
+    TAG_CONFLICT_RESPONSE,
     TAG_CREATE_REQUEST_OPENAPI_EXAMPLES,
     TAG_NAMES_RESPONSE_EXAMPLE,
     TAG_RESPONSE_EXAMPLE,
     TAG_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    TAG_UPDATE_VALIDATION_ERROR_RESPONSE,
+    TAG_VALIDATION_ERROR_RESPONSE,
     TAGS_RESPONSE_EXAMPLE,
     TOKEN_REQUEST_OPENAPI_EXAMPLES,
     TOKEN_RESPONSE_EXAMPLE,
@@ -368,6 +385,107 @@ def test_write_routes_include_openapi_request_examples() -> None:
         ][content_type]
 
         assert request_content["examples"] == expected_example
+
+
+def test_api_routes_include_openapi_error_examples() -> None:
+    """Documented JSON error responses should publish realistic examples."""
+    openapi = create_api_app(
+        memory=True,
+        default_group_name="default",
+    ).openapi()
+
+    expected_responses = {
+        ("post", "/api/v1/auth/token", "401"): AUTH_TOKEN_ERROR_RESPONSE,
+        ("get", "/api/v1/ideas", "401"): API_AUTH_ERROR_RESPONSE,
+        (
+            "get",
+            "/api/v1/ideas",
+            "503",
+        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+        (
+            "post",
+            "/api/v1/ideas",
+            "404",
+        ): IDEA_GROUP_NOT_FOUND_RESPONSE,
+        (
+            "put",
+            "/api/v1/ideas/{idea_pk}",
+            "404",
+        ): IDEA_UPDATE_NOT_FOUND_RESPONSE,
+        (
+            "put",
+            "/api/v1/ideas/{idea_pk}",
+            "409",
+        ): IDEA_CONFLICT_RESPONSE,
+        (
+            "put",
+            "/api/v1/ideas/{idea_pk}",
+            "422",
+        ): IDEA_UPDATE_VALIDATION_ERROR_RESPONSE,
+        (
+            "delete",
+            "/api/v1/ideas/{idea_pk}",
+            "422",
+        ): IDEA_DELETE_VALIDATION_ERROR_RESPONSE,
+        (
+            "post",
+            "/api/v1/groups",
+            "404",
+        ): GROUP_PARENT_NOT_FOUND_RESPONSE,
+        (
+            "post",
+            "/api/v1/groups",
+            "422",
+        ): GROUP_CREATE_VALIDATION_ERROR_RESPONSE,
+        (
+            "put",
+            "/api/v1/groups/{group_pk}",
+            "409",
+        ): GROUP_UPDATE_CONFLICT_RESPONSE,
+        (
+            "put",
+            "/api/v1/groups/{group_pk}",
+            "422",
+        ): GROUP_UPDATE_VALIDATION_ERROR_RESPONSE,
+        (
+            "delete",
+            "/api/v1/groups/{group_pk}",
+            "404",
+        ): GROUP_DELETE_NOT_FOUND_RESPONSE,
+        (
+            "delete",
+            "/api/v1/groups/{group_pk}",
+            "409",
+        ): GROUP_DELETE_CONFLICT_RESPONSE,
+        ("post", "/api/v1/tags", "409"): TAG_CONFLICT_RESPONSE,
+        ("post", "/api/v1/tags", "422"): TAG_VALIDATION_ERROR_RESPONSE,
+        (
+            "put",
+            "/api/v1/tags/{tag_pk}",
+            "422",
+        ): TAG_UPDATE_VALIDATION_ERROR_RESPONSE,
+    }
+
+    for (
+        method,
+        path,
+        status_code,
+    ), expected_response in expected_responses.items():
+        response = openapi["paths"][path][method]["responses"][status_code]
+
+        assert response == expected_response
+
+    for methods in openapi["paths"].values():
+        for operation in methods.values():
+            for status_code, response in operation["responses"].items():
+                if status_code.startswith("2"):
+                    continue
+                content = response.get("content", {})
+                json_content = content.get("application/json")
+                if json_content is None:
+                    continue
+
+                assert {"example", "examples"} & json_content.keys()
 
 
 def test_token_endpoint_returns_service_unavailable_when_auth_unconfigured(

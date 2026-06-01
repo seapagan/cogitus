@@ -6,6 +6,86 @@ from typing import Final
 
 JsonResponseExample = dict[str, dict[str, dict[str, object]]]
 OpenApiExamples = dict[str, dict[str, object]]
+OpenApiResponse = dict[str, object]
+
+
+def _detail(message: str) -> dict[str, str]:
+    return {"detail": message}
+
+
+def _string_too_short_error(field: str) -> dict[str, object]:
+    return {
+        "detail": [
+            {
+                "type": "string_too_short",
+                "loc": ["body", field],
+                "msg": "String should have at least 1 character",
+                "input": "   ",
+                "ctx": {"min_length": 1},
+            },
+        ],
+    }
+
+
+def _path_int_error(parameter: str) -> dict[str, object]:
+    return {
+        "detail": [
+            {
+                "type": "int_parsing",
+                "loc": ["path", parameter],
+                "msg": (
+                    "Input should be a valid integer, unable to parse string "
+                    "as an integer"
+                ),
+                "input": "abc",
+            },
+        ],
+    }
+
+
+def _query_limit_error() -> dict[str, object]:
+    return {
+        "detail": [
+            {
+                "type": "greater_than_equal",
+                "loc": ["query", "limit"],
+                "msg": "Input should be greater than or equal to 1",
+                "input": "0",
+                "ctx": {"ge": 1},
+            },
+        ],
+    }
+
+
+def _body_int_error(field: str) -> dict[str, object]:
+    return {
+        "detail": [
+            {
+                "type": "int_parsing",
+                "loc": ["body", field],
+                "msg": (
+                    "Input should be a valid integer, unable to parse string "
+                    "as an integer"
+                ),
+                "input": "abc",
+            },
+        ],
+    }
+
+
+def _body_ge_error(field: str) -> dict[str, object]:
+    return {
+        "detail": [
+            {
+                "type": "greater_than_equal",
+                "loc": ["body", field],
+                "msg": "Input should be greater than or equal to 1",
+                "input": 0,
+                "ctx": {"ge": 1},
+            },
+        ],
+    }
+
 
 GROUP_RESPONSE_EXAMPLE: Final = {
     "pk": 4,
@@ -252,6 +332,374 @@ TOKEN_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
     },
 }
 HEALTH_RESPONSE_EXAMPLE: Final = {"status": "ok"}
+
+AUTH_TOKEN_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Authentication failed.",
+    "content": {
+        "application/json": {
+            "example": _detail("Incorrect username or password"),
+        },
+    },
+}
+API_AUTH_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Bearer token is missing or invalid.",
+    "content": {
+        "application/json": {
+            "examples": {
+                "missing_token": {
+                    "summary": "Call a protected endpoint without a token",
+                    "value": _detail("Not authenticated"),
+                },
+                "invalid_token": {
+                    "summary": (
+                        "Call a protected endpoint with an invalid token"
+                    ),
+                    "value": _detail("Could not validate credentials"),
+                },
+            },
+        },
+    },
+}
+API_AUTH_NOT_CONFIGURED_RESPONSE: Final[OpenApiResponse] = {
+    "description": "API authentication has not been configured.",
+    "content": {
+        "application/json": {
+            "example": _detail("API authentication is not configured"),
+        },
+    },
+}
+TOKEN_FORM_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Token form validation failed.",
+    "content": {
+        "application/json": {
+            "example": {
+                "detail": [
+                    {
+                        "type": "missing",
+                        "loc": ["body", "username"],
+                        "msg": "Field required",
+                        "input": {"password": "correct horse battery staple"},
+                    },
+                ],
+            },
+        },
+    },
+}
+IDEA_NOT_FOUND_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Idea was not found.",
+    "content": {
+        "application/json": {
+            "example": _detail("Idea 99999 not found"),
+        },
+    },
+}
+IDEA_GROUP_NOT_FOUND_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Selected idea group was not found.",
+    "content": {
+        "application/json": {
+            "example": _detail("Group with pk=99999 not found"),
+        },
+    },
+}
+IDEA_UPDATE_NOT_FOUND_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Idea or selected idea group was not found.",
+    "content": {
+        "application/json": {
+            "examples": {
+                "missing_idea": {
+                    "summary": "Update an idea that no longer exists",
+                    "value": _detail("Idea 99999 not found"),
+                },
+                "missing_group": {
+                    "summary": "Move an idea to a missing group",
+                    "value": _detail("Group with pk=99999 not found"),
+                },
+            },
+        },
+    },
+}
+IDEA_CONFLICT_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Idea update or delete was rejected.",
+    "content": {
+        "application/json": {
+            "example": _detail("Idea has been modified on the server"),
+        },
+    },
+}
+IDEA_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Idea create request validation failed.",
+    "content": {
+        "application/json": {
+            "examples": {
+                "blank_title": {
+                    "summary": "Create an idea with a blank title",
+                    "value": _string_too_short_error("title"),
+                },
+                "invalid_group_pk": {
+                    "summary": "Create an idea with a non-numeric group key",
+                    "value": _body_int_error("group_pk"),
+                },
+            },
+        },
+    },
+}
+IDEA_UPDATE_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Idea update request validation failed.",
+    "content": {
+        "application/json": {
+            "examples": {
+                "invalid_path": {
+                    "summary": "Use a non-numeric idea primary key",
+                    "value": _path_int_error("idea_pk"),
+                },
+                "blank_title": {
+                    "summary": "Update an idea with a blank title",
+                    "value": _string_too_short_error("title"),
+                },
+                "invalid_group_pk": {
+                    "summary": "Move an idea with a non-numeric group key",
+                    "value": _body_int_error("group_pk"),
+                },
+            },
+        },
+    },
+}
+IDEA_DELETE_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Idea delete request validation failed.",
+    "content": {
+        "application/json": {
+            "examples": {
+                "invalid_path": {
+                    "summary": "Use a non-numeric idea primary key",
+                    "value": _path_int_error("idea_pk"),
+                },
+                "invalid_timestamp": {
+                    "summary": "Send a non-numeric freshness timestamp",
+                    "value": _body_int_error("last_known_updated_at"),
+                },
+            },
+        },
+    },
+}
+IDEA_QUERY_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Idea query parameters are invalid.",
+    "content": {
+        "application/json": {
+            "example": _query_limit_error(),
+        },
+    },
+}
+IDEA_PATH_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Idea path parameter is invalid.",
+    "content": {
+        "application/json": {
+            "example": _path_int_error("idea_pk"),
+        },
+    },
+}
+GROUP_NOT_FOUND_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Group was not found.",
+    "content": {
+        "application/json": {
+            "example": _detail("Group 99999 not found"),
+        },
+    },
+}
+GROUP_PARENT_NOT_FOUND_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Parent group was not found.",
+    "content": {
+        "application/json": {
+            "example": _detail("Parent group not found"),
+        },
+    },
+}
+GROUP_CONFLICT_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Group operation conflicts with existing data.",
+    "content": {
+        "application/json": {
+            "example": _detail('Group "backend" already exists'),
+        },
+    },
+}
+GROUP_CREATE_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Group create request validation failed.",
+    "content": {
+        "application/json": {
+            "examples": {
+                "blank_name": {
+                    "summary": "Create a group with a blank name",
+                    "value": _string_too_short_error("name"),
+                },
+                "invalid_parent_pk": {
+                    "summary": "Nest a group under an invalid parent key",
+                    "value": _body_ge_error("parent_pk"),
+                },
+            },
+        },
+    },
+}
+GROUP_UPDATE_CONFLICT_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Group rename conflicts with existing data.",
+    "content": {
+        "application/json": {
+            "examples": {
+                "duplicate_name": {
+                    "summary": "Rename a group to an existing name",
+                    "value": _detail('Group "backend" already exists'),
+                },
+                "default_group": {
+                    "summary": "Rename the default group",
+                    "value": _detail("Default group cannot be renamed"),
+                },
+            },
+        },
+    },
+}
+GROUP_UPDATE_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Group update request validation failed.",
+    "content": {
+        "application/json": {
+            "examples": {
+                "invalid_path": {
+                    "summary": "Use a non-numeric group primary key",
+                    "value": _path_int_error("group_pk"),
+                },
+                "blank_name": {
+                    "summary": "Rename a group to a blank name",
+                    "value": _string_too_short_error("name"),
+                },
+            },
+        },
+    },
+}
+GROUP_PATH_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Group path parameter is invalid.",
+    "content": {
+        "application/json": {
+            "example": _path_int_error("group_pk"),
+        },
+    },
+}
+GROUP_DELETE_NOT_FOUND_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Group or target group was not found.",
+    "content": {
+        "application/json": {
+            "examples": {
+                "missing_group": {
+                    "summary": "Delete a group that no longer exists",
+                    "value": _detail("Group 99999 not found"),
+                },
+                "missing_target": {
+                    "summary": "Move ideas to a missing target group",
+                    "value": _detail("Target group not found"),
+                },
+            },
+        },
+    },
+}
+GROUP_DELETE_CONFLICT_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Group delete conflicts with existing data.",
+    "content": {
+        "application/json": {
+            "examples": {
+                "default_group": {
+                    "summary": "Delete the default group",
+                    "value": _detail("Default group cannot be deleted"),
+                },
+                "child_groups": {
+                    "summary": "Delete a group that has child groups",
+                    "value": _detail(
+                        "Group with child groups cannot be deleted"
+                    ),
+                },
+                "same_target": {
+                    "summary": "Move ideas into the group being deleted",
+                    "value": _detail(
+                        "Cannot move ideas into the same group being deleted"
+                    ),
+                },
+            },
+        },
+    },
+}
+GROUP_DELETE_QUERY_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Group delete query parameters are invalid.",
+    "content": {
+        "application/json": {
+            "examples": {
+                "invalid_path": {
+                    "summary": "Use a non-numeric group primary key",
+                    "value": _path_int_error("group_pk"),
+                },
+                "invalid_target": {
+                    "summary": "Move ideas to an invalid target group key",
+                    "value": {
+                        "detail": [
+                            {
+                                "type": "greater_than_equal",
+                                "loc": ["query", "move_to_group_pk"],
+                                "msg": (
+                                    "Input should be greater than or equal to 1"
+                                ),
+                                "input": "0",
+                                "ctx": {"ge": 1},
+                            },
+                        ],
+                    },
+                },
+            },
+        },
+    },
+}
+TAG_NOT_FOUND_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Tag was not found.",
+    "content": {
+        "application/json": {
+            "example": _detail("Tag 99999 not found"),
+        },
+    },
+}
+TAG_CONFLICT_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Tag operation conflicts with existing data.",
+    "content": {
+        "application/json": {
+            "example": _detail('Tag "python" already exists'),
+        },
+    },
+}
+TAG_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Tag request validation failed.",
+    "content": {
+        "application/json": {
+            "example": _detail("Tag name cannot be empty"),
+        },
+    },
+}
+TAG_UPDATE_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Tag update request validation failed.",
+    "content": {
+        "application/json": {
+            "examples": {
+                "invalid_path": {
+                    "summary": "Use a non-numeric tag primary key",
+                    "value": _path_int_error("tag_pk"),
+                },
+                "blank_name": {
+                    "summary": "Rename a tag to a blank name",
+                    "value": _detail("Tag name cannot be empty"),
+                },
+            },
+        },
+    },
+}
+TAG_PATH_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
+    "description": "Tag path parameter is invalid.",
+    "content": {
+        "application/json": {
+            "example": _path_int_error("tag_pk"),
+        },
+    },
+}
 
 
 def json_response_example(example: object) -> JsonResponseExample:

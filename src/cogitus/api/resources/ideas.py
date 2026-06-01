@@ -7,12 +7,23 @@ from fastapi import APIRouter, Body, Depends, Path, Query, status
 from cogitus.api.dependencies import get_current_api_user, get_idea_manager
 from cogitus.api.managers.idea_manager import IdeaManager
 from cogitus.api.openapi_examples import (
+    API_AUTH_ERROR_RESPONSE,
+    API_AUTH_NOT_CONFIGURED_RESPONSE,
+    IDEA_CONFLICT_RESPONSE,
     IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES,
     IDEA_DELETE_REQUEST_OPENAPI_EXAMPLES,
+    IDEA_DELETE_VALIDATION_ERROR_RESPONSE,
+    IDEA_GROUP_NOT_FOUND_RESPONSE,
     IDEA_HASH_RESPONSE_EXAMPLE,
+    IDEA_NOT_FOUND_RESPONSE,
+    IDEA_PATH_VALIDATION_ERROR_RESPONSE,
+    IDEA_QUERY_VALIDATION_ERROR_RESPONSE,
     IDEA_REFS_RESPONSE_EXAMPLE,
     IDEA_RESPONSE_EXAMPLE,
+    IDEA_UPDATE_NOT_FOUND_RESPONSE,
     IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    IDEA_UPDATE_VALIDATION_ERROR_RESPONSE,
+    IDEA_VALIDATION_ERROR_RESPONSE,
     IDEAS_RESPONSE_EXAMPLE,
     json_response_example,
 )
@@ -31,6 +42,10 @@ router = APIRouter(
     prefix="/api/v1/ideas",
     tags=["ideas"],
     dependencies=[Depends(get_current_api_user)],
+    responses={
+        status.HTTP_401_UNAUTHORIZED: API_AUTH_ERROR_RESPONSE,
+        status.HTTP_503_SERVICE_UNAVAILABLE: API_AUTH_NOT_CONFIGURED_RESPONSE,
+    },
 )
 
 
@@ -41,6 +56,9 @@ router = APIRouter(
     summary="Search or list Cogitus ideas",
     responses={
         status.HTTP_200_OK: json_response_example(IDEAS_RESPONSE_EXAMPLE),
+        status.HTTP_422_UNPROCESSABLE_CONTENT: (
+            IDEA_QUERY_VALIDATION_ERROR_RESPONSE
+        ),
     },
 )
 async def list_ideas(
@@ -83,6 +101,9 @@ async def list_ideas(
     summary="Search or list Cogitus idea references",
     responses={
         status.HTTP_200_OK: json_response_example(IDEA_REFS_RESPONSE_EXAMPLE),
+        status.HTTP_422_UNPROCESSABLE_CONTENT: (
+            IDEA_QUERY_VALIDATION_ERROR_RESPONSE
+        ),
     },
 )
 async def list_idea_refs(
@@ -122,6 +143,8 @@ async def list_idea_refs(
     status_code=status.HTTP_201_CREATED,
     responses={
         status.HTTP_201_CREATED: json_response_example(IDEA_RESPONSE_EXAMPLE),
+        status.HTTP_404_NOT_FOUND: IDEA_GROUP_NOT_FOUND_RESPONSE,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: IDEA_VALIDATION_ERROR_RESPONSE,
     },
 )
 async def create_idea(
@@ -139,6 +162,10 @@ async def create_idea(
     "/{idea_pk}/hash",
     responses={
         status.HTTP_200_OK: json_response_example(IDEA_HASH_RESPONSE_EXAMPLE),
+        status.HTTP_404_NOT_FOUND: IDEA_NOT_FOUND_RESPONSE,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: (
+            IDEA_PATH_VALIDATION_ERROR_RESPONSE
+        ),
     },
 )
 async def get_idea_hash(
@@ -156,6 +183,10 @@ async def get_idea_hash(
     summary="Get a Cogitus idea by primary key",
     responses={
         status.HTTP_200_OK: json_response_example(IDEA_RESPONSE_EXAMPLE),
+        status.HTTP_404_NOT_FOUND: IDEA_NOT_FOUND_RESPONSE,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: (
+            IDEA_PATH_VALIDATION_ERROR_RESPONSE
+        ),
     },
 )
 async def get_idea(
@@ -181,6 +212,11 @@ async def get_idea(
     "/{idea_pk}",
     responses={
         status.HTTP_200_OK: json_response_example(IDEA_RESPONSE_EXAMPLE),
+        status.HTTP_404_NOT_FOUND: IDEA_UPDATE_NOT_FOUND_RESPONSE,
+        status.HTTP_409_CONFLICT: IDEA_CONFLICT_RESPONSE,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: (
+            IDEA_UPDATE_VALIDATION_ERROR_RESPONSE
+        ),
     },
 )
 async def update_idea(
@@ -195,7 +231,17 @@ async def update_idea(
     return manager.update_idea(idea_pk, payload)
 
 
-@router.delete("/{idea_pk}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{idea_pk}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_404_NOT_FOUND: IDEA_NOT_FOUND_RESPONSE,
+        status.HTTP_409_CONFLICT: IDEA_CONFLICT_RESPONSE,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: (
+            IDEA_DELETE_VALIDATION_ERROR_RESPONSE
+        ),
+    },
+)
 async def delete_idea(
     idea_pk: int,
     payload: Annotated[

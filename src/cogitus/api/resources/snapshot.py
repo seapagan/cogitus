@@ -10,6 +10,8 @@ from cogitus.api.dependencies import (
 )
 from cogitus.api.managers.snapshot_manager import SnapshotManager
 from cogitus.api.openapi_examples import (
+    API_AUTH_ERROR_RESPONSE,
+    API_AUTH_NOT_CONFIGURED_RESPONSE,
     SNAPSHOT_RESPONSE_EXAMPLE,
     SNAPSHOT_STATE_RESPONSE_EXAMPLE,
     json_response_example,
@@ -23,6 +25,10 @@ router = APIRouter(
     prefix="/api/v1/snapshot",
     tags=["snapshot"],
     dependencies=[Depends(get_current_api_user)],
+    responses={
+        status.HTTP_401_UNAUTHORIZED: API_AUTH_ERROR_RESPONSE,
+        status.HTTP_503_SERVICE_UNAVAILABLE: API_AUTH_NOT_CONFIGURED_RESPONSE,
+    },
 )
 
 

@@ -7,10 +7,22 @@ from fastapi import APIRouter, Body, Depends, Query, status
 from cogitus.api.dependencies import get_current_api_user, get_group_manager
 from cogitus.api.managers.group_manager import GroupManager
 from cogitus.api.openapi_examples import (
+    API_AUTH_ERROR_RESPONSE,
+    API_AUTH_NOT_CONFIGURED_RESPONSE,
+    GROUP_CONFLICT_RESPONSE,
     GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    GROUP_CREATE_VALIDATION_ERROR_RESPONSE,
+    GROUP_DELETE_CONFLICT_RESPONSE,
+    GROUP_DELETE_NOT_FOUND_RESPONSE,
+    GROUP_DELETE_QUERY_VALIDATION_ERROR_RESPONSE,
     GROUP_NAMES_RESPONSE_EXAMPLE,
+    GROUP_NOT_FOUND_RESPONSE,
+    GROUP_PARENT_NOT_FOUND_RESPONSE,
+    GROUP_PATH_VALIDATION_ERROR_RESPONSE,
     GROUP_RESPONSE_EXAMPLE,
+    GROUP_UPDATE_CONFLICT_RESPONSE,
     GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    GROUP_UPDATE_VALIDATION_ERROR_RESPONSE,
     GROUPS_RESPONSE_EXAMPLE,
     json_response_example,
 )
@@ -24,6 +36,10 @@ router = APIRouter(
     prefix="/api/v1/groups",
     tags=["groups"],
     dependencies=[Depends(get_current_api_user)],
+    responses={
+        status.HTTP_401_UNAUTHORIZED: API_AUTH_ERROR_RESPONSE,
+        status.HTTP_503_SERVICE_UNAVAILABLE: API_AUTH_NOT_CONFIGURED_RESPONSE,
+    },
 )
 
 
@@ -61,6 +77,11 @@ async def list_group_names(
     status_code=status.HTTP_201_CREATED,
     responses={
         status.HTTP_201_CREATED: json_response_example(GROUP_RESPONSE_EXAMPLE),
+        status.HTTP_404_NOT_FOUND: GROUP_PARENT_NOT_FOUND_RESPONSE,
+        status.HTTP_409_CONFLICT: GROUP_CONFLICT_RESPONSE,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: (
+            GROUP_CREATE_VALIDATION_ERROR_RESPONSE
+        ),
     },
 )
 async def create_group(
@@ -78,6 +99,10 @@ async def create_group(
     "/{group_pk}",
     responses={
         status.HTTP_200_OK: json_response_example(GROUP_RESPONSE_EXAMPLE),
+        status.HTTP_404_NOT_FOUND: GROUP_NOT_FOUND_RESPONSE,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: (
+            GROUP_PATH_VALIDATION_ERROR_RESPONSE
+        ),
     },
 )
 async def get_group(
@@ -92,6 +117,11 @@ async def get_group(
     "/{group_pk}",
     responses={
         status.HTTP_200_OK: json_response_example(GROUP_RESPONSE_EXAMPLE),
+        status.HTTP_404_NOT_FOUND: GROUP_NOT_FOUND_RESPONSE,
+        status.HTTP_409_CONFLICT: GROUP_UPDATE_CONFLICT_RESPONSE,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: (
+            GROUP_UPDATE_VALIDATION_ERROR_RESPONSE
+        ),
     },
 )
 async def update_group(
@@ -106,7 +136,17 @@ async def update_group(
     return manager.update_group(group_pk, payload)
 
 
-@router.delete("/{group_pk}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{group_pk}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_404_NOT_FOUND: GROUP_DELETE_NOT_FOUND_RESPONSE,
+        status.HTTP_409_CONFLICT: GROUP_DELETE_CONFLICT_RESPONSE,
+        status.HTTP_422_UNPROCESSABLE_CONTENT: (
+            GROUP_DELETE_QUERY_VALIDATION_ERROR_RESPONSE
+        ),
+    },
+)
 async def delete_group(
     group_pk: int,
     manager: Annotated[GroupManager, Depends(get_group_manager)],
