@@ -32,8 +32,18 @@ GROUPS_RESPONSE_EXAMPLE: Final = [
 ]
 GROUP_NAMES_RESPONSE_EXAMPLE: Final = ["api", "backend", "default"]
 GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
+    "root_group": {
+        "summary": "Create a root group",
+        "description": "Omit parent_pk to create a top-level group.",
+        "value": {
+            "name": "backend",
+        },
+    },
     "child_group": {
         "summary": "Create a child group",
+        "description": (
+            "Include parent_pk to nest the group under another group."
+        ),
         "value": {
             "name": "api",
             "parent_pk": 3,
@@ -143,8 +153,17 @@ IDEA_HASH_RESPONSE_EXAMPLE: Final = {
     "detail_hash": IDEA_RESPONSE_EXAMPLE["detail_hash"],
 }
 IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
-    "create_idea": {
-        "summary": "Create an idea in a group",
+    "default_group_idea": {
+        "summary": "Create an idea in the default group",
+        "description": "Omit group_pk to use the configured default group.",
+        "value": {
+            "title": "Capture release checklist",
+            "body": "List the final checks before publishing the next release.",
+            "tags": ["release", "todo"],
+        },
+    },
+    "grouped_idea": {
+        "summary": "Create an idea in a specific group",
         "value": {
             "title": "Compare SQLite FTS query strategies",
             "body": (
@@ -158,7 +177,11 @@ IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
 }
 IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
     "replace_idea": {
-        "summary": "Replace an idea with optimistic locking",
+        "summary": "Replace an idea after reading it",
+        "description": (
+            "last_known_updated_at lets the server reject the update if the "
+            "idea changed since it was read."
+        ),
         "value": {
             "title": "Compare SQLite FTS query strategies",
             "body": (
@@ -170,13 +193,33 @@ IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
             "last_known_updated_at": 1763904000,
         },
     },
+    "keep_existing_tags": {
+        "summary": "Update text and keep existing tags",
+        "description": "Omit tags to leave the current tag list unchanged.",
+        "value": {
+            "title": "Compare SQLite FTS query strategies",
+            "body": (
+                "Capture benchmark notes and choose the search query plan "
+                "for the next release."
+            ),
+            "group_pk": 3,
+        },
+    },
 }
 IDEA_DELETE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
-    "delete_with_lock": {
-        "summary": "Delete an idea with optimistic locking",
+    "delete_after_reading": {
+        "summary": "Delete an idea after reading it",
+        "description": (
+            "last_known_updated_at lets the server reject the delete if the "
+            "idea changed since it was read."
+        ),
         "value": {
             "last_known_updated_at": 1763904000,
         },
+    },
+    "delete_without_freshness_check": {
+        "summary": "Delete an idea without a freshness check",
+        "value": {},
     },
 }
 
