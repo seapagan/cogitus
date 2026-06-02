@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import jwt
 import pytest
@@ -108,6 +108,15 @@ def isolated_app_settings() -> Generator[None]:
         yield
     finally:
         AppSettings._instances.clear()
+
+
+@pytest.fixture(scope="module")
+def openapi_schema() -> dict[str, Any]:
+    """Return the generated OpenAPI schema shared by documentation tests."""
+    return create_api_app(
+        memory=True,
+        default_group_name="default",
+    ).openapi()
 
 
 def test_get_service_raises_when_uninitialized() -> None:
@@ -245,13 +254,10 @@ async def test_create_mcp_app_lifespan_starts_internal_api(
     assert response.json() == []
 
 
-def test_mcp_tool_routes_include_openapi_examples() -> None:
+def test_mcp_tool_routes_include_openapi_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
     """MCP-exposed routes should publish realistic OpenAPI examples."""
-    openapi = create_api_app(
-        memory=True,
-        default_group_name="default",
-    ).openapi()
-
     expected_examples: dict[str, object] = {
         "/api/v1/ideas/refs": IDEA_REFS_RESPONSE_EXAMPLE,
         "/api/v1/ideas/{idea_pk}": IDEA_RESPONSE_EXAMPLE,
@@ -260,22 +266,19 @@ def test_mcp_tool_routes_include_openapi_examples() -> None:
     }
 
     for path, expected_example in expected_examples.items():
-        response_content = openapi["paths"][path]["get"]["responses"]["200"][
-            "content"
-        ]
+        response_content = openapi_schema["paths"][path]["get"]["responses"][
+            "200"
+        ]["content"]
 
         assert response_content["application/json"]["example"] == (
             expected_example
         )
 
 
-def test_api_routes_include_openapi_response_examples() -> None:
+def test_api_routes_include_openapi_response_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
     """Body-returning API routes should publish realistic examples."""
-    openapi = create_api_app(
-        memory=True,
-        default_group_name="default",
-    ).openapi()
-
     expected_examples = {
         ("post", "/api/v1/auth/token", "200"): TOKEN_RESPONSE_EXAMPLE,
         ("get", "/api/v1/groups", "200"): GROUPS_RESPONSE_EXAMPLE,
@@ -317,7 +320,7 @@ def test_api_routes_include_openapi_response_examples() -> None:
         path,
         status_code,
     ), expected_example in expected_examples.items():
-        response_content = openapi["paths"][path][method]["responses"][
+        response_content = openapi_schema["paths"][path][method]["responses"][
             status_code
         ]["content"]
 
@@ -340,7 +343,7 @@ def test_api_routes_include_openapi_response_examples() -> None:
         path,
         status_code,
     ), expected_group_openapi_examples in expected_group_examples.items():
-        response_content = openapi["paths"][path][method]["responses"][
+        response_content = openapi_schema["paths"][path][method]["responses"][
             status_code
         ]["content"]
 
@@ -369,38 +372,35 @@ def test_openapi_response_examples_match_response_models() -> None:
     TypeAdapter(TagResponse).validate_python(TAG_RESPONSE_EXAMPLE)
 
 
-def test_openapi_examples_preserve_runtime_shapes() -> None:
+def test_openapi_examples_preserve_runtime_shapes(
+    openapi_schema: dict[str, Any],
+) -> None:
     """Generated examples should preserve runtime-significant shapes."""
-    openapi = create_api_app(
-        memory=True,
-        default_group_name="default",
-    ).openapi()
-
-    groups_example = openapi["paths"]["/api/v1/groups"]["get"]["responses"][
-        "200"
-    ]["content"]["application/json"]["example"]
+    groups_example = openapi_schema["paths"]["/api/v1/groups"]["get"][
+        "responses"
+    ]["200"]["content"]["application/json"]["example"]
     assert groups_example[1]["parent_pk"] is None
     assert groups_example[2]["parent_pk"] is None
 
-    group_examples = openapi["paths"]["/api/v1/groups/{group_pk}"]["get"][
-        "responses"
-    ]["200"]["content"]["application/json"]["examples"]
+    group_examples = openapi_schema["paths"]["/api/v1/groups/{group_pk}"][
+        "get"
+    ]["responses"]["200"]["content"]["application/json"]["examples"]
     assert group_examples["root_group"]["value"]["parent_pk"] is None
     assert group_examples["child_group"]["value"]["parent_pk"] == 3
 
-    idea_refs_example = openapi["paths"]["/api/v1/ideas/refs"]["get"][
+    idea_refs_example = openapi_schema["paths"]["/api/v1/ideas/refs"]["get"][
         "responses"
     ]["200"]["content"]["application/json"]["example"]
     assert [idea["pk"] for idea in idea_refs_example] == [43, 42]
 
-    token_error = openapi["paths"]["/api/v1/auth/token"]["post"]["responses"][
-        "422"
-    ]["content"]["application/json"]["example"]
+    token_error = openapi_schema["paths"]["/api/v1/auth/token"]["post"][
+        "responses"
+    ]["422"]["content"]["application/json"]["example"]
     assert token_error["detail"][0]["input"] is None
 
-    tag_errors = openapi["paths"]["/api/v1/tags"]["post"]["responses"]["422"][
-        "content"
-    ]["application/json"]["examples"]
+    tag_errors = openapi_schema["paths"]["/api/v1/tags"]["post"]["responses"][
+        "422"
+    ]["content"]["application/json"]["examples"]
     assert tag_errors["missing_name"]["value"]["detail"][0]["loc"] == [
         "body",
         "name",
@@ -410,13 +410,10 @@ def test_openapi_examples_preserve_runtime_shapes() -> None:
     }
 
 
-def test_delete_routes_do_not_publish_json_response_examples() -> None:
+def test_delete_routes_do_not_publish_json_response_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
     """No-content routes should not document fake JSON response bodies."""
-    openapi = create_api_app(
-        memory=True,
-        default_group_name="default",
-    ).openapi()
-
     delete_paths = (
         "/api/v1/groups/{group_pk}",
         "/api/v1/ideas/{idea_pk}",
@@ -426,17 +423,14 @@ def test_delete_routes_do_not_publish_json_response_examples() -> None:
     for path in delete_paths:
         assert (
             "content"
-            not in openapi["paths"][path]["delete"]["responses"]["204"]
+            not in openapi_schema["paths"][path]["delete"]["responses"]["204"]
         )
 
 
-def test_write_routes_include_openapi_request_examples() -> None:
+def test_write_routes_include_openapi_request_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
     """Write routes should publish realistic request body examples."""
-    openapi = create_api_app(
-        memory=True,
-        default_group_name="default",
-    ).openapi()
-
     expected_examples = {
         (
             "post",
@@ -485,20 +479,17 @@ def test_write_routes_include_openapi_request_examples() -> None:
         path,
         content_type,
     ), expected_example in expected_examples.items():
-        request_content = openapi["paths"][path][method]["requestBody"][
+        request_content = openapi_schema["paths"][path][method]["requestBody"][
             "content"
         ][content_type]
 
         assert request_content["examples"] == expected_example
 
 
-def test_api_routes_include_openapi_error_examples() -> None:
+def test_api_routes_include_openapi_error_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
     """Documented JSON error responses should publish realistic examples."""
-    openapi = create_api_app(
-        memory=True,
-        default_group_name="default",
-    ).openapi()
-
     expected_responses = {
         ("post", "/api/v1/auth/token", "401"): AUTH_TOKEN_ERROR_RESPONSE,
         (
@@ -838,7 +829,9 @@ def test_api_routes_include_openapi_error_examples() -> None:
         path,
         status_code,
     ), expected_response in expected_responses.items():
-        response = openapi["paths"][path][method]["responses"][status_code]
+        response = openapi_schema["paths"][path][method]["responses"][
+            status_code
+        ]
 
         assert response == expected_response
 
@@ -853,7 +846,7 @@ def test_api_routes_include_openapi_error_examples() -> None:
         "trace",
     }
 
-    for methods in openapi["paths"].values():
+    for methods in openapi_schema["paths"].values():
         for key, operation in methods.items():
             if key not in http_methods:
                 continue
