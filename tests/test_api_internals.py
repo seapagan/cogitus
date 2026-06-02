@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 import jwt
 import pytest
@@ -117,6 +117,254 @@ def openapi_schema() -> dict[str, Any]:
         memory=True,
         default_group_name="default",
     ).openapi()
+
+
+OpenApiResponseKey = tuple[str, str, str]
+OpenApiResponses = dict[OpenApiResponseKey, object]
+
+AUTH_ERROR_RESPONSES: OpenApiResponses = {
+    ("post", "/api/v1/auth/token", "401"): AUTH_TOKEN_ERROR_RESPONSE,
+    (
+        "post",
+        "/api/v1/auth/token",
+        "422",
+    ): TOKEN_FORM_VALIDATION_ERROR_RESPONSE,
+    (
+        "post",
+        "/api/v1/auth/token",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+}
+IDEA_ERROR_RESPONSES: OpenApiResponses = {
+    ("get", "/api/v1/ideas", "401"): API_AUTH_ERROR_RESPONSE,
+    ("get", "/api/v1/ideas", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/ideas", "422"): IDEA_QUERY_VALIDATION_ERROR_RESPONSE,
+    ("post", "/api/v1/ideas", "401"): API_AUTH_ERROR_RESPONSE,
+    ("post", "/api/v1/ideas", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("post", "/api/v1/ideas", "404"): IDEA_GROUP_NOT_FOUND_RESPONSE,
+    ("post", "/api/v1/ideas", "422"): IDEA_VALIDATION_ERROR_RESPONSE,
+    ("get", "/api/v1/ideas/refs", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/refs",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/refs",
+        "422",
+    ): IDEA_QUERY_VALIDATION_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}/hash",
+        "401",
+    ): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}/hash",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}/hash",
+        "404",
+    ): IDEA_NOT_FOUND_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}/hash",
+        "422",
+    ): IDEA_PATH_VALIDATION_ERROR_RESPONSE,
+    ("get", "/api/v1/ideas/{idea_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/ideas/{idea_pk}", "404"): IDEA_NOT_FOUND_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}",
+        "422",
+    ): IDEA_PATH_VALIDATION_ERROR_RESPONSE,
+    ("put", "/api/v1/ideas/{idea_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "put",
+        "/api/v1/ideas/{idea_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("put", "/api/v1/ideas/{idea_pk}", "404"): IDEA_UPDATE_NOT_FOUND_RESPONSE,
+    ("put", "/api/v1/ideas/{idea_pk}", "409"): IDEA_CONFLICT_RESPONSE,
+    (
+        "put",
+        "/api/v1/ideas/{idea_pk}",
+        "422",
+    ): IDEA_UPDATE_VALIDATION_ERROR_RESPONSE,
+    ("delete", "/api/v1/ideas/{idea_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "delete",
+        "/api/v1/ideas/{idea_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("delete", "/api/v1/ideas/{idea_pk}", "404"): IDEA_NOT_FOUND_RESPONSE,
+    ("delete", "/api/v1/ideas/{idea_pk}", "409"): IDEA_CONFLICT_RESPONSE,
+    (
+        "delete",
+        "/api/v1/ideas/{idea_pk}",
+        "422",
+    ): IDEA_DELETE_VALIDATION_ERROR_RESPONSE,
+}
+GROUP_ERROR_RESPONSES: OpenApiResponses = {
+    ("get", "/api/v1/groups", "401"): API_AUTH_ERROR_RESPONSE,
+    ("get", "/api/v1/groups", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("post", "/api/v1/groups", "401"): API_AUTH_ERROR_RESPONSE,
+    ("post", "/api/v1/groups", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("post", "/api/v1/groups", "404"): GROUP_PARENT_NOT_FOUND_RESPONSE,
+    ("post", "/api/v1/groups", "409"): GROUP_CONFLICT_RESPONSE,
+    ("post", "/api/v1/groups", "422"): GROUP_CREATE_VALIDATION_ERROR_RESPONSE,
+    ("get", "/api/v1/groups/names", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/groups/names",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/groups/{group_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/groups/{group_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/groups/{group_pk}", "404"): GROUP_NOT_FOUND_RESPONSE,
+    (
+        "get",
+        "/api/v1/groups/{group_pk}",
+        "422",
+    ): GROUP_PATH_VALIDATION_ERROR_RESPONSE,
+    ("put", "/api/v1/groups/{group_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "put",
+        "/api/v1/groups/{group_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("put", "/api/v1/groups/{group_pk}", "404"): GROUP_NOT_FOUND_RESPONSE,
+    (
+        "put",
+        "/api/v1/groups/{group_pk}",
+        "409",
+    ): GROUP_UPDATE_CONFLICT_RESPONSE,
+    (
+        "put",
+        "/api/v1/groups/{group_pk}",
+        "422",
+    ): GROUP_UPDATE_VALIDATION_ERROR_RESPONSE,
+    ("delete", "/api/v1/groups/{group_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "delete",
+        "/api/v1/groups/{group_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    (
+        "delete",
+        "/api/v1/groups/{group_pk}",
+        "404",
+    ): GROUP_DELETE_NOT_FOUND_RESPONSE,
+    (
+        "delete",
+        "/api/v1/groups/{group_pk}",
+        "409",
+    ): GROUP_DELETE_CONFLICT_RESPONSE,
+    (
+        "delete",
+        "/api/v1/groups/{group_pk}",
+        "422",
+    ): GROUP_DELETE_VALIDATION_ERROR_RESPONSE,
+}
+TAG_ERROR_RESPONSES: OpenApiResponses = {
+    ("get", "/api/v1/tags", "401"): API_AUTH_ERROR_RESPONSE,
+    ("get", "/api/v1/tags", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("post", "/api/v1/tags", "401"): API_AUTH_ERROR_RESPONSE,
+    ("post", "/api/v1/tags", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("post", "/api/v1/tags", "409"): TAG_CONFLICT_RESPONSE,
+    ("post", "/api/v1/tags", "422"): TAG_VALIDATION_ERROR_RESPONSE,
+    ("get", "/api/v1/tags/names", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/tags/names",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/tags/{tag_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/tags/{tag_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/tags/{tag_pk}", "404"): TAG_NOT_FOUND_RESPONSE,
+    (
+        "get",
+        "/api/v1/tags/{tag_pk}",
+        "422",
+    ): TAG_PATH_VALIDATION_ERROR_RESPONSE,
+    ("put", "/api/v1/tags/{tag_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "put",
+        "/api/v1/tags/{tag_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("put", "/api/v1/tags/{tag_pk}", "404"): TAG_NOT_FOUND_RESPONSE,
+    ("put", "/api/v1/tags/{tag_pk}", "409"): TAG_CONFLICT_RESPONSE,
+    (
+        "put",
+        "/api/v1/tags/{tag_pk}",
+        "422",
+    ): TAG_UPDATE_VALIDATION_ERROR_RESPONSE,
+    ("delete", "/api/v1/tags/{tag_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "delete",
+        "/api/v1/tags/{tag_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("delete", "/api/v1/tags/{tag_pk}", "404"): TAG_NOT_FOUND_RESPONSE,
+    (
+        "delete",
+        "/api/v1/tags/{tag_pk}",
+        "422",
+    ): TAG_PATH_VALIDATION_ERROR_RESPONSE,
+}
+SNAPSHOT_ERROR_RESPONSES: OpenApiResponses = {
+    ("get", "/api/v1/snapshot", "401"): API_AUTH_ERROR_RESPONSE,
+    ("get", "/api/v1/snapshot", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/snapshot/state", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/snapshot/state",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+}
+HTTP_METHODS: Final = {
+    "delete",
+    "get",
+    "head",
+    "options",
+    "patch",
+    "post",
+    "put",
+    "trace",
+}
+
+
+def _assert_openapi_error_responses(
+    openapi_schema: dict[str, Any],
+    expected_responses: OpenApiResponses,
+) -> None:
+    for (
+        method,
+        path,
+        status_code,
+    ), expected_response in expected_responses.items():
+        response = openapi_schema["paths"][path][method]["responses"][
+            status_code
+        ]
+
+        assert response == expected_response
 
 
 def test_get_service_raises_when_uninitialized() -> None:
@@ -486,369 +734,48 @@ def test_write_routes_include_openapi_request_examples(
         assert request_content["examples"] == expected_example
 
 
-def test_api_routes_include_openapi_error_examples(
+def test_auth_routes_include_openapi_error_examples(
     openapi_schema: dict[str, Any],
 ) -> None:
-    """Documented JSON error responses should publish realistic examples."""
-    expected_responses = {
-        ("post", "/api/v1/auth/token", "401"): AUTH_TOKEN_ERROR_RESPONSE,
-        (
-            "post",
-            "/api/v1/auth/token",
-            "422",
-        ): TOKEN_FORM_VALIDATION_ERROR_RESPONSE,
-        (
-            "post",
-            "/api/v1/auth/token",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        ("get", "/api/v1/ideas", "401"): API_AUTH_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/ideas",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "get",
-            "/api/v1/ideas",
-            "422",
-        ): IDEA_QUERY_VALIDATION_ERROR_RESPONSE,
-        ("post", "/api/v1/ideas", "401"): API_AUTH_ERROR_RESPONSE,
-        (
-            "post",
-            "/api/v1/ideas",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "post",
-            "/api/v1/ideas",
-            "404",
-        ): IDEA_GROUP_NOT_FOUND_RESPONSE,
-        (
-            "post",
-            "/api/v1/ideas",
-            "422",
-        ): IDEA_VALIDATION_ERROR_RESPONSE,
-        ("get", "/api/v1/ideas/refs", "401"): API_AUTH_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/ideas/refs",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "get",
-            "/api/v1/ideas/refs",
-            "422",
-        ): IDEA_QUERY_VALIDATION_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/ideas/{idea_pk}/hash",
-            "401",
-        ): API_AUTH_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/ideas/{idea_pk}/hash",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "get",
-            "/api/v1/ideas/{idea_pk}/hash",
-            "404",
-        ): IDEA_NOT_FOUND_RESPONSE,
-        (
-            "get",
-            "/api/v1/ideas/{idea_pk}/hash",
-            "422",
-        ): IDEA_PATH_VALIDATION_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/ideas/{idea_pk}",
-            "401",
-        ): API_AUTH_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/ideas/{idea_pk}",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "get",
-            "/api/v1/ideas/{idea_pk}",
-            "404",
-        ): IDEA_NOT_FOUND_RESPONSE,
-        (
-            "get",
-            "/api/v1/ideas/{idea_pk}",
-            "422",
-        ): IDEA_PATH_VALIDATION_ERROR_RESPONSE,
-        (
-            "put",
-            "/api/v1/ideas/{idea_pk}",
-            "401",
-        ): API_AUTH_ERROR_RESPONSE,
-        (
-            "put",
-            "/api/v1/ideas/{idea_pk}",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "put",
-            "/api/v1/ideas/{idea_pk}",
-            "404",
-        ): IDEA_UPDATE_NOT_FOUND_RESPONSE,
-        (
-            "put",
-            "/api/v1/ideas/{idea_pk}",
-            "409",
-        ): IDEA_CONFLICT_RESPONSE,
-        (
-            "put",
-            "/api/v1/ideas/{idea_pk}",
-            "422",
-        ): IDEA_UPDATE_VALIDATION_ERROR_RESPONSE,
-        (
-            "delete",
-            "/api/v1/ideas/{idea_pk}",
-            "401",
-        ): API_AUTH_ERROR_RESPONSE,
-        (
-            "delete",
-            "/api/v1/ideas/{idea_pk}",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "delete",
-            "/api/v1/ideas/{idea_pk}",
-            "404",
-        ): IDEA_NOT_FOUND_RESPONSE,
-        (
-            "delete",
-            "/api/v1/ideas/{idea_pk}",
-            "409",
-        ): IDEA_CONFLICT_RESPONSE,
-        (
-            "delete",
-            "/api/v1/ideas/{idea_pk}",
-            "422",
-        ): IDEA_DELETE_VALIDATION_ERROR_RESPONSE,
-        ("get", "/api/v1/groups", "401"): API_AUTH_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/groups",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        ("post", "/api/v1/groups", "401"): API_AUTH_ERROR_RESPONSE,
-        (
-            "post",
-            "/api/v1/groups",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "post",
-            "/api/v1/groups",
-            "404",
-        ): GROUP_PARENT_NOT_FOUND_RESPONSE,
-        (
-            "post",
-            "/api/v1/groups",
-            "409",
-        ): GROUP_CONFLICT_RESPONSE,
-        (
-            "post",
-            "/api/v1/groups",
-            "422",
-        ): GROUP_CREATE_VALIDATION_ERROR_RESPONSE,
-        ("get", "/api/v1/groups/names", "401"): API_AUTH_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/groups/names",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "get",
-            "/api/v1/groups/{group_pk}",
-            "401",
-        ): API_AUTH_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/groups/{group_pk}",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "get",
-            "/api/v1/groups/{group_pk}",
-            "404",
-        ): GROUP_NOT_FOUND_RESPONSE,
-        (
-            "get",
-            "/api/v1/groups/{group_pk}",
-            "422",
-        ): GROUP_PATH_VALIDATION_ERROR_RESPONSE,
-        (
-            "put",
-            "/api/v1/groups/{group_pk}",
-            "401",
-        ): API_AUTH_ERROR_RESPONSE,
-        (
-            "put",
-            "/api/v1/groups/{group_pk}",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "put",
-            "/api/v1/groups/{group_pk}",
-            "404",
-        ): GROUP_NOT_FOUND_RESPONSE,
-        (
-            "put",
-            "/api/v1/groups/{group_pk}",
-            "409",
-        ): GROUP_UPDATE_CONFLICT_RESPONSE,
-        (
-            "put",
-            "/api/v1/groups/{group_pk}",
-            "422",
-        ): GROUP_UPDATE_VALIDATION_ERROR_RESPONSE,
-        (
-            "delete",
-            "/api/v1/groups/{group_pk}",
-            "401",
-        ): API_AUTH_ERROR_RESPONSE,
-        (
-            "delete",
-            "/api/v1/groups/{group_pk}",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "delete",
-            "/api/v1/groups/{group_pk}",
-            "404",
-        ): GROUP_DELETE_NOT_FOUND_RESPONSE,
-        (
-            "delete",
-            "/api/v1/groups/{group_pk}",
-            "409",
-        ): GROUP_DELETE_CONFLICT_RESPONSE,
-        (
-            "delete",
-            "/api/v1/groups/{group_pk}",
-            "422",
-        ): GROUP_DELETE_VALIDATION_ERROR_RESPONSE,
-        ("get", "/api/v1/tags", "401"): API_AUTH_ERROR_RESPONSE,
-        ("get", "/api/v1/tags", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        ("post", "/api/v1/tags", "401"): API_AUTH_ERROR_RESPONSE,
-        ("post", "/api/v1/tags", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        ("post", "/api/v1/tags", "409"): TAG_CONFLICT_RESPONSE,
-        ("post", "/api/v1/tags", "422"): TAG_VALIDATION_ERROR_RESPONSE,
-        ("get", "/api/v1/tags/names", "401"): API_AUTH_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/tags/names",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "get",
-            "/api/v1/tags/{tag_pk}",
-            "401",
-        ): API_AUTH_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/tags/{tag_pk}",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "get",
-            "/api/v1/tags/{tag_pk}",
-            "404",
-        ): TAG_NOT_FOUND_RESPONSE,
-        (
-            "get",
-            "/api/v1/tags/{tag_pk}",
-            "422",
-        ): TAG_PATH_VALIDATION_ERROR_RESPONSE,
-        (
-            "put",
-            "/api/v1/tags/{tag_pk}",
-            "401",
-        ): API_AUTH_ERROR_RESPONSE,
-        (
-            "put",
-            "/api/v1/tags/{tag_pk}",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "put",
-            "/api/v1/tags/{tag_pk}",
-            "404",
-        ): TAG_NOT_FOUND_RESPONSE,
-        (
-            "put",
-            "/api/v1/tags/{tag_pk}",
-            "409",
-        ): TAG_CONFLICT_RESPONSE,
-        (
-            "put",
-            "/api/v1/tags/{tag_pk}",
-            "422",
-        ): TAG_UPDATE_VALIDATION_ERROR_RESPONSE,
-        (
-            "delete",
-            "/api/v1/tags/{tag_pk}",
-            "401",
-        ): API_AUTH_ERROR_RESPONSE,
-        (
-            "delete",
-            "/api/v1/tags/{tag_pk}",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        (
-            "delete",
-            "/api/v1/tags/{tag_pk}",
-            "404",
-        ): TAG_NOT_FOUND_RESPONSE,
-        (
-            "delete",
-            "/api/v1/tags/{tag_pk}",
-            "422",
-        ): TAG_PATH_VALIDATION_ERROR_RESPONSE,
-        ("get", "/api/v1/snapshot", "401"): API_AUTH_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/snapshot",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-        ("get", "/api/v1/snapshot/state", "401"): API_AUTH_ERROR_RESPONSE,
-        (
-            "get",
-            "/api/v1/snapshot/state",
-            "503",
-        ): API_AUTH_NOT_CONFIGURED_RESPONSE,
-    }
+    """Auth routes should publish realistic error examples."""
+    _assert_openapi_error_responses(openapi_schema, AUTH_ERROR_RESPONSES)
 
-    for (
-        method,
-        path,
-        status_code,
-    ), expected_response in expected_responses.items():
-        response = openapi_schema["paths"][path][method]["responses"][
-            status_code
-        ]
 
-        assert response == expected_response
+def test_idea_routes_include_openapi_error_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """Idea routes should publish realistic error examples."""
+    _assert_openapi_error_responses(openapi_schema, IDEA_ERROR_RESPONSES)
 
-    http_methods = {
-        "delete",
-        "get",
-        "head",
-        "options",
-        "patch",
-        "post",
-        "put",
-        "trace",
-    }
 
+def test_group_routes_include_openapi_error_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """Group routes should publish realistic error examples."""
+    _assert_openapi_error_responses(openapi_schema, GROUP_ERROR_RESPONSES)
+
+
+def test_tag_routes_include_openapi_error_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """Tag routes should publish realistic error examples."""
+    _assert_openapi_error_responses(openapi_schema, TAG_ERROR_RESPONSES)
+
+
+def test_snapshot_routes_include_openapi_error_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """Snapshot routes should publish realistic error examples."""
+    _assert_openapi_error_responses(openapi_schema, SNAPSHOT_ERROR_RESPONSES)
+
+
+def test_json_error_responses_include_exactly_one_example_field(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """JSON error responses should use either example or examples."""
     for methods in openapi_schema["paths"].values():
         for key, operation in methods.items():
-            if key not in http_methods:
+            if key not in HTTP_METHODS:
                 continue
             if not isinstance(operation, dict) or "responses" not in operation:
                 continue
