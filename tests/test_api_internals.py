@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
 from pwdlib.exceptions import UnknownHashError
+from pydantic import TypeAdapter
 from starlette.routing import Mount, Route, WebSocketRoute
 
 import cogitus.api as api_package
@@ -71,6 +72,18 @@ from cogitus.api.openapi_examples import (
     TOKEN_REQUEST_OPENAPI_EXAMPLES,
     TOKEN_RESPONSE_EXAMPLE,
 )
+from cogitus.api.schemas.response.auth import TokenResponse
+from cogitus.api.schemas.response.group import GroupResponse
+from cogitus.api.schemas.response.idea import (
+    IdeaHashResponse,
+    IdeaRefResponse,
+    IdeaResponse,
+)
+from cogitus.api.schemas.response.snapshot import (
+    SnapshotResponse,
+    SnapshotStateResponse,
+)
+from cogitus.api.schemas.response.tag import TagResponse
 from cogitus.config import (
     DEFAULT_API_AUTH_JWT_ALGORITHM,
     AppSettings,
@@ -334,6 +347,67 @@ def test_api_routes_include_openapi_response_examples() -> None:
         assert response_content["application/json"]["examples"] == (
             expected_group_openapi_examples
         )
+
+
+def test_openapi_response_examples_match_response_models() -> None:
+    """Published response examples should stay valid for response schemas."""
+    TypeAdapter(TokenResponse).validate_python(TOKEN_RESPONSE_EXAMPLE)
+    TypeAdapter(list[GroupResponse]).validate_python(GROUPS_RESPONSE_EXAMPLE)
+    for example in GROUP_RESPONSE_OPENAPI_EXAMPLES.values():
+        TypeAdapter(GroupResponse).validate_python(example["value"])
+    TypeAdapter(list[IdeaResponse]).validate_python(IDEAS_RESPONSE_EXAMPLE)
+    TypeAdapter(IdeaResponse).validate_python(IDEA_RESPONSE_EXAMPLE)
+    TypeAdapter(list[IdeaRefResponse]).validate_python(
+        IDEA_REFS_RESPONSE_EXAMPLE,
+    )
+    TypeAdapter(IdeaHashResponse).validate_python(IDEA_HASH_RESPONSE_EXAMPLE)
+    TypeAdapter(SnapshotResponse).validate_python(SNAPSHOT_RESPONSE_EXAMPLE)
+    TypeAdapter(SnapshotStateResponse).validate_python(
+        SNAPSHOT_STATE_RESPONSE_EXAMPLE,
+    )
+    TypeAdapter(list[TagResponse]).validate_python(TAGS_RESPONSE_EXAMPLE)
+    TypeAdapter(TagResponse).validate_python(TAG_RESPONSE_EXAMPLE)
+
+
+def test_openapi_examples_preserve_runtime_shapes() -> None:
+    """Generated examples should preserve runtime-significant shapes."""
+    openapi = create_api_app(
+        memory=True,
+        default_group_name="default",
+    ).openapi()
+
+    groups_example = openapi["paths"]["/api/v1/groups"]["get"]["responses"][
+        "200"
+    ]["content"]["application/json"]["example"]
+    assert groups_example[1]["parent_pk"] is None
+    assert groups_example[2]["parent_pk"] is None
+
+    group_examples = openapi["paths"]["/api/v1/groups/{group_pk}"]["get"][
+        "responses"
+    ]["200"]["content"]["application/json"]["examples"]
+    assert group_examples["root_group"]["value"]["parent_pk"] is None
+    assert group_examples["child_group"]["value"]["parent_pk"] == 3
+
+    idea_refs_example = openapi["paths"]["/api/v1/ideas/refs"]["get"][
+        "responses"
+    ]["200"]["content"]["application/json"]["example"]
+    assert [idea["pk"] for idea in idea_refs_example] == [43, 42]
+
+    token_error = openapi["paths"]["/api/v1/auth/token"]["post"]["responses"][
+        "422"
+    ]["content"]["application/json"]["example"]
+    assert token_error["detail"][0]["input"] is None
+
+    tag_errors = openapi["paths"]["/api/v1/tags"]["post"]["responses"]["422"][
+        "content"
+    ]["application/json"]["examples"]
+    assert tag_errors["missing_name"]["value"]["detail"][0]["loc"] == [
+        "body",
+        "name",
+    ]
+    assert tag_errors["blank_name"]["value"] == {
+        "detail": "Tag name cannot be empty",
+    }
 
 
 def test_delete_routes_do_not_publish_json_response_examples() -> None:
@@ -793,7 +867,11 @@ def test_api_routes_include_openapi_error_examples() -> None:
                 if json_content is None:
                     continue
 
-                assert {"example", "examples"} & json_content.keys()
+                has_example = "example" in json_content
+                has_examples = "examples" in json_content
+
+                assert has_example or has_examples
+                assert has_example != has_examples
 
 
 def test_token_endpoint_returns_service_unavailable_when_auth_unconfigured(
