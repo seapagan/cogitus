@@ -146,21 +146,21 @@ TAG_RESPONSE_EXAMPLE: Final = {
     "name": "sqlite",
 }
 TAGS_RESPONSE_EXAMPLE: Final = [
-    TAG_RESPONSE_EXAMPLE,
-    {
-        "pk": 9,
-        "created_at": 1763814200,
-        "updated_at": 1763814200,
-        "name": "search",
-    },
     {
         "pk": 10,
         "created_at": 1763814300,
         "updated_at": 1763814300,
         "name": "performance",
     },
+    {
+        "pk": 9,
+        "created_at": 1763814200,
+        "updated_at": 1763814200,
+        "name": "search",
+    },
+    TAG_RESPONSE_EXAMPLE,
 ]
-TAG_NAMES_RESPONSE_EXAMPLE: Final = ["sqlite", "search", "performance"]
+TAG_NAMES_RESPONSE_EXAMPLE: Final = ["performance", "search", "sqlite"]
 TAG_CREATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
     "create_tag": {
         "summary": "Create a tag",
