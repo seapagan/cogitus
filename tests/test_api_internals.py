@@ -475,8 +475,23 @@ def test_api_routes_include_openapi_error_examples() -> None:
 
         assert response == expected_response
 
+    http_methods = {
+        "delete",
+        "get",
+        "head",
+        "options",
+        "patch",
+        "post",
+        "put",
+        "trace",
+    }
+
     for methods in openapi["paths"].values():
-        for operation in methods.values():
+        for key, operation in methods.items():
+            if key not in http_methods:
+                continue
+            if not isinstance(operation, dict) or "responses" not in operation:
+                continue
             for status_code, response in operation["responses"].items():
                 if status_code.startswith("2"):
                     continue
