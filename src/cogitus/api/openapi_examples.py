@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Final
 
+OpenApiSchema = dict[str, object]
 JsonResponseExample = dict[str, dict[str, dict[str, object]]]
 OpenApiExamples = dict[str, dict[str, object]]
 OpenApiResponse = dict[str, object]
@@ -99,6 +100,7 @@ ROOT_GROUP_RESPONSE_EXAMPLE: Final = {
     "created_at": 1763814000,
     "updated_at": 1763814000,
     "name": "backend",
+    "parent_pk": None,
 }
 GROUPS_RESPONSE_EXAMPLE: Final = [
     GROUP_RESPONSE_EXAMPLE,
@@ -108,9 +110,20 @@ GROUPS_RESPONSE_EXAMPLE: Final = [
         "created_at": 1763810000,
         "updated_at": 1763810000,
         "name": "default",
+        "parent_pk": None,
     },
 ]
 GROUP_NAMES_RESPONSE_EXAMPLE: Final = ["api", "backend", "default"]
+GROUP_RESPONSE_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
+    "child_group": {
+        "summary": "Return a child group",
+        "value": GROUP_RESPONSE_EXAMPLE,
+    },
+    "root_group": {
+        "summary": "Return a root group",
+        "value": ROOT_GROUP_RESPONSE_EXAMPLE,
+    },
+}
 GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES: Final[OpenApiExamples] = {
     "root_group": {
         "summary": "Create a root group",
@@ -214,18 +227,18 @@ IDEAS_RESPONSE_EXAMPLE: Final = [
 ]
 IDEA_REFS_RESPONSE_EXAMPLE: Final = [
     {
-        "pk": 42,
-        "title": "Compare SQLite FTS query strategies",
-        "group": "backend",
-        "tags": ["sqlite", "search", "performance"],
-        "updated_at": 1763904000,
-    },
-    {
         "pk": 43,
         "title": "Draft remote cache refresh notes",
         "group": "api",
         "tags": ["search"],
         "updated_at": 1763907600,
+    },
+    {
+        "pk": 42,
+        "title": "Compare SQLite FTS query strategies",
+        "group": "backend",
+        "tags": ["sqlite", "search", "performance"],
+        "updated_at": 1763904000,
     },
 ]
 IDEA_HASH_RESPONSE_EXAMPLE: Final = {
@@ -378,7 +391,7 @@ TOKEN_FORM_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
                         "type": "missing",
                         "loc": ["body", "username"],
                         "msg": "Field required",
-                        "input": {"password": "correct horse battery staple"},
+                        "input": None,
                     },
                 ],
             },
@@ -671,7 +684,25 @@ TAG_VALIDATION_ERROR_RESPONSE: Final[OpenApiResponse] = {
     "description": "Tag request validation failed.",
     "content": {
         "application/json": {
-            "example": _detail("Tag name cannot be empty"),
+            "examples": {
+                "missing_name": {
+                    "summary": "Create a tag without a name",
+                    "value": {
+                        "detail": [
+                            {
+                                "type": "missing",
+                                "loc": ["body", "name"],
+                                "msg": "Field required",
+                                "input": {},
+                            },
+                        ],
+                    },
+                },
+                "blank_name": {
+                    "summary": "Create a tag with a blank name",
+                    "value": _detail("Tag name cannot be empty"),
+                },
+            },
         },
     },
 }
@@ -711,3 +742,44 @@ def json_response_example(example: object) -> JsonResponseExample:
             },
         },
     }
+
+
+def json_response_examples(examples: OpenApiExamples) -> JsonResponseExample:
+    """Return FastAPI OpenAPI metadata for multiple JSON examples."""
+    return {
+        "content": {
+            "application/json": {
+                "examples": examples,
+            },
+        },
+    }
+
+
+def restore_openapi_example_nulls(openapi_schema: OpenApiSchema) -> None:
+    """Restore intentional nulls FastAPI strips from OpenAPI examples."""
+
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            restore_group_parent_null(value)
+            restore_missing_username_input(value)
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    def restore_group_parent_null(value: dict[object, object]) -> None:
+        pk = value.get("pk")
+        name = value.get("name")
+        if isinstance(pk, int) and name in {"backend", "default"}:
+            value.setdefault("parent_pk", None)
+
+    def restore_missing_username_input(value: dict[object, object]) -> None:
+        if (
+            value.get("type") == "missing"
+            and value.get("loc") == ["body", "username"]
+            and value.get("msg") == "Field required"
+        ):
+            value.setdefault("input", None)
+
+    visit(openapi_schema)

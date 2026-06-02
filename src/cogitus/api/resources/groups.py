@@ -19,12 +19,13 @@ from cogitus.api.openapi_examples import (
     GROUP_NOT_FOUND_RESPONSE,
     GROUP_PARENT_NOT_FOUND_RESPONSE,
     GROUP_PATH_VALIDATION_ERROR_RESPONSE,
-    GROUP_RESPONSE_EXAMPLE,
+    GROUP_RESPONSE_OPENAPI_EXAMPLES,
     GROUP_UPDATE_CONFLICT_RESPONSE,
     GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES,
     GROUP_UPDATE_VALIDATION_ERROR_RESPONSE,
     GROUPS_RESPONSE_EXAMPLE,
     json_response_example,
+    json_response_examples,
 )
 from cogitus.api.schemas.request.group import (
     GroupCreateRequest,
@@ -76,7 +77,9 @@ async def list_group_names(
     "",
     status_code=status.HTTP_201_CREATED,
     responses={
-        status.HTTP_201_CREATED: json_response_example(GROUP_RESPONSE_EXAMPLE),
+        status.HTTP_201_CREATED: json_response_examples(
+            GROUP_RESPONSE_OPENAPI_EXAMPLES,
+        ),
         status.HTTP_404_NOT_FOUND: GROUP_PARENT_NOT_FOUND_RESPONSE,
         status.HTTP_409_CONFLICT: GROUP_CONFLICT_RESPONSE,
         status.HTTP_422_UNPROCESSABLE_CONTENT: (
@@ -98,7 +101,9 @@ async def create_group(
 @router.get(
     "/{group_pk}",
     responses={
-        status.HTTP_200_OK: json_response_example(GROUP_RESPONSE_EXAMPLE),
+        status.HTTP_200_OK: json_response_examples(
+            GROUP_RESPONSE_OPENAPI_EXAMPLES,
+        ),
         status.HTTP_404_NOT_FOUND: GROUP_NOT_FOUND_RESPONSE,
         status.HTTP_422_UNPROCESSABLE_CONTENT: (
             GROUP_PATH_VALIDATION_ERROR_RESPONSE
@@ -116,7 +121,9 @@ async def get_group(
 @router.put(
     "/{group_pk}",
     responses={
-        status.HTTP_200_OK: json_response_example(GROUP_RESPONSE_EXAMPLE),
+        status.HTTP_200_OK: json_response_examples(
+            GROUP_RESPONSE_OPENAPI_EXAMPLES,
+        ),
         status.HTTP_404_NOT_FOUND: GROUP_NOT_FOUND_RESPONSE,
         status.HTTP_409_CONFLICT: GROUP_UPDATE_CONFLICT_RESPONSE,
         status.HTTP_422_UNPROCESSABLE_CONTENT: (

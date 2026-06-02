@@ -33,7 +33,7 @@ from cogitus.api.openapi_examples import (
     GROUP_NOT_FOUND_RESPONSE,
     GROUP_PARENT_NOT_FOUND_RESPONSE,
     GROUP_PATH_VALIDATION_ERROR_RESPONSE,
-    GROUP_RESPONSE_EXAMPLE,
+    GROUP_RESPONSE_OPENAPI_EXAMPLES,
     GROUP_UPDATE_CONFLICT_RESPONSE,
     GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES,
     GROUP_UPDATE_VALIDATION_ERROR_RESPONSE,
@@ -239,7 +239,7 @@ def test_mcp_tool_routes_include_openapi_examples() -> None:
         default_group_name="default",
     ).openapi()
 
-    expected_examples = {
+    expected_examples: dict[str, object] = {
         "/api/v1/ideas/refs": IDEA_REFS_RESPONSE_EXAMPLE,
         "/api/v1/ideas/{idea_pk}": IDEA_RESPONSE_EXAMPLE,
         "/api/v1/groups/names": GROUP_NAMES_RESPONSE_EXAMPLE,
@@ -266,10 +266,7 @@ def test_api_routes_include_openapi_response_examples() -> None:
     expected_examples = {
         ("post", "/api/v1/auth/token", "200"): TOKEN_RESPONSE_EXAMPLE,
         ("get", "/api/v1/groups", "200"): GROUPS_RESPONSE_EXAMPLE,
-        ("post", "/api/v1/groups", "201"): GROUP_RESPONSE_EXAMPLE,
         ("get", "/api/v1/groups/names", "200"): GROUP_NAMES_RESPONSE_EXAMPLE,
-        ("get", "/api/v1/groups/{group_pk}", "200"): GROUP_RESPONSE_EXAMPLE,
-        ("put", "/api/v1/groups/{group_pk}", "200"): GROUP_RESPONSE_EXAMPLE,
         ("get", "/api/v1/ideas", "200"): IDEAS_RESPONSE_EXAMPLE,
         ("post", "/api/v1/ideas", "201"): IDEA_RESPONSE_EXAMPLE,
         ("get", "/api/v1/ideas/refs", "200"): IDEA_REFS_RESPONSE_EXAMPLE,
@@ -313,6 +310,29 @@ def test_api_routes_include_openapi_response_examples() -> None:
 
         assert response_content["application/json"]["example"] == (
             expected_example
+        )
+
+    expected_group_examples: dict[tuple[str, str, str], object] = {
+        ("post", "/api/v1/groups", "201"): GROUP_RESPONSE_OPENAPI_EXAMPLES,
+        ("get", "/api/v1/groups/{group_pk}", "200"): (
+            GROUP_RESPONSE_OPENAPI_EXAMPLES
+        ),
+        ("put", "/api/v1/groups/{group_pk}", "200"): (
+            GROUP_RESPONSE_OPENAPI_EXAMPLES
+        ),
+    }
+
+    for (
+        method,
+        path,
+        status_code,
+    ), expected_group_openapi_examples in expected_group_examples.items():
+        response_content = openapi["paths"][path][method]["responses"][
+            status_code
+        ]["content"]
+
+        assert response_content["application/json"]["examples"] == (
+            expected_group_openapi_examples
         )
 
 
