@@ -85,7 +85,7 @@ dev = [
     "pytest-sugar>=1.1.1",
     "pytest-watcher>=0.6.3",
     "python-multipart>=0.0.20",
-    "pytest-xdist",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.15.0",
     "textual-dev>=1.8.0",
     "types-pyperclip>=1.9.0.20250801",

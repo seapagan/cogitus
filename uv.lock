@@ -599,7 +599,7 @@ dev = [
     { name = "pytest-reverse", specifier = ">=1.9.0" },
     { name = "pytest-sugar", specifier = ">=1.1.1" },
     { name = "pytest-watcher", specifier = ">=0.6.3" },
-    { name = "pytest-xdist" },
+    { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "python-multipart", specifier = ">=0.0.20" },
     { name = "ruff", specifier = ">=0.15.0" },
     { name = "textual-dev", specifier = ">=1.8.0" },
