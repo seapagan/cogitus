@@ -6,8 +6,13 @@ import os
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 
+from cogitus.api.openapi_examples import (
+    HEALTH_RESPONSE_EXAMPLE,
+    json_response_example,
+    restore_openapi_example_nulls,
+)
 from cogitus.api.resources.auth import router as auth_router
 from cogitus.api.resources.groups import router as groups_router
 from cogitus.api.resources.ideas import router as ideas_router
@@ -76,9 +81,26 @@ def create_api_app(
     app.include_router(tags_router)
     app.include_router(snapshot_router)
 
-    @app.get("/health", tags=["health"])
+    @app.get(
+        "/health",
+        tags=["health"],
+        responses={
+            status.HTTP_200_OK: json_response_example(
+                HEALTH_RESPONSE_EXAMPLE,
+            ),
+        },
+    )
     async def health() -> dict[str, str]:
         """Return a simple health response."""
         return {"status": "ok"}
+
+    original_openapi = app.openapi
+
+    def custom_openapi() -> dict[str, object]:
+        openapi_schema = original_openapi()
+        restore_openapi_example_nulls(openapi_schema)
+        return openapi_schema
+
+    object.__setattr__(app, "openapi", custom_openapi)
 
     return app

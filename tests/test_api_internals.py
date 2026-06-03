@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 import jwt
 import pytest
@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.testclient import TestClient
 from pwdlib.exceptions import UnknownHashError
+from pydantic import TypeAdapter
 from starlette.routing import Mount, Route, WebSocketRoute
 
 import cogitus.api as api_package
@@ -19,12 +20,70 @@ from cogitus.api.dependencies import get_current_mcp_user, get_service
 from cogitus.api.main import COGITUS_API_DB_PATH_ENV, create_api_app
 from cogitus.api.managers.auth_manager import AuthManager, MCPAuthManager
 from cogitus.api.mcp import create_mcp_app
-from cogitus.api.resources.groups import GROUP_NAMES_RESPONSE_EXAMPLE
-from cogitus.api.resources.ideas import (
+from cogitus.api.openapi_examples import (
+    API_AUTH_ERROR_RESPONSE,
+    API_AUTH_NOT_CONFIGURED_RESPONSE,
+    AUTH_TOKEN_ERROR_RESPONSE,
+    GROUP_CONFLICT_RESPONSE,
+    GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    GROUP_CREATE_VALIDATION_ERROR_RESPONSE,
+    GROUP_DELETE_CONFLICT_RESPONSE,
+    GROUP_DELETE_NOT_FOUND_RESPONSE,
+    GROUP_DELETE_VALIDATION_ERROR_RESPONSE,
+    GROUP_NAMES_RESPONSE_EXAMPLE,
+    GROUP_NOT_FOUND_RESPONSE,
+    GROUP_PARENT_NOT_FOUND_RESPONSE,
+    GROUP_PATH_VALIDATION_ERROR_RESPONSE,
+    GROUP_RESPONSE_OPENAPI_EXAMPLES,
+    GROUP_UPDATE_CONFLICT_RESPONSE,
+    GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    GROUP_UPDATE_VALIDATION_ERROR_RESPONSE,
+    GROUPS_RESPONSE_EXAMPLE,
+    HEALTH_RESPONSE_EXAMPLE,
+    IDEA_CONFLICT_RESPONSE,
+    IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    IDEA_DELETE_REQUEST_OPENAPI_EXAMPLES,
+    IDEA_DELETE_VALIDATION_ERROR_RESPONSE,
+    IDEA_GROUP_NOT_FOUND_RESPONSE,
+    IDEA_HASH_RESPONSE_EXAMPLE,
+    IDEA_NOT_FOUND_RESPONSE,
+    IDEA_PATH_VALIDATION_ERROR_RESPONSE,
+    IDEA_QUERY_VALIDATION_ERROR_RESPONSE,
     IDEA_REFS_RESPONSE_EXAMPLE,
     IDEA_RESPONSE_EXAMPLE,
+    IDEA_UPDATE_NOT_FOUND_RESPONSE,
+    IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    IDEA_UPDATE_VALIDATION_ERROR_RESPONSE,
+    IDEA_VALIDATION_ERROR_RESPONSE,
+    IDEAS_RESPONSE_EXAMPLE,
+    SNAPSHOT_RESPONSE_EXAMPLE,
+    SNAPSHOT_STATE_RESPONSE_EXAMPLE,
+    TAG_CONFLICT_RESPONSE,
+    TAG_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    TAG_NAMES_RESPONSE_EXAMPLE,
+    TAG_NOT_FOUND_RESPONSE,
+    TAG_PATH_VALIDATION_ERROR_RESPONSE,
+    TAG_RESPONSE_EXAMPLE,
+    TAG_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    TAG_UPDATE_VALIDATION_ERROR_RESPONSE,
+    TAG_VALIDATION_ERROR_RESPONSE,
+    TAGS_RESPONSE_EXAMPLE,
+    TOKEN_FORM_VALIDATION_ERROR_RESPONSE,
+    TOKEN_REQUEST_OPENAPI_EXAMPLES,
+    TOKEN_RESPONSE_EXAMPLE,
 )
-from cogitus.api.resources.tags import TAG_NAMES_RESPONSE_EXAMPLE
+from cogitus.api.schemas.response.auth import TokenResponse
+from cogitus.api.schemas.response.group import GroupResponse
+from cogitus.api.schemas.response.idea import (
+    IdeaHashResponse,
+    IdeaRefResponse,
+    IdeaResponse,
+)
+from cogitus.api.schemas.response.snapshot import (
+    SnapshotResponse,
+    SnapshotStateResponse,
+)
+from cogitus.api.schemas.response.tag import TagResponse
 from cogitus.config import (
     DEFAULT_API_AUTH_JWT_ALGORITHM,
     AppSettings,
@@ -49,6 +108,420 @@ def isolated_app_settings() -> Generator[None]:
         yield
     finally:
         AppSettings._instances.clear()
+
+
+@pytest.fixture(scope="module")
+def openapi_schema() -> dict[str, Any]:
+    """Return the generated OpenAPI schema shared by documentation tests."""
+    return create_api_app(
+        memory=True,
+        default_group_name="default",
+    ).openapi()
+
+
+OpenApiResponseKey = tuple[str, str, str]
+OpenApiResponses = dict[OpenApiResponseKey, object]
+OpenApiRequestKey = tuple[str, str, str]
+OpenApiRequestExamples = dict[OpenApiRequestKey, object]
+
+OPENAPI_RESPONSE_EXAMPLES: OpenApiResponses = {
+    ("post", "/api/v1/auth/token", "200"): TOKEN_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/groups", "200"): GROUPS_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/groups/names", "200"): GROUP_NAMES_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/ideas", "200"): IDEAS_RESPONSE_EXAMPLE,
+    ("post", "/api/v1/ideas", "201"): IDEA_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/ideas/refs", "200"): IDEA_REFS_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/ideas/{idea_pk}", "200"): IDEA_RESPONSE_EXAMPLE,
+    ("put", "/api/v1/ideas/{idea_pk}", "200"): IDEA_RESPONSE_EXAMPLE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}/hash",
+        "200",
+    ): IDEA_HASH_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/snapshot", "200"): SNAPSHOT_RESPONSE_EXAMPLE,
+    (
+        "get",
+        "/api/v1/snapshot/state",
+        "200",
+    ): SNAPSHOT_STATE_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/tags", "200"): TAGS_RESPONSE_EXAMPLE,
+    ("post", "/api/v1/tags", "201"): TAG_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/tags/names", "200"): TAG_NAMES_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/tags/{tag_pk}", "200"): TAG_RESPONSE_EXAMPLE,
+    ("put", "/api/v1/tags/{tag_pk}", "200"): TAG_RESPONSE_EXAMPLE,
+    ("get", "/health", "200"): HEALTH_RESPONSE_EXAMPLE,
+}
+OPENAPI_GROUP_RESPONSE_EXAMPLES: OpenApiResponses = {
+    ("post", "/api/v1/groups", "201"): GROUP_RESPONSE_OPENAPI_EXAMPLES,
+    (
+        "get",
+        "/api/v1/groups/{group_pk}",
+        "200",
+    ): GROUP_RESPONSE_OPENAPI_EXAMPLES,
+    (
+        "put",
+        "/api/v1/groups/{group_pk}",
+        "200",
+    ): GROUP_RESPONSE_OPENAPI_EXAMPLES,
+}
+OPENAPI_REQUEST_EXAMPLES: OpenApiRequestExamples = {
+    (
+        "post",
+        "/api/v1/auth/token",
+        "application/x-www-form-urlencoded",
+    ): TOKEN_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "post",
+        "/api/v1/groups",
+        "application/json",
+    ): GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "put",
+        "/api/v1/groups/{group_pk}",
+        "application/json",
+    ): GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "post",
+        "/api/v1/ideas",
+        "application/json",
+    ): IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "put",
+        "/api/v1/ideas/{idea_pk}",
+        "application/json",
+    ): IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "delete",
+        "/api/v1/ideas/{idea_pk}",
+        "application/json",
+    ): IDEA_DELETE_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "post",
+        "/api/v1/tags",
+        "application/json",
+    ): TAG_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "put",
+        "/api/v1/tags/{tag_pk}",
+        "application/json",
+    ): TAG_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+}
+AUTH_ERROR_RESPONSES: OpenApiResponses = {
+    ("post", "/api/v1/auth/token", "401"): AUTH_TOKEN_ERROR_RESPONSE,
+    (
+        "post",
+        "/api/v1/auth/token",
+        "422",
+    ): TOKEN_FORM_VALIDATION_ERROR_RESPONSE,
+    (
+        "post",
+        "/api/v1/auth/token",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+}
+IDEA_ERROR_RESPONSES: OpenApiResponses = {
+    ("get", "/api/v1/ideas", "401"): API_AUTH_ERROR_RESPONSE,
+    ("get", "/api/v1/ideas", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/ideas", "422"): IDEA_QUERY_VALIDATION_ERROR_RESPONSE,
+    ("post", "/api/v1/ideas", "401"): API_AUTH_ERROR_RESPONSE,
+    ("post", "/api/v1/ideas", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("post", "/api/v1/ideas", "404"): IDEA_GROUP_NOT_FOUND_RESPONSE,
+    ("post", "/api/v1/ideas", "422"): IDEA_VALIDATION_ERROR_RESPONSE,
+    ("get", "/api/v1/ideas/refs", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/refs",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/refs",
+        "422",
+    ): IDEA_QUERY_VALIDATION_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}/hash",
+        "401",
+    ): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}/hash",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}/hash",
+        "404",
+    ): IDEA_NOT_FOUND_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}/hash",
+        "422",
+    ): IDEA_PATH_VALIDATION_ERROR_RESPONSE,
+    ("get", "/api/v1/ideas/{idea_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/ideas/{idea_pk}", "404"): IDEA_NOT_FOUND_RESPONSE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}",
+        "422",
+    ): IDEA_PATH_VALIDATION_ERROR_RESPONSE,
+    ("put", "/api/v1/ideas/{idea_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "put",
+        "/api/v1/ideas/{idea_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("put", "/api/v1/ideas/{idea_pk}", "404"): IDEA_UPDATE_NOT_FOUND_RESPONSE,
+    ("put", "/api/v1/ideas/{idea_pk}", "409"): IDEA_CONFLICT_RESPONSE,
+    (
+        "put",
+        "/api/v1/ideas/{idea_pk}",
+        "422",
+    ): IDEA_UPDATE_VALIDATION_ERROR_RESPONSE,
+    ("delete", "/api/v1/ideas/{idea_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "delete",
+        "/api/v1/ideas/{idea_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("delete", "/api/v1/ideas/{idea_pk}", "404"): IDEA_NOT_FOUND_RESPONSE,
+    ("delete", "/api/v1/ideas/{idea_pk}", "409"): IDEA_CONFLICT_RESPONSE,
+    (
+        "delete",
+        "/api/v1/ideas/{idea_pk}",
+        "422",
+    ): IDEA_DELETE_VALIDATION_ERROR_RESPONSE,
+}
+GROUP_ERROR_RESPONSES: OpenApiResponses = {
+    ("get", "/api/v1/groups", "401"): API_AUTH_ERROR_RESPONSE,
+    ("get", "/api/v1/groups", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("post", "/api/v1/groups", "401"): API_AUTH_ERROR_RESPONSE,
+    ("post", "/api/v1/groups", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("post", "/api/v1/groups", "404"): GROUP_PARENT_NOT_FOUND_RESPONSE,
+    ("post", "/api/v1/groups", "409"): GROUP_CONFLICT_RESPONSE,
+    ("post", "/api/v1/groups", "422"): GROUP_CREATE_VALIDATION_ERROR_RESPONSE,
+    ("get", "/api/v1/groups/names", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/groups/names",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/groups/{group_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/groups/{group_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/groups/{group_pk}", "404"): GROUP_NOT_FOUND_RESPONSE,
+    (
+        "get",
+        "/api/v1/groups/{group_pk}",
+        "422",
+    ): GROUP_PATH_VALIDATION_ERROR_RESPONSE,
+    ("put", "/api/v1/groups/{group_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "put",
+        "/api/v1/groups/{group_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("put", "/api/v1/groups/{group_pk}", "404"): GROUP_NOT_FOUND_RESPONSE,
+    (
+        "put",
+        "/api/v1/groups/{group_pk}",
+        "409",
+    ): GROUP_UPDATE_CONFLICT_RESPONSE,
+    (
+        "put",
+        "/api/v1/groups/{group_pk}",
+        "422",
+    ): GROUP_UPDATE_VALIDATION_ERROR_RESPONSE,
+    ("delete", "/api/v1/groups/{group_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "delete",
+        "/api/v1/groups/{group_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    (
+        "delete",
+        "/api/v1/groups/{group_pk}",
+        "404",
+    ): GROUP_DELETE_NOT_FOUND_RESPONSE,
+    (
+        "delete",
+        "/api/v1/groups/{group_pk}",
+        "409",
+    ): GROUP_DELETE_CONFLICT_RESPONSE,
+    (
+        "delete",
+        "/api/v1/groups/{group_pk}",
+        "422",
+    ): GROUP_DELETE_VALIDATION_ERROR_RESPONSE,
+}
+TAG_ERROR_RESPONSES: OpenApiResponses = {
+    ("get", "/api/v1/tags", "401"): API_AUTH_ERROR_RESPONSE,
+    ("get", "/api/v1/tags", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("post", "/api/v1/tags", "401"): API_AUTH_ERROR_RESPONSE,
+    ("post", "/api/v1/tags", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("post", "/api/v1/tags", "409"): TAG_CONFLICT_RESPONSE,
+    ("post", "/api/v1/tags", "422"): TAG_VALIDATION_ERROR_RESPONSE,
+    ("get", "/api/v1/tags/names", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/tags/names",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/tags/{tag_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/tags/{tag_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/tags/{tag_pk}", "404"): TAG_NOT_FOUND_RESPONSE,
+    (
+        "get",
+        "/api/v1/tags/{tag_pk}",
+        "422",
+    ): TAG_PATH_VALIDATION_ERROR_RESPONSE,
+    ("put", "/api/v1/tags/{tag_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "put",
+        "/api/v1/tags/{tag_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("put", "/api/v1/tags/{tag_pk}", "404"): TAG_NOT_FOUND_RESPONSE,
+    ("put", "/api/v1/tags/{tag_pk}", "409"): TAG_CONFLICT_RESPONSE,
+    (
+        "put",
+        "/api/v1/tags/{tag_pk}",
+        "422",
+    ): TAG_UPDATE_VALIDATION_ERROR_RESPONSE,
+    ("delete", "/api/v1/tags/{tag_pk}", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "delete",
+        "/api/v1/tags/{tag_pk}",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("delete", "/api/v1/tags/{tag_pk}", "404"): TAG_NOT_FOUND_RESPONSE,
+    (
+        "delete",
+        "/api/v1/tags/{tag_pk}",
+        "422",
+    ): TAG_PATH_VALIDATION_ERROR_RESPONSE,
+}
+SNAPSHOT_ERROR_RESPONSES: OpenApiResponses = {
+    ("get", "/api/v1/snapshot", "401"): API_AUTH_ERROR_RESPONSE,
+    ("get", "/api/v1/snapshot", "503"): API_AUTH_NOT_CONFIGURED_RESPONSE,
+    ("get", "/api/v1/snapshot/state", "401"): API_AUTH_ERROR_RESPONSE,
+    (
+        "get",
+        "/api/v1/snapshot/state",
+        "503",
+    ): API_AUTH_NOT_CONFIGURED_RESPONSE,
+}
+HTTP_METHODS: Final = {
+    "delete",
+    "get",
+    "head",
+    "options",
+    "patch",
+    "post",
+    "put",
+    "trace",
+}
+
+
+def _assert_openapi_error_responses(
+    openapi_schema: dict[str, Any],
+    expected_responses: OpenApiResponses,
+) -> None:
+    for (
+        method,
+        path,
+        status_code,
+    ), expected_response in expected_responses.items():
+        response = openapi_schema["paths"][path][method]["responses"][
+            status_code
+        ]
+
+        assert response == expected_response
+
+
+def _assert_openapi_response_examples(
+    openapi_schema: dict[str, Any],
+    expected_examples: OpenApiResponses,
+) -> None:
+    for (
+        method,
+        path,
+        status_code,
+    ), expected_example in expected_examples.items():
+        response_content = openapi_schema["paths"][path][method]["responses"][
+            status_code
+        ]["content"]
+
+        assert response_content["application/json"]["example"] == (
+            expected_example
+        )
+
+
+def _assert_openapi_response_example_sets(
+    openapi_schema: dict[str, Any],
+    expected_examples: OpenApiResponses,
+) -> None:
+    for (
+        method,
+        path,
+        status_code,
+    ), expected_example in expected_examples.items():
+        response_content = openapi_schema["paths"][path][method]["responses"][
+            status_code
+        ]["content"]
+
+        assert response_content["application/json"]["examples"] == (
+            expected_example
+        )
+
+
+def _assert_openapi_request_examples(
+    openapi_schema: dict[str, Any],
+    expected_examples: OpenApiRequestExamples,
+) -> None:
+    for (
+        method,
+        path,
+        content_type,
+    ), expected_example in expected_examples.items():
+        request_content = openapi_schema["paths"][path][method]["requestBody"][
+            "content"
+        ][content_type]
+
+        assert request_content["examples"] == expected_example
+
+
+def _iter_openapi_operations(
+    openapi_schema: dict[str, Any],
+) -> Generator[dict[str, Any]]:
+    for methods in openapi_schema["paths"].values():
+        for key, operation in methods.items():
+            if key in HTTP_METHODS and isinstance(operation, dict):
+                yield operation
+
+
+def _iter_json_error_response_contents(
+    openapi_schema: dict[str, Any],
+) -> Generator[dict[str, Any]]:
+    for operation in _iter_openapi_operations(openapi_schema):
+        for status_code, response in operation.get("responses", {}).items():
+            if status_code.startswith("2"):
+                continue
+            json_content = response.get("content", {}).get("application/json")
+            if json_content is not None:
+                yield json_content
 
 
 def test_get_service_raises_when_uninitialized() -> None:
@@ -186,14 +659,11 @@ async def test_create_mcp_app_lifespan_starts_internal_api(
     assert response.json() == []
 
 
-def test_mcp_tool_routes_include_openapi_examples() -> None:
+def test_mcp_tool_routes_include_openapi_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
     """MCP-exposed routes should publish realistic OpenAPI examples."""
-    openapi = create_api_app(
-        memory=True,
-        default_group_name="default",
-    ).openapi()
-
-    expected_examples = {
+    expected_examples: dict[str, object] = {
         "/api/v1/ideas/refs": IDEA_REFS_RESPONSE_EXAMPLE,
         "/api/v1/ideas/{idea_pk}": IDEA_RESPONSE_EXAMPLE,
         "/api/v1/groups/names": GROUP_NAMES_RESPONSE_EXAMPLE,
@@ -201,13 +671,156 @@ def test_mcp_tool_routes_include_openapi_examples() -> None:
     }
 
     for path, expected_example in expected_examples.items():
-        response_content = openapi["paths"][path]["get"]["responses"]["200"][
-            "content"
-        ]
+        response_content = openapi_schema["paths"][path]["get"]["responses"][
+            "200"
+        ]["content"]
 
         assert response_content["application/json"]["example"] == (
             expected_example
         )
+
+
+def test_api_routes_include_openapi_response_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """Body-returning API routes should publish realistic examples."""
+    _assert_openapi_response_examples(
+        openapi_schema,
+        OPENAPI_RESPONSE_EXAMPLES,
+    )
+    _assert_openapi_response_example_sets(
+        openapi_schema,
+        OPENAPI_GROUP_RESPONSE_EXAMPLES,
+    )
+
+
+def test_openapi_response_examples_match_response_models() -> None:
+    """Published response examples should stay valid for response schemas."""
+    TypeAdapter(TokenResponse).validate_python(TOKEN_RESPONSE_EXAMPLE)
+    TypeAdapter(list[GroupResponse]).validate_python(GROUPS_RESPONSE_EXAMPLE)
+    for example in GROUP_RESPONSE_OPENAPI_EXAMPLES.values():
+        TypeAdapter(GroupResponse).validate_python(example["value"])
+    TypeAdapter(list[IdeaResponse]).validate_python(IDEAS_RESPONSE_EXAMPLE)
+    TypeAdapter(IdeaResponse).validate_python(IDEA_RESPONSE_EXAMPLE)
+    TypeAdapter(list[IdeaRefResponse]).validate_python(
+        IDEA_REFS_RESPONSE_EXAMPLE,
+    )
+    TypeAdapter(IdeaHashResponse).validate_python(IDEA_HASH_RESPONSE_EXAMPLE)
+    TypeAdapter(SnapshotResponse).validate_python(SNAPSHOT_RESPONSE_EXAMPLE)
+    TypeAdapter(SnapshotStateResponse).validate_python(
+        SNAPSHOT_STATE_RESPONSE_EXAMPLE,
+    )
+    TypeAdapter(list[TagResponse]).validate_python(TAGS_RESPONSE_EXAMPLE)
+    TypeAdapter(TagResponse).validate_python(TAG_RESPONSE_EXAMPLE)
+
+
+def test_openapi_examples_preserve_runtime_shapes(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """Generated examples should preserve runtime-significant shapes."""
+    groups_example = openapi_schema["paths"]["/api/v1/groups"]["get"][
+        "responses"
+    ]["200"]["content"]["application/json"]["example"]
+    assert groups_example[1]["parent_pk"] is None
+    assert groups_example[2]["parent_pk"] is None
+
+    group_examples = openapi_schema["paths"]["/api/v1/groups/{group_pk}"][
+        "get"
+    ]["responses"]["200"]["content"]["application/json"]["examples"]
+    assert group_examples["root_group"]["value"]["parent_pk"] is None
+    assert group_examples["child_group"]["value"]["parent_pk"] == 3
+
+    idea_refs_example = openapi_schema["paths"]["/api/v1/ideas/refs"]["get"][
+        "responses"
+    ]["200"]["content"]["application/json"]["example"]
+    assert [idea["pk"] for idea in idea_refs_example] == [43, 42]
+
+    token_error = openapi_schema["paths"]["/api/v1/auth/token"]["post"][
+        "responses"
+    ]["422"]["content"]["application/json"]["example"]
+    assert token_error["detail"][0]["input"] is None
+
+    tag_errors = openapi_schema["paths"]["/api/v1/tags"]["post"]["responses"][
+        "422"
+    ]["content"]["application/json"]["examples"]
+    assert tag_errors["missing_name"]["value"]["detail"][0]["loc"] == [
+        "body",
+        "name",
+    ]
+    assert tag_errors["blank_name"]["value"] == {
+        "detail": "Tag name cannot be empty",
+    }
+
+
+def test_delete_routes_do_not_publish_json_response_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """No-content routes should not document fake JSON response bodies."""
+    delete_paths = (
+        "/api/v1/groups/{group_pk}",
+        "/api/v1/ideas/{idea_pk}",
+        "/api/v1/tags/{tag_pk}",
+    )
+
+    for path in delete_paths:
+        assert (
+            "content"
+            not in openapi_schema["paths"][path]["delete"]["responses"]["204"]
+        )
+
+
+def test_write_routes_include_openapi_request_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """Write routes should publish realistic request body examples."""
+    _assert_openapi_request_examples(openapi_schema, OPENAPI_REQUEST_EXAMPLES)
+
+
+def test_auth_routes_include_openapi_error_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """Auth routes should publish realistic error examples."""
+    _assert_openapi_error_responses(openapi_schema, AUTH_ERROR_RESPONSES)
+
+
+def test_idea_routes_include_openapi_error_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """Idea routes should publish realistic error examples."""
+    _assert_openapi_error_responses(openapi_schema, IDEA_ERROR_RESPONSES)
+
+
+def test_group_routes_include_openapi_error_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """Group routes should publish realistic error examples."""
+    _assert_openapi_error_responses(openapi_schema, GROUP_ERROR_RESPONSES)
+
+
+def test_tag_routes_include_openapi_error_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """Tag routes should publish realistic error examples."""
+    _assert_openapi_error_responses(openapi_schema, TAG_ERROR_RESPONSES)
+
+
+def test_snapshot_routes_include_openapi_error_examples(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """Snapshot routes should publish realistic error examples."""
+    _assert_openapi_error_responses(openapi_schema, SNAPSHOT_ERROR_RESPONSES)
+
+
+def test_json_error_responses_include_exactly_one_example_field(
+    openapi_schema: dict[str, Any],
+) -> None:
+    """JSON error responses should use either example or examples."""
+    for json_content in _iter_json_error_response_contents(openapi_schema):
+        has_example = "example" in json_content
+        has_examples = "examples" in json_content
+
+        assert has_example or has_examples
+        assert has_example != has_examples
 
 
 def test_token_endpoint_returns_service_unavailable_when_auth_unconfigured(
