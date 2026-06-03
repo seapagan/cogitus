@@ -121,7 +121,91 @@ def openapi_schema() -> dict[str, Any]:
 
 OpenApiResponseKey = tuple[str, str, str]
 OpenApiResponses = dict[OpenApiResponseKey, object]
+OpenApiRequestKey = tuple[str, str, str]
+OpenApiRequestExamples = dict[OpenApiRequestKey, object]
 
+OPENAPI_RESPONSE_EXAMPLES: OpenApiResponses = {
+    ("post", "/api/v1/auth/token", "200"): TOKEN_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/groups", "200"): GROUPS_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/groups/names", "200"): GROUP_NAMES_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/ideas", "200"): IDEAS_RESPONSE_EXAMPLE,
+    ("post", "/api/v1/ideas", "201"): IDEA_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/ideas/refs", "200"): IDEA_REFS_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/ideas/{idea_pk}", "200"): IDEA_RESPONSE_EXAMPLE,
+    ("put", "/api/v1/ideas/{idea_pk}", "200"): IDEA_RESPONSE_EXAMPLE,
+    (
+        "get",
+        "/api/v1/ideas/{idea_pk}/hash",
+        "200",
+    ): IDEA_HASH_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/snapshot", "200"): SNAPSHOT_RESPONSE_EXAMPLE,
+    (
+        "get",
+        "/api/v1/snapshot/state",
+        "200",
+    ): SNAPSHOT_STATE_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/tags", "200"): TAGS_RESPONSE_EXAMPLE,
+    ("post", "/api/v1/tags", "201"): TAG_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/tags/names", "200"): TAG_NAMES_RESPONSE_EXAMPLE,
+    ("get", "/api/v1/tags/{tag_pk}", "200"): TAG_RESPONSE_EXAMPLE,
+    ("put", "/api/v1/tags/{tag_pk}", "200"): TAG_RESPONSE_EXAMPLE,
+    ("get", "/health", "200"): HEALTH_RESPONSE_EXAMPLE,
+}
+OPENAPI_GROUP_RESPONSE_EXAMPLES: OpenApiResponses = {
+    ("post", "/api/v1/groups", "201"): GROUP_RESPONSE_OPENAPI_EXAMPLES,
+    (
+        "get",
+        "/api/v1/groups/{group_pk}",
+        "200",
+    ): GROUP_RESPONSE_OPENAPI_EXAMPLES,
+    (
+        "put",
+        "/api/v1/groups/{group_pk}",
+        "200",
+    ): GROUP_RESPONSE_OPENAPI_EXAMPLES,
+}
+OPENAPI_REQUEST_EXAMPLES: OpenApiRequestExamples = {
+    (
+        "post",
+        "/api/v1/auth/token",
+        "application/x-www-form-urlencoded",
+    ): TOKEN_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "post",
+        "/api/v1/groups",
+        "application/json",
+    ): GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "put",
+        "/api/v1/groups/{group_pk}",
+        "application/json",
+    ): GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "post",
+        "/api/v1/ideas",
+        "application/json",
+    ): IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "put",
+        "/api/v1/ideas/{idea_pk}",
+        "application/json",
+    ): IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "delete",
+        "/api/v1/ideas/{idea_pk}",
+        "application/json",
+    ): IDEA_DELETE_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "post",
+        "/api/v1/tags",
+        "application/json",
+    ): TAG_CREATE_REQUEST_OPENAPI_EXAMPLES,
+    (
+        "put",
+        "/api/v1/tags/{tag_pk}",
+        "application/json",
+    ): TAG_UPDATE_REQUEST_OPENAPI_EXAMPLES,
+}
 AUTH_ERROR_RESPONSES: OpenApiResponses = {
     ("post", "/api/v1/auth/token", "401"): AUTH_TOKEN_ERROR_RESPONSE,
     (
@@ -367,6 +451,79 @@ def _assert_openapi_error_responses(
         assert response == expected_response
 
 
+def _assert_openapi_response_examples(
+    openapi_schema: dict[str, Any],
+    expected_examples: OpenApiResponses,
+) -> None:
+    for (
+        method,
+        path,
+        status_code,
+    ), expected_example in expected_examples.items():
+        response_content = openapi_schema["paths"][path][method]["responses"][
+            status_code
+        ]["content"]
+
+        assert response_content["application/json"]["example"] == (
+            expected_example
+        )
+
+
+def _assert_openapi_response_example_sets(
+    openapi_schema: dict[str, Any],
+    expected_examples: OpenApiResponses,
+) -> None:
+    for (
+        method,
+        path,
+        status_code,
+    ), expected_example in expected_examples.items():
+        response_content = openapi_schema["paths"][path][method]["responses"][
+            status_code
+        ]["content"]
+
+        assert response_content["application/json"]["examples"] == (
+            expected_example
+        )
+
+
+def _assert_openapi_request_examples(
+    openapi_schema: dict[str, Any],
+    expected_examples: OpenApiRequestExamples,
+) -> None:
+    for (
+        method,
+        path,
+        content_type,
+    ), expected_example in expected_examples.items():
+        request_content = openapi_schema["paths"][path][method]["requestBody"][
+            "content"
+        ][content_type]
+
+        assert request_content["examples"] == expected_example
+
+
+def _iter_openapi_operations(
+    openapi_schema: dict[str, Any],
+) -> Generator[dict[str, Any]]:
+    for methods in openapi_schema["paths"].values():
+        for key, operation in methods.items():
+            if key in HTTP_METHODS and isinstance(operation, dict):
+                yield operation
+
+
+def _iter_json_error_response_contents(
+    openapi_schema: dict[str, Any],
+) -> Generator[dict[str, Any]]:
+    for operation in _iter_openapi_operations(openapi_schema):
+        for status_code, response in operation.get("responses", {}).items():
+            if status_code.startswith("2"):
+                continue
+            json_content = response.get("content", {}).get("application/json")
+            if json_content is not None:
+                yield json_content
+
+
 def test_get_service_raises_when_uninitialized() -> None:
     """Dependency helper should fail clearly without app state service."""
     request = cast(
@@ -527,77 +684,14 @@ def test_api_routes_include_openapi_response_examples(
     openapi_schema: dict[str, Any],
 ) -> None:
     """Body-returning API routes should publish realistic examples."""
-    expected_examples = {
-        ("post", "/api/v1/auth/token", "200"): TOKEN_RESPONSE_EXAMPLE,
-        ("get", "/api/v1/groups", "200"): GROUPS_RESPONSE_EXAMPLE,
-        ("get", "/api/v1/groups/names", "200"): GROUP_NAMES_RESPONSE_EXAMPLE,
-        ("get", "/api/v1/ideas", "200"): IDEAS_RESPONSE_EXAMPLE,
-        ("post", "/api/v1/ideas", "201"): IDEA_RESPONSE_EXAMPLE,
-        ("get", "/api/v1/ideas/refs", "200"): IDEA_REFS_RESPONSE_EXAMPLE,
-        (
-            "get",
-            "/api/v1/ideas/{idea_pk}",
-            "200",
-        ): IDEA_RESPONSE_EXAMPLE,
-        (
-            "put",
-            "/api/v1/ideas/{idea_pk}",
-            "200",
-        ): IDEA_RESPONSE_EXAMPLE,
-        (
-            "get",
-            "/api/v1/ideas/{idea_pk}/hash",
-            "200",
-        ): IDEA_HASH_RESPONSE_EXAMPLE,
-        ("get", "/api/v1/snapshot", "200"): SNAPSHOT_RESPONSE_EXAMPLE,
-        (
-            "get",
-            "/api/v1/snapshot/state",
-            "200",
-        ): SNAPSHOT_STATE_RESPONSE_EXAMPLE,
-        ("get", "/api/v1/tags", "200"): TAGS_RESPONSE_EXAMPLE,
-        ("post", "/api/v1/tags", "201"): TAG_RESPONSE_EXAMPLE,
-        ("get", "/api/v1/tags/names", "200"): TAG_NAMES_RESPONSE_EXAMPLE,
-        ("get", "/api/v1/tags/{tag_pk}", "200"): TAG_RESPONSE_EXAMPLE,
-        ("put", "/api/v1/tags/{tag_pk}", "200"): TAG_RESPONSE_EXAMPLE,
-        ("get", "/health", "200"): HEALTH_RESPONSE_EXAMPLE,
-    }
-
-    for (
-        method,
-        path,
-        status_code,
-    ), expected_example in expected_examples.items():
-        response_content = openapi_schema["paths"][path][method]["responses"][
-            status_code
-        ]["content"]
-
-        assert response_content["application/json"]["example"] == (
-            expected_example
-        )
-
-    expected_group_examples: dict[tuple[str, str, str], object] = {
-        ("post", "/api/v1/groups", "201"): GROUP_RESPONSE_OPENAPI_EXAMPLES,
-        ("get", "/api/v1/groups/{group_pk}", "200"): (
-            GROUP_RESPONSE_OPENAPI_EXAMPLES
-        ),
-        ("put", "/api/v1/groups/{group_pk}", "200"): (
-            GROUP_RESPONSE_OPENAPI_EXAMPLES
-        ),
-    }
-
-    for (
-        method,
-        path,
-        status_code,
-    ), expected_group_openapi_examples in expected_group_examples.items():
-        response_content = openapi_schema["paths"][path][method]["responses"][
-            status_code
-        ]["content"]
-
-        assert response_content["application/json"]["examples"] == (
-            expected_group_openapi_examples
-        )
+    _assert_openapi_response_examples(
+        openapi_schema,
+        OPENAPI_RESPONSE_EXAMPLES,
+    )
+    _assert_openapi_response_example_sets(
+        openapi_schema,
+        OPENAPI_GROUP_RESPONSE_EXAMPLES,
+    )
 
 
 def test_openapi_response_examples_match_response_models() -> None:
@@ -679,59 +773,7 @@ def test_write_routes_include_openapi_request_examples(
     openapi_schema: dict[str, Any],
 ) -> None:
     """Write routes should publish realistic request body examples."""
-    expected_examples = {
-        (
-            "post",
-            "/api/v1/auth/token",
-            "application/x-www-form-urlencoded",
-        ): TOKEN_REQUEST_OPENAPI_EXAMPLES,
-        (
-            "post",
-            "/api/v1/groups",
-            "application/json",
-        ): GROUP_CREATE_REQUEST_OPENAPI_EXAMPLES,
-        (
-            "put",
-            "/api/v1/groups/{group_pk}",
-            "application/json",
-        ): GROUP_UPDATE_REQUEST_OPENAPI_EXAMPLES,
-        (
-            "post",
-            "/api/v1/ideas",
-            "application/json",
-        ): IDEA_CREATE_REQUEST_OPENAPI_EXAMPLES,
-        (
-            "put",
-            "/api/v1/ideas/{idea_pk}",
-            "application/json",
-        ): IDEA_UPDATE_REQUEST_OPENAPI_EXAMPLES,
-        (
-            "delete",
-            "/api/v1/ideas/{idea_pk}",
-            "application/json",
-        ): IDEA_DELETE_REQUEST_OPENAPI_EXAMPLES,
-        (
-            "post",
-            "/api/v1/tags",
-            "application/json",
-        ): TAG_CREATE_REQUEST_OPENAPI_EXAMPLES,
-        (
-            "put",
-            "/api/v1/tags/{tag_pk}",
-            "application/json",
-        ): TAG_UPDATE_REQUEST_OPENAPI_EXAMPLES,
-    }
-
-    for (
-        method,
-        path,
-        content_type,
-    ), expected_example in expected_examples.items():
-        request_content = openapi_schema["paths"][path][method]["requestBody"][
-            "content"
-        ][content_type]
-
-        assert request_content["examples"] == expected_example
+    _assert_openapi_request_examples(openapi_schema, OPENAPI_REQUEST_EXAMPLES)
 
 
 def test_auth_routes_include_openapi_error_examples(
@@ -773,25 +815,12 @@ def test_json_error_responses_include_exactly_one_example_field(
     openapi_schema: dict[str, Any],
 ) -> None:
     """JSON error responses should use either example or examples."""
-    for methods in openapi_schema["paths"].values():
-        for key, operation in methods.items():
-            if key not in HTTP_METHODS:
-                continue
-            if not isinstance(operation, dict) or "responses" not in operation:
-                continue
-            for status_code, response in operation["responses"].items():
-                if status_code.startswith("2"):
-                    continue
-                content = response.get("content", {})
-                json_content = content.get("application/json")
-                if json_content is None:
-                    continue
+    for json_content in _iter_json_error_response_contents(openapi_schema):
+        has_example = "example" in json_content
+        has_examples = "examples" in json_content
 
-                has_example = "example" in json_content
-                has_examples = "examples" in json_content
-
-                assert has_example or has_examples
-                assert has_example != has_examples
+        assert has_example or has_examples
+        assert has_example != has_examples
 
 
 def test_token_endpoint_returns_service_unavailable_when_auth_unconfigured(
