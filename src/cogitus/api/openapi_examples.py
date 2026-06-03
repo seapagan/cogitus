@@ -684,7 +684,13 @@ def restore_openapi_example_nulls(openapi_schema: OpenApiSchema) -> None:
     def restore_group_parent_null(value: dict[object, object]) -> None:
         pk = value.get("pk")
         name = value.get("name")
-        if isinstance(pk, int) and name in {"backend", "default"}:
+        root_group_pks = (1, 3)
+        root_group_names = ("backend", "default")
+        if (
+            isinstance(pk, int)
+            and pk in root_group_pks
+            and name in root_group_names
+        ):
             value.setdefault("parent_pk", None)
 
     def restore_missing_username_input(value: dict[object, object]) -> None:
