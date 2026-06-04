@@ -94,7 +94,7 @@ dev = [
 
 # --------------------------------- POE tasks -------------------------------- #
 [tool.poe.env]
-UV_FROZEN = "1"
+# UV_FROZEN = "1"
 
 [tool.poe.tasks]
 pre.cmd = "prek run --all-files"
