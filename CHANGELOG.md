@@ -5,15 +5,42 @@ project since the first release, with the latest changes at the top.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.12.0](https://github.com/seapagan/cogitus/releases/tag/0.12.0) (July 02, 2026)
+
+**New Features**
+
+- Add nested group support ([#79](https://github.com/seapagan/cogitus/pull/79)) by [seapagan](https://github.com/seapagan)
+
+**Testing**
+
+- Add parallel pytest execution ([#83](https://github.com/seapagan/cogitus/pull/83)) by [seapagan](https://github.com/seapagan)
+
+**Security**
+
+- Update several deps for security issues and to latest versions ([#87](https://github.com/seapagan/cogitus/pull/87)) by [seapagan](https://github.com/seapagan)
+- Remove UV_FROZEN and update several deps for security alerts ([#84](https://github.com/seapagan/cogitus/pull/84)) by [seapagan](https://github.com/seapagan)
+
+**Documentation**
+
+- Improve Swagger API examples ([#80](https://github.com/seapagan/cogitus/pull/80)) by [seapagan](https://github.com/seapagan)
+
+**Dependency Updates**
+
+- Chore(deps): update actions/checkout action to v7 ([#86](https://github.com/seapagan/cogitus/pull/86)) by [renovate[bot]](https://github.com/apps/renovate)
+- Chore(deps): update astral-sh/setup-uv action to v8.2.0 ([#82](https://github.com/seapagan/cogitus/pull/82)) by [renovate[bot]](https://github.com/apps/renovate)
+
+[`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.11.0...0.12.0) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.11.0...0.12.0.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.11.0...0.12.0.patch)
+
 ## [0.11.0](https://github.com/seapagan/cogitus/releases/tag/0.11.0) (May 29, 2026)
-
-**Merged Pull Requests**
-
-- Split idea form save actions ([#77](https://github.com/seapagan/cogitus/pull/77)) by [seapagan](https://github.com/seapagan)
 
 **Bug Fixes**
 
 - Fix: prevent header version clipping ([#76](https://github.com/seapagan/cogitus/pull/76)) by [seapagan](https://github.com/seapagan)
+
+**Refactoring**
+
+- Split idea form save actions ([#77](https://github.com/seapagan/cogitus/pull/77)) by [seapagan](https://github.com/seapagan)
 
 [`Full Changelog`](https://github.com/seapagan/cogitus/compare/0.10.0...0.11.0) | [`Diff`](https://github.com/seapagan/cogitus/compare/0.10.0...0.11.0.diff) | [`Patch`](https://github.com/seapagan/cogitus/compare/0.10.0...0.11.0.patch)
 
