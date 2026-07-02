@@ -61,7 +61,7 @@ simple-toml-settings==0.12.0
     # via cogitus
 sqliter-py==0.20.0
     # via cogitus
-textual==8.2.0
+textual==8.2.7
     # via cogitus
 typer==0.24.1
     # via cogitus
